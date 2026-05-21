@@ -147,3 +147,15 @@ pub struct UpsertApplication {
     pub notes: Option<String>,
     pub tags: Vec<String>,
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ApplicationEvent {
+    pub id: String,
+    pub application_id: String,
+    pub event_type: String,
+    pub old_value: Option<String>,
+    pub new_value: Option<String>,
+    pub description: Option<String>,
+    pub metadata: Value,
+    pub created_at: String,
+}

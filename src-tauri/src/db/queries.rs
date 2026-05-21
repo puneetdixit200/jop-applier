@@ -4,8 +4,8 @@ use serde::Serialize;
 use thiserror::Error;
 
 use super::models::{
-    Application, Job, Setting, SettingValue, UpsertApplication, UpsertJob, UpsertSetting,
-    UpsertUserProfile, UserProfile,
+    Application, ApplicationEvent, Job, Setting, SettingValue, UpsertApplication, UpsertJob,
+    UpsertSetting, UpsertUserProfile, UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -360,8 +360,10 @@ pub fn upsert_application(
 ) -> QueryResult<Application> {
     let tags = to_json_text(&application.tags)?;
     let job_id = application.job_id.clone();
+    let next_status = application.status.clone();
 
     if let Some(existing) = get_application_by_job_id(connection, &job_id)? {
+        let previous_status = existing.status.clone();
         connection.execute(
             "UPDATE applications
              SET status = ?1,
@@ -388,6 +390,17 @@ pub fn upsert_application(
                 existing.id,
             ],
         )?;
+        let saved = get_application_by_job_id(connection, &job_id)?
+            .ok_or(QueryError::MissingApplicationAfterSave)?;
+        if previous_status != next_status {
+            record_status_change_event(
+                connection,
+                &saved.id,
+                Some(previous_status.as_str()),
+                &next_status,
+            )?;
+        }
+        return Ok(saved);
     } else {
         connection.execute(
             "INSERT INTO applications (
@@ -410,7 +423,48 @@ pub fn upsert_application(
         )?;
     }
 
-    get_application_by_job_id(connection, &job_id)?.ok_or(QueryError::MissingApplicationAfterSave)
+    let saved = get_application_by_job_id(connection, &job_id)?
+        .ok_or(QueryError::MissingApplicationAfterSave)?;
+    record_status_change_event(connection, &saved.id, None, &next_status)?;
+    Ok(saved)
+}
+
+pub fn list_application_events(
+    connection: &Connection,
+    application_id: &str,
+) -> QueryResult<Vec<ApplicationEvent>> {
+    let mut statement = connection.prepare(
+        "SELECT id, application_id, event_type, old_value, new_value, description, metadata, created_at
+         FROM application_events
+         WHERE application_id = ?1
+         ORDER BY created_at DESC, rowid DESC",
+    )?;
+
+    let rows = statement.query_map([application_id], application_event_from_row)?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(QueryError::from)
+}
+
+fn record_status_change_event(
+    connection: &Connection,
+    application_id: &str,
+    old_value: Option<&str>,
+    new_value: &str,
+) -> QueryResult<()> {
+    let metadata = to_json_text(&serde_json::json!({ "source": "application_upsert" }))?;
+    let description = match old_value {
+        Some(previous) => format!("Application status changed from {previous} to {new_value}"),
+        None => format!("Application status set to {new_value}"),
+    };
+
+    connection.execute(
+        "INSERT INTO application_events (
+             application_id, event_type, old_value, new_value, description, metadata
+         )
+         VALUES (?1, 'status_change', ?2, ?3, ?4, ?5)",
+        params![application_id, old_value, new_value, description, metadata],
+    )?;
+    Ok(())
 }
 
 fn get_application_by_job_id(
@@ -456,6 +510,24 @@ fn application_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Application
         max_retries: row.get(13)?,
         notes: row.get(14)?,
         tags,
+    })
+}
+
+fn application_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ApplicationEvent> {
+    let metadata: String = row.get(6)?;
+    let metadata = serde_json::from_str(&metadata).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(6, rusqlite::types::Type::Text, Box::new(error))
+    })?;
+
+    Ok(ApplicationEvent {
+        id: row.get(0)?,
+        application_id: row.get(1)?,
+        event_type: row.get(2)?,
+        old_value: row.get(3)?,
+        new_value: row.get(4)?,
+        description: row.get(5)?,
+        metadata,
+        created_at: row.get(7)?,
     })
 }
 

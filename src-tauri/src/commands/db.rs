@@ -1,8 +1,8 @@
 use crate::{
     db::{
         models::{
-            Application, Job, Setting, UpsertApplication, UpsertJob, UpsertSetting,
-            UpsertUserProfile, UserProfile,
+            Application, ApplicationEvent, Job, Setting, UpsertApplication, UpsertJob,
+            UpsertSetting, UpsertUserProfile, UserProfile,
         },
         queries, schema,
     },
@@ -101,4 +101,17 @@ pub fn save_application_command(
         .lock()
         .map_err(|_| "database connection lock poisoned".to_string())?;
     queries::upsert_application(&connection, application).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn list_application_events_command(
+    state: State<'_, AppState>,
+    application_id: String,
+) -> Result<Vec<ApplicationEvent>, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::list_application_events(&connection, &application_id)
+        .map_err(|error| error.to_string())
 }

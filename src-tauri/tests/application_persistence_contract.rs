@@ -1,6 +1,6 @@
 use careercaveman_lib::db::{
     models::{UpsertApplication, UpsertJob},
-    queries::{list_applications, upsert_application, upsert_job},
+    queries::{list_application_events, list_applications, upsert_application, upsert_job},
     schema::initialize_schema,
 };
 use rusqlite::Connection;
@@ -89,4 +89,19 @@ fn queues_updates_and_lists_applications_with_job_context() {
     assert_eq!(applications[0].retry_count, 0);
     assert_eq!(applications[0].max_retries, 3);
     assert_eq!(applications[0].tags, vec!["priority", "resume"]);
+
+    let events =
+        list_application_events(&connection, &updated.id).expect("list application events");
+
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].event_type, "status_change");
+    assert_eq!(events[0].old_value.as_deref(), Some("queued"));
+    assert_eq!(events[0].new_value.as_deref(), Some("preparing"));
+    assert_eq!(
+        events[0].description.as_deref(),
+        Some("Application status changed from queued to preparing")
+    );
+    assert_eq!(events[1].event_type, "status_change");
+    assert_eq!(events[1].old_value, None);
+    assert_eq!(events[1].new_value.as_deref(), Some("queued"));
 }

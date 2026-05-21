@@ -89,6 +89,17 @@ export type UpsertApplication = {
   tags: string[];
 };
 
+export type ApplicationEvent = {
+  id: string;
+  application_id: string;
+  event_type: string;
+  old_value: string | null;
+  new_value: string | null;
+  description: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
 export function isDesktopRuntime() {
   return "__TAURI_INTERNALS__" in window;
 }
@@ -123,4 +134,8 @@ export async function listApplications() {
 
 export async function saveApplication(application: UpsertApplication) {
   return invoke<Application>("save_application_command", { application });
+}
+
+export async function listApplicationEvents(applicationId: string) {
+  return invoke<ApplicationEvent[]>("list_application_events_command", { applicationId });
 }
