@@ -4,6 +4,10 @@ import { OllamaProvider } from "./ai/providers/ollama-provider.js";
 import { OpenAIProvider } from "./ai/providers/openai-provider.js";
 import { OpenRouterProvider } from "./ai/providers/openrouter-provider.js";
 import {
+  runFollowUpWorker,
+  type FollowUpWorkerDependencies,
+} from "./applications/follow-up-worker.js";
+import {
   BrowserManager,
   createPlaywrightBrowserAdapter,
   type BrowserSession,
@@ -91,6 +95,11 @@ export function createAIEngineFromEnv(env: NodeJS.ProcessEnv = process.env): AIE
   return new AIEngine(providers);
 }
 
+export type SidecarFollowUpOptions = FollowUpWorkerDependencies & {
+  followUpDelaysDays?: number[];
+  maxFollowUps?: number;
+};
+
 export type SidecarRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
@@ -100,6 +109,7 @@ export type SidecarRuntimeOptions = {
     validateSession?: Parameters<typeof runBrowserSessionHealthCheck>[0]["validateSession"];
   };
   jobDiscovery?: JobDiscoveryWorkflowDependencies;
+  followUps?: SidecarFollowUpOptions;
   scheduledTasks?: ScheduledTaskPersistence;
   scheduler?: {
     pollIntervalMs?: number;
@@ -118,12 +128,24 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   const browserManager = new BrowserManager(createPlaywrightBrowserAdapter());
   const now = options.now ?? (() => new Date());
   const jobDiscovery = options.jobDiscovery ?? createEmptyJobDiscoveryDependencies();
+  const followUps = options.followUps ?? createEmptyFollowUpDependencies();
   const scheduledTaskPersistence = options.scheduledTasks ?? createEmptyScheduledTaskPersistence();
 
   workflowEngine.register({
     id: "job-discovery",
     description: "Search configured job queries and persist discovered jobs",
     run: async () => runJobDiscoveryWorkflow(jobDiscovery, { eventBus }),
+  });
+  workflowEngine.register({
+    id: "follow-up-check",
+    description: "Send due follow-ups for applications awaiting a response",
+    run: async () =>
+      runFollowUpWorker(followUps, {
+        now: now(),
+        followUpDelaysDays: options.followUps?.followUpDelaysDays ?? [3, 7, 14],
+        maxFollowUps: options.followUps?.maxFollowUps ?? 3,
+        eventBus,
+      }),
   });
   workflowEngine.register({
     id: "session-health",
@@ -182,6 +204,14 @@ function createEmptyJobDiscoveryDependencies(): JobDiscoveryWorkflowDependencies
     searchQueries: [],
     searchForPersistence: async () => [],
     upsertJobs: async () => [],
+  };
+}
+
+function createEmptyFollowUpDependencies(): FollowUpWorkerDependencies {
+  return {
+    listApplications: async () => [],
+    sendFollowUp: async () => ({ communicationId: null }),
+    updateApplicationFollowUp: async () => undefined,
   };
 }
 

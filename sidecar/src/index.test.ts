@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createSidecarRuntime } from "./index.js";
 import type { BrowserSession } from "./browser/browser-manager.js";
 import type { BrowserSessionHealthTarget } from "./browser/session-health.js";
+import type { FollowUpApplication, FollowUpUpdate } from "./applications/follow-up-scheduler.js";
 import type { SearchQuery } from "./discovery/connectors/connector-interface.js";
 import type { UpsertJobPayload } from "./discovery/job-persistence.js";
 import type { CareerEventMap } from "./orchestrator/events.js";
@@ -312,6 +313,106 @@ describe("sidecar runtime", () => {
         update: {
           last_run: "2026-05-28T08:00:00.000Z",
           next_run: "2026-05-28T12:00:00.000Z",
+        },
+      },
+    ]);
+  });
+
+  it("runs due follow-up scheduled tasks through the follow-up workflow", async () => {
+    const checkedAt = new Date("2026-05-28T09:00:00Z");
+    const dueApplication: FollowUpApplication = {
+      id: "app-1",
+      jobId: "job-1",
+      companyName: "Northstar Labs",
+      status: "submitted",
+      submittedAt: "2026-05-20T10:00:00Z",
+      nextFollowUp: "2026-05-28T08:00:00Z",
+      lastFollowUp: null,
+      followUpCount: 0,
+      responseDate: null,
+      responseType: null,
+    };
+    const sentApplications: string[] = [];
+    const followUpUpdates: Array<{ applicationId: string; update: FollowUpUpdate }> = [];
+    const sentEvents: Array<CareerEventMap["follow_up.sent"]> = [];
+    const scheduledTaskUpdates: Array<{ id: string; update: PersistedScheduledTaskRunUpdate }> = [];
+    const runtime = createSidecarRuntime({
+      now: () => checkedAt,
+      followUps: {
+        followUpDelaysDays: [3, 7, 14],
+        maxFollowUps: 3,
+        listApplications: async () => [dueApplication],
+        sendFollowUp: async (application) => {
+          sentApplications.push(application.id);
+          return { communicationId: `comm-${application.id}` };
+        },
+        updateApplicationFollowUp: async (applicationId, update) => {
+          followUpUpdates.push({ applicationId, update });
+        },
+      },
+      scheduledTasks: {
+        listScheduledTasks: async () => [
+          {
+            id: "follow-up-task",
+            name: "Follow-up Check",
+            type: "follow_up",
+            cron_expression: "0 9 * * *",
+            is_enabled: true,
+            last_run: null,
+            next_run: "2026-05-28T09:00:00.000Z",
+            config: {
+              cadence: { kind: "daily", hour: 9, minute: 0 },
+            },
+            created_at: "2026-05-28T08:00:00.000Z",
+          },
+        ],
+        updateScheduledTaskRun: async (id, update) => {
+          scheduledTaskUpdates.push({ id, update });
+        },
+      },
+    });
+
+    runtime.eventBus.on("follow_up.sent", (event) => sentEvents.push(event));
+
+    await expect(runtime.runDueScheduledTasks()).resolves.toEqual({
+      scanned: 1,
+      due: 1,
+      completed: 1,
+      failed: 0,
+      skipped: 0,
+    });
+
+    expect(runtime.workflowEngine.registeredWorkflows()).toContain("follow-up-check");
+    expect(sentApplications).toEqual(["app-1"]);
+    expect(followUpUpdates).toEqual([
+      {
+        applicationId: "app-1",
+        update: {
+          status: "follow_up_sent",
+          followUpCount: 1,
+          lastFollowUp: "2026-05-28T09:00:00.000Z",
+          nextFollowUp: "2026-06-04T09:00:00.000Z",
+        },
+      },
+    ]);
+    expect(sentEvents).toEqual([
+      {
+        applicationId: "app-1",
+        jobId: "job-1",
+        companyName: "Northstar Labs",
+        status: "follow_up_sent",
+        followUpCount: 1,
+        nextFollowUp: "2026-06-04T09:00:00.000Z",
+        communicationId: "comm-app-1",
+        sentAt: checkedAt,
+      },
+    ]);
+    expect(scheduledTaskUpdates).toEqual([
+      {
+        id: "follow-up-task",
+        update: {
+          last_run: "2026-05-28T09:00:00.000Z",
+          next_run: "2026-05-29T09:00:00.000Z",
         },
       },
     ]);
