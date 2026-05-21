@@ -34,6 +34,18 @@ export type ApplicationFormFillOutcome = {
   submissionUrl: ApplicationFormFillResult["submissionUrl"] | null;
 } & Partial<Pick<ApplicationFormFillResult, "mappedFields" | "platform" | "requiredMissing">>;
 
+export type ApplicationSubmissionResult = {
+  confirmationId: string | null;
+  finalUrl?: string | null;
+  receiptText?: string | null;
+};
+
+export type ApplicationSubmissionVerification = {
+  ok: boolean;
+  confirmationId: string | null;
+  message: string;
+};
+
 export type ApplicationWorkerDependencies = {
   listApplications: () => Promise<ApplicationProcessingApplication[]>;
   prepareApplication: (application: ApplicationProcessingApplication) => Promise<void>;
@@ -42,7 +54,11 @@ export type ApplicationWorkerDependencies = {
     application: ApplicationProcessingApplication,
   ) => Promise<{ coverLetterPath: string | null }>;
   fillApplicationForm: (application: ApplicationProcessingApplication) => Promise<ApplicationFormFillOutcome>;
-  submitApplication: (application: ApplicationProcessingApplication) => Promise<{ confirmationId: string | null }>;
+  submitApplication: (application: ApplicationProcessingApplication) => Promise<ApplicationSubmissionResult>;
+  verifySubmission?: (
+    application: ApplicationProcessingApplication,
+    submission: ApplicationSubmissionResult,
+  ) => Promise<ApplicationSubmissionVerification>;
   updateApplication: (applicationId: string, update: ApplicationProcessingUpdate) => Promise<void>;
 };
 
@@ -168,12 +184,18 @@ async function processQueuedApplication(
     { reviewBeforeSubmit },
   );
   const submission = await dependencies.submitApplication(current);
+  const verification = await verifySubmission(dependencies, current, submission);
+  if (!verification.ok) {
+    throw new Error(`Submission verification failed: ${verification.message}`);
+  }
+  const confirmationId = verification.confirmationId ?? submission.confirmationId;
+
   await transitionApplication(
     current,
     "submitted",
     {
       status: "submitted",
-      confirmationId: submission.confirmationId,
+      confirmationId,
       submittedAt: options.now.toISOString(),
       errorMessage: null,
     },
@@ -184,7 +206,7 @@ async function processQueuedApplication(
     applicationId: application.id,
     jobId: application.jobId,
     companyName: application.companyName,
-    confirmationId: submission.confirmationId,
+    confirmationId,
     submittedAt: options.now,
   });
 
@@ -197,6 +219,22 @@ function normalizedMissingRequiredFields(form: ApplicationFormFillOutcome): stri
 
 function manualReviewRequiredMessage(requiredMissing: string[]): string {
   return `Manual review required for required fields: ${requiredMissing.join(", ")}`;
+}
+
+async function verifySubmission(
+  dependencies: Pick<ApplicationWorkerDependencies, "verifySubmission">,
+  application: ApplicationProcessingApplication,
+  submission: ApplicationSubmissionResult,
+): Promise<ApplicationSubmissionVerification> {
+  if (dependencies.verifySubmission) {
+    return dependencies.verifySubmission(application, submission);
+  }
+
+  return {
+    ok: true,
+    confirmationId: submission.confirmationId,
+    message: "submission verification skipped",
+  };
 }
 
 async function transitionApplication(
