@@ -59,6 +59,16 @@ export type CareerEventMap = {
     reason: string;
     failedAt: Date;
   };
+  "document.generated": {
+    applicationId: string;
+    documentId: string;
+    documentType: string;
+    filePath: string;
+    fileName: string;
+    version: number;
+    aiModelUsed: string | null;
+    generatedAt: Date;
+  };
   "response.received": {
     applicationId: string;
     jobId: string | null;
