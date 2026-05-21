@@ -3,6 +3,15 @@ import type { AIProvider } from "./ai/provider-interface.js";
 import { OllamaProvider } from "./ai/providers/ollama-provider.js";
 import { OpenAIProvider } from "./ai/providers/openai-provider.js";
 import { OpenRouterProvider } from "./ai/providers/openrouter-provider.js";
+import {
+  BrowserManager,
+  createPlaywrightBrowserAdapter,
+  type BrowserSession,
+} from "./browser/browser-manager.js";
+import {
+  runBrowserSessionHealthCheck,
+  type BrowserSessionHealthTarget,
+} from "./browser/session-health.js";
 import { EventBus } from "./orchestrator/event-bus.js";
 import type { CareerEventMap } from "./orchestrator/events.js";
 import { WorkflowEngine } from "./orchestrator/workflow-engine.js";
@@ -65,22 +74,62 @@ export function createAIEngineFromEnv(env: NodeJS.ProcessEnv = process.env): AIE
   return new AIEngine(providers);
 }
 
-export function createSidecarRuntime() {
+export type SidecarRuntimeOptions = {
+  env?: NodeJS.ProcessEnv;
+  now?: () => Date;
+  browserSessionHealth?: {
+    targets: BrowserSessionHealthTarget[];
+    openSession?: (platform: string) => Promise<BrowserSession>;
+    validateSession?: Parameters<typeof runBrowserSessionHealthCheck>[0]["validateSession"];
+  };
+};
+
+export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
+  const env = options.env ?? process.env;
   const eventBus = new EventBus<CareerEventMap>();
   const workflowEngine = new WorkflowEngine(eventBus);
-  const aiEngine = createAIEngineFromEnv();
+  const aiEngine = createAIEngineFromEnv(env);
+  const browserManager = new BrowserManager(createPlaywrightBrowserAdapter());
+  const now = options.now ?? (() => new Date());
 
   workflowEngine.register({
     id: "daily-discovery",
     description: "Placeholder discovery workflow for the Phase 1 foundation",
     run: async () => ({ queued: 0 }),
   });
+  workflowEngine.register({
+    id: "session-health",
+    description: "Verify configured browser sessions are valid",
+    run: async () =>
+      runBrowserSessionHealthCheck(
+        {
+          openSession:
+            options.browserSessionHealth?.openSession ??
+            ((platform) => browserManager.openSession(platform)),
+          validateSession: options.browserSessionHealth?.validateSession,
+        },
+        {
+          checkedAt: now(),
+          eventBus,
+          targets: options.browserSessionHealth?.targets ?? browserSessionTargetsFromEnv(env),
+        },
+      ),
+  });
 
   return {
     aiEngine,
+    browserManager,
     eventBus,
     workflowEngine,
   };
+}
+
+export function browserSessionTargetsFromEnv(env: NodeJS.ProcessEnv = process.env): BrowserSessionHealthTarget[] {
+  return (env.BROWSER_SESSION_PLATFORMS ?? "")
+    .split(",")
+    .map((platform) => platform.trim())
+    .filter((platform) => platform.length > 0)
+    .map((platform) => ({ platform, isEnabled: true }));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
