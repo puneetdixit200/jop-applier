@@ -32,6 +32,7 @@ import {
   runJobDiscoveryWorkflow,
   type JobDiscoveryWorkflowDependencies,
 } from "./discovery/job-discovery-workflow.js";
+import type { SearchQuery } from "./discovery/connectors/connector-interface.js";
 import {
   runExportSyncWorker,
   type ExportSyncWorkerDependencies,
@@ -216,7 +217,11 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   workflowEngine.register({
     id: "job-discovery",
     description: "Search configured job queries and persist discovered jobs",
-    run: async () => runJobDiscoveryWorkflow(jobDiscovery, { eventBus }),
+    run: async (input) =>
+      runJobDiscoveryWorkflow(jobDiscovery, {
+        eventBus,
+        searchQueries: discoverySearchQueriesFromWorkflowInput(input),
+      }),
   });
   workflowEngine.register({
     id: "application-processing",
@@ -328,6 +333,31 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
     schedulerService,
     workflowEngine,
   };
+}
+
+function discoverySearchQueriesFromWorkflowInput(input: unknown): SearchQuery[] | undefined {
+  if (!isRecord(input) || !isRecord(input.discovery)) {
+    return undefined;
+  }
+  const { searchQueries } = input.discovery;
+  if (!Array.isArray(searchQueries)) {
+    return undefined;
+  }
+
+  return searchQueries.filter(isSearchQuery);
+}
+
+function isSearchQuery(value: unknown): value is SearchQuery {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.keywords) &&
+    value.keywords.length > 0 &&
+    value.keywords.every((keyword) => typeof keyword === "string" && keyword.trim().length > 0)
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function createEmptyJobDiscoveryDependencies(): JobDiscoveryWorkflowDependencies {

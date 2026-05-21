@@ -109,12 +109,23 @@ pub fn run_sidecar_workflow_with_command(
     command: &SidecarCommand,
     workflow_id: &str,
 ) -> Result<Value, SidecarError> {
+    run_sidecar_workflow_with_command_and_params(command, workflow_id, json!({}))
+}
+
+pub fn run_sidecar_workflow_with_command_and_params(
+    command: &SidecarCommand,
+    workflow_id: &str,
+    extra_params: Value,
+) -> Result<Value, SidecarError> {
+    let mut params = json!({ "workflowId": workflow_id });
+    merge_json_object(&mut params, extra_params);
+
     send_sidecar_ipc_request(
         command,
         SidecarIpcRequest {
             id: format!("workflow-{workflow_id}"),
             method: "workflow.run".to_string(),
-            params: Some(json!({ "workflowId": workflow_id })),
+            params: Some(params),
         },
     )
 }
@@ -125,6 +136,16 @@ pub fn sidecar_status() -> Result<SidecarRuntimeStatus, SidecarError> {
 
 pub fn run_sidecar_workflow(workflow_id: &str) -> Result<Value, SidecarError> {
     run_sidecar_workflow_with_command(&default_sidecar_command()?, workflow_id)
+}
+
+fn merge_json_object(base: &mut Value, extra: Value) {
+    let (Some(base), Some(extra)) = (base.as_object_mut(), extra.as_object()) else {
+        return;
+    };
+
+    for (key, value) in extra {
+        base.insert(key.clone(), value.clone());
+    }
 }
 
 fn send_sidecar_ipc_request(

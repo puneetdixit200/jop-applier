@@ -1,11 +1,18 @@
 use careercaveman_lib::{
     commands::sidecar::run_sidecar_workflow_and_persist_jobs_with_command,
-    db::{queries::list_jobs, schema::initialize_schema},
+    db::{
+        models::{SettingValue, UpsertSetting},
+        queries::{list_jobs, upsert_setting},
+        schema::initialize_schema,
+    },
     sidecar::SidecarCommand,
 };
 use rusqlite::Connection;
 use serde_json::json;
-use std::path::PathBuf;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 #[test]
 fn persists_jobs_returned_by_sidecar_discovery_into_sqlite() {
@@ -36,9 +43,68 @@ esac"#,
     assert_eq!(jobs[0].ai_priority.as_deref(), Some("high"));
 }
 
+#[test]
+fn sends_discovery_search_queries_from_settings_to_sidecar() {
+    let connection = Connection::open_in_memory().expect("open in-memory database");
+    initialize_schema(&connection).expect("initialize schema");
+    upsert_setting(
+        &connection,
+        UpsertSetting {
+            key: "discovery.searchQueries".to_string(),
+            category: Some("discovery".to_string()),
+            value: SettingValue::Array(vec![json!({
+                "keywords": ["react", "typescript"],
+                "location": "Remote",
+                "remote": true,
+                "experienceLevel": "entry",
+                "jobType": "fulltime"
+            })]),
+        },
+    )
+    .expect("save discovery search query setting");
+    let request_path = std::env::temp_dir().join(format!(
+        "careercaveman-sidecar-request-{}.json",
+        std::process::id()
+    ));
+    let command = capture_request_sidecar(&request_path);
+
+    run_sidecar_workflow_and_persist_jobs_with_command(&command, &connection, "job-discovery")
+        .expect("run configured job discovery workflow");
+
+    let request: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&request_path).expect("read captured request"))
+            .expect("captured request is JSON");
+    let _ = fs::remove_file(&request_path);
+    assert_eq!(
+        request["params"]["discovery"]["searchQueries"],
+        json!([{
+            "keywords": ["react", "typescript"],
+            "location": "Remote",
+            "remote": true,
+            "experienceLevel": "entry",
+            "jobType": "fulltime"
+        }])
+    );
+}
+
 fn shell_sidecar(script: &str) -> SidecarCommand {
     SidecarCommand {
         program: PathBuf::from("/bin/sh"),
         args: vec!["-c".to_string(), script.to_string()],
+    }
+}
+
+fn capture_request_sidecar(request_path: &Path) -> SidecarCommand {
+    SidecarCommand {
+        program: PathBuf::from("/bin/sh"),
+        args: vec![
+            "-c".to_string(),
+            format!(
+                r#"read line
+printf '%s' "$line" > '{}'
+printf '{{"id":"workflow-job-discovery","ok":true,"result":{{"queries":1,"discovered":0,"stored":0,"jobs":[]}}}}\n'"#,
+                request_path.display()
+            ),
+        ],
     }
 }

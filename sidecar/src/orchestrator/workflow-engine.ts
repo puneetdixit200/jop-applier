@@ -4,7 +4,7 @@ import type { CareerEventMap } from "./events.js";
 export type WorkflowDefinition<Result = unknown> = {
   id: string;
   description: string;
-  run: () => Promise<Result>;
+  run: (input?: unknown) => Promise<Result>;
 };
 
 export class WorkflowEngine {
@@ -19,7 +19,7 @@ export class WorkflowEngine {
     this.workflows.set(workflow.id, workflow);
   }
 
-  async run<Result = unknown>(workflowId: string): Promise<Result> {
+  async run<Result = unknown>(workflowId: string, input?: unknown): Promise<Result> {
     const workflow = this.workflows.get(workflowId);
     if (!workflow) {
       throw new Error(`Unknown workflow: ${workflowId}`);
@@ -32,7 +32,7 @@ export class WorkflowEngine {
     });
 
     try {
-      const result = (await workflow.run()) as Result;
+      const result = (await workflow.run(input)) as Result;
       this.eventBus.emit("workflow.completed", {
         workflowId,
         status: "completed",
@@ -54,4 +54,3 @@ export class WorkflowEngine {
     return [...this.workflows.keys()].sort();
   }
 }
-

@@ -18,6 +18,7 @@ export type JobDiscoveryWorkflowDependencies = {
 
 export type JobDiscoveryWorkflowOptions = {
   eventBus?: EventBus<CareerEventMap>;
+  searchQueries?: SearchQuery[];
 };
 
 export type JobDiscoveryWorkflowResult = {
@@ -34,8 +35,9 @@ export async function runJobDiscoveryWorkflow(
   let discovered = 0;
   let stored = 0;
   const discoveredJobs: UpsertJobPayload[] = [];
+  const searchQueries = options.searchQueries ?? dependencies.searchQueries;
 
-  for (const query of dependencies.searchQueries) {
+  for (const query of searchQueries) {
     const jobs = await dependencies.searchForPersistence(query);
     discovered += jobs.length;
     discoveredJobs.push(...jobs);
@@ -57,7 +59,7 @@ export async function runJobDiscoveryWorkflow(
   }
 
   return {
-    queries: dependencies.searchQueries.length,
+    queries: searchQueries.length,
     discovered,
     stored,
     jobs: discoveredJobs,

@@ -90,6 +90,70 @@ describe("sidecar runtime IPC", () => {
     expect(persistedUrls).toEqual(["https://jobs.example/react"]);
   });
 
+  it("passes configured discovery search queries into job-discovery", async () => {
+    const searchedQueries: unknown[] = [];
+    const runtime = createSidecarRuntime({
+      jobDiscovery: {
+        searchQueries: [],
+        searchForPersistence: async (query) => {
+          searchedQueries.push(query);
+          return [
+            discoveredJob({
+              url: "https://jobs.example/configured-react",
+              title: "Configured React Engineer",
+              company_name: "Settings Labs",
+            }),
+          ];
+        },
+        upsertJobs: async (jobs) =>
+          jobs.map((job, index) => ({
+            id: `configured-job-${index + 1}`,
+            platform: job.platform,
+            title: job.title,
+            company_name: job.company_name,
+          })),
+      },
+    });
+
+    await expect(
+      handleSidecarIpcRequest(runtime, {
+        id: "workflow-configured",
+        method: "workflow.run",
+        params: {
+          workflowId: "job-discovery",
+          discovery: {
+            searchQueries: [
+              {
+                keywords: ["react", "typescript"],
+                location: "Remote",
+                remote: true,
+                experienceLevel: "entry",
+                jobType: "fulltime",
+              },
+            ],
+          },
+        },
+      }),
+    ).resolves.toEqual({
+      id: "workflow-configured",
+      ok: true,
+      result: expect.objectContaining({
+        queries: 1,
+        discovered: 1,
+        stored: 1,
+      }),
+    });
+    expect(searchedQueries).toEqual([
+      {
+        keywords: ["react", "typescript"],
+        location: "Remote",
+        remote: true,
+        experienceLevel: "entry",
+        jobType: "fulltime",
+      },
+    ]);
+  });
+
   it("serializes JSON-line responses for stdio IPC", async () => {
     const runtime = createSidecarRuntime();
     const input = new PassThrough();

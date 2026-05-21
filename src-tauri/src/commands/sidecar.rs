@@ -1,5 +1,8 @@
 use crate::{
-    db::{models::UpsertJob, queries},
+    db::{
+        models::{SettingValue, UpsertJob},
+        queries,
+    },
     sidecar::{self, SidecarCommand, SidecarRuntimeStatus},
     AppState,
 };
@@ -37,7 +40,11 @@ pub fn run_sidecar_workflow_and_persist_jobs_with_command(
     connection: &Connection,
     workflow_id: &str,
 ) -> Result<Value, String> {
-    let mut result = sidecar::run_sidecar_workflow_with_command(command, workflow_id)
+    let mut result = sidecar::run_sidecar_workflow_with_command_and_params(
+        command,
+        workflow_id,
+        workflow_params_from_settings(connection, workflow_id)?,
+    )
         .map_err(|error| error.to_string())?;
 
     if workflow_id == "job-discovery" {
@@ -45,6 +52,38 @@ pub fn run_sidecar_workflow_and_persist_jobs_with_command(
     }
 
     Ok(result)
+}
+
+fn workflow_params_from_settings(
+    connection: &Connection,
+    workflow_id: &str,
+) -> Result<Value, String> {
+    if workflow_id != "job-discovery" {
+        return Ok(json!({}));
+    }
+
+    let Some(setting) = queries::get_setting(connection, "discovery.searchQueries")
+        .map_err(|error| error.to_string())?
+    else {
+        return Ok(json!({}));
+    };
+
+    match setting.value {
+        SettingValue::Array(search_queries) if !search_queries.is_empty() => Ok(json!({
+            "discovery": {
+                "searchQueries": search_queries
+            }
+        })),
+        SettingValue::Object(value) => match value.as_array() {
+            Some(search_queries) if !search_queries.is_empty() => Ok(json!({
+                "discovery": {
+                    "searchQueries": search_queries
+                }
+            })),
+            _ => Ok(json!({})),
+        },
+        _ => Ok(json!({})),
+    }
 }
 
 fn persist_discovered_jobs(connection: &Connection, result: &mut Value) -> Result<(), String> {

@@ -56,7 +56,7 @@ export async function handleSidecarIpcRequest(
         return {
           id,
           ok: true,
-          result: await runtime.workflowEngine.run(workflowId),
+          result: await runtime.workflowEngine.run(workflowId, params),
         };
       }
       default:
