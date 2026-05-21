@@ -450,6 +450,7 @@ function createApplicationWorkerDependencies(
       empty.generateCoverLetter,
     fillApplicationForm: options?.fillApplicationForm ?? empty.fillApplicationForm,
     submitApplication: options?.submitApplication ?? empty.submitApplication,
+    verifySubmission: options?.verifySubmission,
     updateApplication: options?.updateApplication ?? empty.updateApplication,
   };
 }

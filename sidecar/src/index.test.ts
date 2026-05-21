@@ -534,6 +534,71 @@ describe("sidecar runtime", () => {
     ]);
   });
 
+  it("wires submission verification into full-auto application processing", async () => {
+    const checkedAt = new Date("2026-05-28T11:00:00Z");
+    const verifiedSubmissions: string[] = [];
+    const applicationUpdates: Array<{ applicationId: string; update: Record<string, unknown> }> = [];
+    const runtime = createSidecarRuntime({
+      now: () => checkedAt,
+      applicationProcessing: {
+        reviewBeforeSubmit: false,
+        listApplications: async () => [
+          {
+            id: "app-1",
+            jobId: "job-1",
+            companyName: "Northstar Labs",
+            status: "queued",
+            mode: "full_auto",
+            resumePath: null,
+            coverLetterPath: null,
+            retryCount: 0,
+            maxRetries: 3,
+          },
+        ],
+        prepareApplication: async () => undefined,
+        generateResume: async () => ({ resumePath: "/tmp/app-1-resume.pdf" }),
+        generateCoverLetter: async () => ({ coverLetterPath: "/tmp/app-1-cover-letter.pdf" }),
+        fillApplicationForm: async () => ({
+          submissionUrl: "https://ats.example/app-1/submit",
+          requiredMissing: [],
+        }),
+        submitApplication: async () => ({
+          confirmationId: null,
+          receiptText: "Thanks for applying. Confirmation CONF-42",
+        }),
+        verifySubmission: async (application, submission) => {
+          verifiedSubmissions.push(`${application.id}:${submission.receiptText}`);
+
+          return {
+            ok: true,
+            confirmationId: "CONF-42",
+            message: "confirmation receipt detected",
+          };
+        },
+        updateApplication: async (applicationId, update) => {
+          applicationUpdates.push({ applicationId, update });
+        },
+      },
+    });
+
+    await expect(runtime.workflowEngine.run("application-processing")).resolves.toMatchObject({
+      processed: 1,
+      failed: 0,
+      submitted: 1,
+    });
+
+    expect(verifiedSubmissions).toEqual(["app-1:Thanks for applying. Confirmation CONF-42"]);
+    expect(applicationUpdates.at(-1)).toEqual({
+      applicationId: "app-1",
+      update: {
+        status: "submitted",
+        confirmationId: "CONF-42",
+        submittedAt: "2026-05-28T11:00:00.000Z",
+        errorMessage: null,
+      },
+    });
+  });
+
   it("wires document generation into due application processing tasks", async () => {
     const checkedAt = new Date("2026-05-28T10:30:00Z");
     const outputDir = await mkdtemp(join(tmpdir(), "careercaveman-runtime-docs-"));
