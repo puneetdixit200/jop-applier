@@ -1,12 +1,18 @@
 import type {
   AIProvider,
+  ClassifiedJobPosting,
   ChatMessage,
   ChatOptions,
+  CompanyForEmail,
   CompletionOptions,
+  JobForContent,
   JobForMatching,
   MatchResult,
   ModelInfo,
+  ProfileForContent,
   ProfileForMatching,
+  ResumeContent,
+  TailoredResume,
 } from "./provider-interface.js";
 
 export class AIEngine {
@@ -91,5 +97,133 @@ export class AIEngine {
       tags: parsed.tags,
     };
   }
+
+  async tailorResume(resume: ResumeContent, job: JobForContent): Promise<TailoredResume> {
+    const prompt = [
+      "Tailor this resume for the job as strict JSON.",
+      "Preserve accurate facts, reorder and emphasize relevant experience, and do not invent credentials.",
+      `Resume JSON: ${JSON.stringify(resume)}`,
+      `Job JSON: ${JSON.stringify(job)}`,
+      'Return a JSON object with "summary", "skills", and "tailoringNotes" plus any preserved resume sections.',
+    ].join("\n");
+
+    const raw = await this.complete(prompt, { temperature: 0.2 });
+    const parsed = parseJsonObject(raw, "AI tailored resume result");
+    const summary = requireString(parsed, "summary", "AI tailored resume result");
+    const skills = requireStringArray(parsed, "skills", "AI tailored resume result");
+    const tailoringNotes = requireStringArray(parsed, "tailoringNotes", "AI tailored resume result");
+
+    return {
+      ...parsed,
+      summary,
+      skills,
+      tailoringNotes,
+    };
+  }
+
+  async generateCoverLetter(profile: ProfileForContent, job: JobForContent): Promise<string> {
+    const prompt = [
+      "Generate a personalized cover letter for this application.",
+      "Keep it professional, specific to the company and role, and grounded only in the candidate profile.",
+      `Candidate JSON: ${JSON.stringify(profile)}`,
+      `Job JSON: ${JSON.stringify(job)}`,
+    ].join("\n");
+
+    return nonEmptyCompletion(await this.complete(prompt, { temperature: 0.4 }), "AI cover letter result");
+  }
+
+  async generateColdEmail(profile: ProfileForContent, company: CompanyForEmail): Promise<string> {
+    const prompt = [
+      "Write a concise cold outreach email for this target company.",
+      "Include a useful subject line, a short personalized opener, and a clear low-friction call to action.",
+      `Candidate JSON: ${JSON.stringify(profile)}`,
+      `Company JSON: ${JSON.stringify(company)}`,
+    ].join("\n");
+
+    return nonEmptyCompletion(await this.complete(prompt, { temperature: 0.4 }), "AI cold email result");
+  }
+
+  async classifyJobPosting(rawPosting: string): Promise<ClassifiedJobPosting> {
+    const prompt = [
+      "Extract structured job data from this posting as strict JSON.",
+      `Posting: ${rawPosting}`,
+      'Return {"title":string,"companyName":string,"location":string|null,"description":string,"requirements":string[],"jobType":string|null,"experienceLevel":string|null,"remote":boolean}.',
+    ].join("\n");
+
+    const raw = await this.complete(prompt, { temperature: 0.1 });
+    const parsed = parseJsonObject(raw, "AI classified job result");
+
+    return {
+      title: requireString(parsed, "title", "AI classified job result"),
+      companyName: requireString(parsed, "companyName", "AI classified job result"),
+      location: optionalString(parsed, "location", "AI classified job result"),
+      description: requireString(parsed, "description", "AI classified job result"),
+      requirements: requireStringArray(parsed, "requirements", "AI classified job result"),
+      jobType: optionalString(parsed, "jobType", "AI classified job result"),
+      experienceLevel: optionalString(parsed, "experienceLevel", "AI classified job result"),
+      remote: requireBoolean(parsed, "remote", "AI classified job result"),
+    };
+  }
 }
 
+function parseJsonObject(raw: string, context: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`${context} must be valid JSON`);
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error(`${context} must be a JSON object`);
+  }
+
+  return parsed;
+}
+
+function requireString(record: Record<string, unknown>, key: string, context: string): string {
+  const value = record[key];
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${context} must include ${key}`);
+  }
+  return value;
+}
+
+function optionalString(record: Record<string, unknown>, key: string, context: string): string | null {
+  const value = record[key];
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    throw new Error(`${context} must include ${key} as a string or null`);
+  }
+  return value;
+}
+
+function requireStringArray(record: Record<string, unknown>, key: string, context: string): string[] {
+  const value = record[key];
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error(`${context} must include ${key} as a string array`);
+  }
+  return value;
+}
+
+function requireBoolean(record: Record<string, unknown>, key: string, context: string): boolean {
+  const value = record[key];
+  if (typeof value !== "boolean") {
+    throw new Error(`${context} must include ${key} as a boolean`);
+  }
+  return value;
+}
+
+function nonEmptyCompletion(raw: string, context: string): string {
+  const value = raw.trim();
+  if (value.length === 0) {
+    throw new Error(`${context} cannot be empty`);
+  }
+  return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
