@@ -21,6 +21,10 @@ import {
   type BrowserSessionHealthTarget,
 } from "./browser/session-health.js";
 import {
+  runEmailResponseWorker,
+  type EmailResponseWorkerDependencies,
+} from "./communications/email-response-worker.js";
+import {
   runJobDiscoveryWorkflow,
   type JobDiscoveryWorkflowDependencies,
 } from "./discovery/job-discovery-workflow.js";
@@ -109,6 +113,10 @@ export type SidecarApplicationProcessingOptions = ApplicationWorkerDependencies 
   reviewBeforeSubmit?: boolean;
 };
 
+export type SidecarEmailCheckOptions = EmailResponseWorkerDependencies & {
+  maxResponses?: number;
+};
+
 export type SidecarRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
@@ -119,6 +127,7 @@ export type SidecarRuntimeOptions = {
   };
   jobDiscovery?: JobDiscoveryWorkflowDependencies;
   applicationProcessing?: SidecarApplicationProcessingOptions;
+  emailCheck?: SidecarEmailCheckOptions;
   followUps?: SidecarFollowUpOptions;
   scheduledTasks?: ScheduledTaskPersistence;
   scheduler?: {
@@ -140,6 +149,7 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   const jobDiscovery = options.jobDiscovery ?? createEmptyJobDiscoveryDependencies();
   const applicationProcessing =
     options.applicationProcessing ?? createEmptyApplicationWorkerDependencies();
+  const emailCheck = options.emailCheck ?? createEmptyEmailResponseWorkerDependencies();
   const followUps = options.followUps ?? createEmptyFollowUpDependencies();
   const scheduledTaskPersistence = options.scheduledTasks ?? createEmptyScheduledTaskPersistence();
 
@@ -157,6 +167,16 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
         eventBus,
         maxApplications: options.applicationProcessing?.maxApplications,
         reviewBeforeSubmit: options.applicationProcessing?.reviewBeforeSubmit,
+      }),
+  });
+  workflowEngine.register({
+    id: "email-check",
+    description: "Check inbound email responses and update application records",
+    run: async () =>
+      runEmailResponseWorker(emailCheck, {
+        now: now(),
+        eventBus,
+        maxResponses: options.emailCheck?.maxResponses,
       }),
   });
   workflowEngine.register({
@@ -239,6 +259,15 @@ function createEmptyApplicationWorkerDependencies(): ApplicationWorkerDependenci
     fillApplicationForm: async () => ({ submissionUrl: null }),
     submitApplication: async () => ({ confirmationId: null }),
     updateApplication: async () => undefined,
+  };
+}
+
+function createEmptyEmailResponseWorkerDependencies(): EmailResponseWorkerDependencies {
+  return {
+    fetchResponses: async () => [],
+    saveCommunication: async () => ({ communicationId: null }),
+    updateApplicationResponse: async () => undefined,
+    markResponseProcessed: async () => undefined,
   };
 }
 

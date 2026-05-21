@@ -527,4 +527,119 @@ describe("sidecar runtime", () => {
       },
     ]);
   });
+
+  it("runs due email check scheduled tasks through the email response workflow", async () => {
+    const checkedAt = new Date("2026-05-28T09:45:00Z");
+    const savedCommunications: Array<Record<string, unknown>> = [];
+    const applicationResponses: Array<{ applicationId: string; update: Record<string, unknown> }> = [];
+    const processedMessages: string[] = [];
+    const responseEvents: Array<CareerEventMap["response.received"]> = [];
+    const scheduledTaskUpdates: Array<{ id: string; update: PersistedScheduledTaskRunUpdate }> = [];
+    const runtime = createSidecarRuntime({
+      now: () => checkedAt,
+      emailCheck: {
+        fetchResponses: async () => [
+          {
+            id: "imap-1",
+            applicationId: "app-1",
+            jobId: "job-1",
+            companyName: "Northstar Labs",
+            contactId: "contact-1",
+            from: "recruiter@northstar.example",
+            subject: "Interview availability",
+            body: "Can you share availability for an interview this week?",
+            receivedAt: "2026-05-28T09:40:00.000Z",
+            responseType: "interview",
+          },
+        ],
+        saveCommunication: async (communication) => {
+          savedCommunications.push(communication);
+          return { communicationId: "comm-1" };
+        },
+        updateApplicationResponse: async (applicationId, update) => {
+          applicationResponses.push({ applicationId, update });
+        },
+        markResponseProcessed: async (messageId) => {
+          processedMessages.push(messageId);
+        },
+      },
+      scheduledTasks: {
+        listScheduledTasks: async () => [
+          {
+            id: "email-check-task",
+            name: "Email Check",
+            type: "email_check",
+            cron_expression: "*/15 * * * *",
+            is_enabled: true,
+            last_run: null,
+            next_run: "2026-05-28T09:45:00.000Z",
+            config: {
+              cadence: { kind: "interval", minutes: 15 },
+            },
+            created_at: "2026-05-28T09:30:00.000Z",
+          },
+        ],
+        updateScheduledTaskRun: async (id, update) => {
+          scheduledTaskUpdates.push({ id, update });
+        },
+      },
+    });
+
+    runtime.eventBus.on("response.received", (event) => responseEvents.push(event));
+
+    await expect(runtime.runDueScheduledTasks()).resolves.toEqual({
+      scanned: 1,
+      due: 1,
+      completed: 1,
+      failed: 0,
+      skipped: 0,
+    });
+
+    expect(runtime.workflowEngine.registeredWorkflows()).toContain("email-check");
+    expect(savedCommunications).toEqual([
+      {
+        applicationId: "app-1",
+        contactId: "contact-1",
+        direction: "received",
+        type: "response",
+        subject: "Interview availability",
+        body: "Can you share availability for an interview this week?",
+        emailId: "imap-1",
+        sentAt: "2026-05-28T09:40:00.000Z",
+        readAt: null,
+      },
+    ]);
+    expect(applicationResponses).toEqual([
+      {
+        applicationId: "app-1",
+        update: {
+          responseDate: "2026-05-28T09:40:00.000Z",
+          responseType: "interview",
+          responseNotes: "Interview availability",
+          status: "response_received",
+        },
+      },
+    ]);
+    expect(processedMessages).toEqual(["imap-1"]);
+    expect(responseEvents).toEqual([
+      {
+        applicationId: "app-1",
+        jobId: "job-1",
+        companyName: "Northstar Labs",
+        communicationId: "comm-1",
+        responseType: "interview",
+        subject: "Interview availability",
+        receivedAt: new Date("2026-05-28T09:40:00.000Z"),
+      },
+    ]);
+    expect(scheduledTaskUpdates).toEqual([
+      {
+        id: "email-check-task",
+        update: {
+          last_run: "2026-05-28T09:45:00.000Z",
+          next_run: "2026-05-28T10:00:00.000Z",
+        },
+      },
+    ]);
+  });
 });

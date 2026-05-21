@@ -59,6 +59,21 @@ export type CareerEventMap = {
     reason: string;
     failedAt: Date;
   };
+  "response.received": {
+    applicationId: string;
+    jobId: string | null;
+    companyName: string | null;
+    communicationId: string | null;
+    responseType: string;
+    subject: string | null;
+    receivedAt: Date;
+  };
+  "email_check.failed": {
+    messageId: string;
+    applicationId: string | null;
+    reason: string;
+    failedAt: Date;
+  };
   "scheduled_task.started": {
     taskId: string;
     taskName: string;
