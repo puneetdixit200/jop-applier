@@ -602,6 +602,26 @@ button:disabled {
   color: #909b95;
 }
 
+.application-editor {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e1e8e3;
+}
+
+.application-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+  gap: 14px;
+}
+
+.application-editor-grid label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: #35423b;
+  font-weight: 700;
+}
+
 .form-panel,
 .settings-panel {
   display: grid;
@@ -763,6 +783,10 @@ legend {
 
   .contact-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .application-editor-grid {
+    grid-template-columns: 1fr;
   }
 
   .settings-grid {

@@ -26,6 +26,7 @@ import {
   listScheduledTasks,
   runDueScheduledTasks,
   runSidecarWorkflow,
+  saveApplication,
   saveScheduledTask,
   saveSetting,
   saveUserProfile,
@@ -37,6 +38,11 @@ import {
   type UpsertUserProfile,
   type UserProfile,
 } from "./lib/tauri-api";
+import {
+  applicationEditDraft,
+  applicationEditToUpsert,
+  type ApplicationEditDraft,
+} from "./lib/application-editor";
 import {
   buildApplicationActivity,
   type ApplicationActivity,
@@ -145,6 +151,7 @@ const previewApplications: Application[] = [
     next_follow_up: "2026-05-23T08:00:00Z",
     resume_path: "/preview/astra-resume.pdf",
     cover_letter_path: "/preview/astra-cover.pdf",
+    notes: "Follow up if there is no response after the weekend.",
     tags: ["frontend"],
   }),
   applicationRecord({
@@ -153,6 +160,7 @@ const previewApplications: Application[] = [
     company_name: "Mosaic AI",
     job_title: "Product Intern",
     status: "preparing",
+    notes: "Tailor product analytics examples before applying.",
     tags: ["ai"],
   }),
   applicationRecord({
@@ -318,8 +326,12 @@ export function App() {
   });
   const [persistedJobs, setPersistedJobs] = useState<JobSummary[]>([]);
   const [persistedApplications, setPersistedApplications] = useState<Application[]>([]);
+  const [previewApplicationRecords, setPreviewApplicationRecords] = useState<Application[]>(previewApplications);
   const [persistedContacts, setPersistedContacts] = useState<Contact[]>([]);
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
+  const [applicationDraft, setApplicationDraft] = useState<ApplicationEditDraft>(() =>
+    applicationEditDraft(previewApplications[0]),
+  );
   const [applicationActivity, setApplicationActivity] = useState<ApplicationActivity>(() =>
     buildApplicationActivity(emptyActivitySources),
   );
@@ -334,9 +346,12 @@ export function App() {
 
   const routeTitle = useMemo(() => routes.find((item) => item.id === route)?.label ?? "Dashboard", [route]);
   const visibleJobs = persistedJobs.length > 0 ? persistedJobs : previewJobs;
+  const visibleApplications = persistedApplications.length > 0 ? persistedApplications : previewApplicationRecords;
+  const selectedApplicationRecord =
+    visibleApplications.find((application) => application.id === selectedApplicationId) ?? null;
   const applicationTracker = useMemo(
-    () => buildApplicationTracker(persistedApplications.length > 0 ? persistedApplications : previewApplications),
-    [persistedApplications],
+    () => buildApplicationTracker(visibleApplications),
+    [visibleApplications],
   );
   const contactCrm = useMemo(
     () => buildContactCrm(persistedContacts.length > 0 ? persistedContacts : previewContacts),
@@ -349,6 +364,12 @@ export function App() {
       setSelectedApplicationId(applicationTracker.rows[0]?.id ?? null);
     }
   }, [applicationTracker, selectedApplicationId]);
+
+  useEffect(() => {
+    if (selectedApplicationRecord) {
+      setApplicationDraft(applicationEditDraft(selectedApplicationRecord));
+    }
+  }, [selectedApplicationRecord]);
 
   useEffect(() => {
     let isMounted = true;
@@ -534,6 +555,41 @@ export function App() {
     }
   }
 
+  async function saveSelectedApplicationEdits() {
+    if (!selectedApplicationRecord) {
+      return;
+    }
+
+    const editedApplication = applicationEditToUpsert(selectedApplicationRecord, applicationDraft);
+
+    const updatePreviewApplication = () => {
+      const updated = {
+        ...selectedApplicationRecord,
+        notes: editedApplication.notes,
+        tags: editedApplication.tags,
+      };
+      setPreviewApplicationRecords((current) =>
+        current.map((application) => (application.id === updated.id ? updated : application)),
+      );
+      setStorageStatus("Browser preview");
+    };
+
+    if (!isDesktopRuntime() || persistedApplications.length === 0) {
+      updatePreviewApplication();
+      return;
+    }
+
+    try {
+      const saved = await saveApplication(editedApplication);
+      setPersistedApplications((current) =>
+        current.map((application) => (application.id === saved.id ? saved : application)),
+      );
+      setStorageStatus("SQLite ready");
+    } catch {
+      setStorageStatus("Storage unavailable");
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar" aria-label="Primary navigation">
@@ -618,7 +674,11 @@ export function App() {
             tracker={applicationTracker}
             activity={applicationActivity}
             contactCrm={contactCrm}
+            selectedApplicationRecord={selectedApplicationRecord}
+            applicationDraft={applicationDraft}
             selectedApplicationId={selectedApplicationId}
+            onApplicationDraftChange={setApplicationDraft}
+            onSaveApplicationEdits={saveSelectedApplicationEdits}
             onSelectApplication={setSelectedApplicationId}
           />
         )}
@@ -774,16 +834,26 @@ function Applications({
   tracker,
   activity,
   contactCrm,
+  selectedApplicationRecord,
+  applicationDraft,
   selectedApplicationId,
+  onApplicationDraftChange,
+  onSaveApplicationEdits,
   onSelectApplication,
 }: {
   tracker: ApplicationTracker;
   activity: ApplicationActivity;
   contactCrm: ContactCrm;
+  selectedApplicationRecord: Application | null;
+  applicationDraft: ApplicationEditDraft;
   selectedApplicationId: string | null;
+  onApplicationDraftChange: (draft: ApplicationEditDraft) => void;
+  onSaveApplicationEdits: () => void;
   onSelectApplication: (applicationId: string) => void;
 }) {
   const selectedApplication = tracker.rows.find((application) => application.id === selectedApplicationId);
+  const updateDraft = <Key extends keyof ApplicationEditDraft>(key: Key, value: ApplicationEditDraft[Key]) =>
+    onApplicationDraftChange({ ...applicationDraft, [key]: value });
 
   return (
     <section className="panel full">
@@ -878,6 +948,39 @@ function Applications({
               </div>
             </article>
           )}
+        </div>
+      </section>
+      <section className="application-editor" aria-label="Application notes and tags">
+        <div className="activity-heading">
+          <div>
+            <p className="eyebrow">Notes</p>
+            <h4>{selectedApplicationRecord ? `${selectedApplicationRecord.company_name} details` : "Application details"}</h4>
+          </div>
+          <button
+            className="secondary-action"
+            type="button"
+            onClick={onSaveApplicationEdits}
+            disabled={!selectedApplicationRecord}
+          >
+            Save Notes
+          </button>
+        </div>
+        <div className="application-editor-grid">
+          <label>
+            Notes
+            <textarea
+              value={applicationDraft.notes}
+              onChange={(event) => updateDraft("notes", event.target.value)}
+              rows={4}
+            />
+          </label>
+          <label>
+            Tags
+            <input
+              value={applicationDraft.tagsText}
+              onChange={(event) => updateDraft("tagsText", event.target.value)}
+            />
+          </label>
         </div>
       </section>
       <div className="activity-detail">
