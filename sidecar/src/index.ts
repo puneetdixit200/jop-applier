@@ -12,6 +12,10 @@ import {
   runBrowserSessionHealthCheck,
   type BrowserSessionHealthTarget,
 } from "./browser/session-health.js";
+import {
+  runJobDiscoveryWorkflow,
+  type JobDiscoveryWorkflowDependencies,
+} from "./discovery/job-discovery-workflow.js";
 import { DEFAULT_WORKFLOWS_BY_TASK_TYPE } from "./orchestrator/default-schedules.js";
 import { EventBus } from "./orchestrator/event-bus.js";
 import type { CareerEventMap } from "./orchestrator/events.js";
@@ -95,6 +99,7 @@ export type SidecarRuntimeOptions = {
     openSession?: (platform: string) => Promise<BrowserSession>;
     validateSession?: Parameters<typeof runBrowserSessionHealthCheck>[0]["validateSession"];
   };
+  jobDiscovery?: JobDiscoveryWorkflowDependencies;
   scheduledTasks?: ScheduledTaskPersistence;
   scheduler?: {
     pollIntervalMs?: number;
@@ -112,12 +117,13 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   const aiEngine = createAIEngineFromEnv(env);
   const browserManager = new BrowserManager(createPlaywrightBrowserAdapter());
   const now = options.now ?? (() => new Date());
+  const jobDiscovery = options.jobDiscovery ?? createEmptyJobDiscoveryDependencies();
   const scheduledTaskPersistence = options.scheduledTasks ?? createEmptyScheduledTaskPersistence();
 
   workflowEngine.register({
-    id: "daily-discovery",
-    description: "Placeholder discovery workflow for the Phase 1 foundation",
-    run: async () => ({ queued: 0 }),
+    id: "job-discovery",
+    description: "Search configured job queries and persist discovered jobs",
+    run: async () => runJobDiscoveryWorkflow(jobDiscovery, { eventBus }),
   });
   workflowEngine.register({
     id: "session-health",
@@ -168,6 +174,14 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
     runDueScheduledTasks: runDueRuntimeScheduledTasks,
     schedulerService,
     workflowEngine,
+  };
+}
+
+function createEmptyJobDiscoveryDependencies(): JobDiscoveryWorkflowDependencies {
+  return {
+    searchQueries: [],
+    searchForPersistence: async () => [],
+    upsertJobs: async () => [],
   };
 }
 
