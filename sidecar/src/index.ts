@@ -4,6 +4,10 @@ import { OllamaProvider } from "./ai/providers/ollama-provider.js";
 import { OpenAIProvider } from "./ai/providers/openai-provider.js";
 import { OpenRouterProvider } from "./ai/providers/openrouter-provider.js";
 import {
+  runApplicationWorker,
+  type ApplicationWorkerDependencies,
+} from "./applications/application-worker.js";
+import {
   runFollowUpWorker,
   type FollowUpWorkerDependencies,
 } from "./applications/follow-up-worker.js";
@@ -100,6 +104,11 @@ export type SidecarFollowUpOptions = FollowUpWorkerDependencies & {
   maxFollowUps?: number;
 };
 
+export type SidecarApplicationProcessingOptions = ApplicationWorkerDependencies & {
+  maxApplications?: number;
+  reviewBeforeSubmit?: boolean;
+};
+
 export type SidecarRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
@@ -109,6 +118,7 @@ export type SidecarRuntimeOptions = {
     validateSession?: Parameters<typeof runBrowserSessionHealthCheck>[0]["validateSession"];
   };
   jobDiscovery?: JobDiscoveryWorkflowDependencies;
+  applicationProcessing?: SidecarApplicationProcessingOptions;
   followUps?: SidecarFollowUpOptions;
   scheduledTasks?: ScheduledTaskPersistence;
   scheduler?: {
@@ -128,6 +138,8 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   const browserManager = new BrowserManager(createPlaywrightBrowserAdapter());
   const now = options.now ?? (() => new Date());
   const jobDiscovery = options.jobDiscovery ?? createEmptyJobDiscoveryDependencies();
+  const applicationProcessing =
+    options.applicationProcessing ?? createEmptyApplicationWorkerDependencies();
   const followUps = options.followUps ?? createEmptyFollowUpDependencies();
   const scheduledTaskPersistence = options.scheduledTasks ?? createEmptyScheduledTaskPersistence();
 
@@ -135,6 +147,17 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
     id: "job-discovery",
     description: "Search configured job queries and persist discovered jobs",
     run: async () => runJobDiscoveryWorkflow(jobDiscovery, { eventBus }),
+  });
+  workflowEngine.register({
+    id: "application-processing",
+    description: "Process queued applications through the application workflow",
+    run: async () =>
+      runApplicationWorker(applicationProcessing, {
+        now: now(),
+        eventBus,
+        maxApplications: options.applicationProcessing?.maxApplications,
+        reviewBeforeSubmit: options.applicationProcessing?.reviewBeforeSubmit,
+      }),
   });
   workflowEngine.register({
     id: "follow-up-check",
@@ -204,6 +227,18 @@ function createEmptyJobDiscoveryDependencies(): JobDiscoveryWorkflowDependencies
     searchQueries: [],
     searchForPersistence: async () => [],
     upsertJobs: async () => [],
+  };
+}
+
+function createEmptyApplicationWorkerDependencies(): ApplicationWorkerDependencies {
+  return {
+    listApplications: async () => [],
+    prepareApplication: async () => undefined,
+    generateResume: async () => ({ resumePath: null }),
+    generateCoverLetter: async () => ({ coverLetterPath: null }),
+    fillApplicationForm: async () => ({ submissionUrl: null }),
+    submitApplication: async () => ({ confirmationId: null }),
+    updateApplication: async () => undefined,
   };
 }
 

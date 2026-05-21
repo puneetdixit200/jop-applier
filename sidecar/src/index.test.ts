@@ -417,4 +417,114 @@ describe("sidecar runtime", () => {
       },
     ]);
   });
+
+  it("runs due application processing scheduled tasks through the application workflow", async () => {
+    const checkedAt = new Date("2026-05-28T09:30:00Z");
+    const applicationUpdates: Array<{ applicationId: string; update: Record<string, unknown> }> = [];
+    const applicationSteps: string[] = [];
+    const scheduledTaskUpdates: Array<{ id: string; update: PersistedScheduledTaskRunUpdate }> = [];
+    const runtime = createSidecarRuntime({
+      now: () => checkedAt,
+      applicationProcessing: {
+        reviewBeforeSubmit: true,
+        listApplications: async () => [
+          {
+            id: "app-1",
+            jobId: "job-1",
+            companyName: "Northstar Labs",
+            status: "queued",
+            mode: "semi_auto",
+            resumePath: null,
+            coverLetterPath: null,
+            retryCount: 0,
+            maxRetries: 3,
+          },
+        ],
+        prepareApplication: async (application) => {
+          applicationSteps.push(`prepare:${application.id}`);
+        },
+        generateResume: async (application) => {
+          applicationSteps.push(`resume:${application.id}`);
+          return { resumePath: `/tmp/${application.id}-resume.pdf` };
+        },
+        generateCoverLetter: async (application) => {
+          applicationSteps.push(`cover:${application.id}`);
+          return { coverLetterPath: `/tmp/${application.id}-cover-letter.pdf` };
+        },
+        fillApplicationForm: async (application) => {
+          applicationSteps.push(`fill:${application.id}`);
+          return { submissionUrl: `https://ats.example/${application.id}/review` };
+        },
+        submitApplication: async (application) => {
+          applicationSteps.push(`submit:${application.id}`);
+          return { confirmationId: `confirmation-${application.id}` };
+        },
+        updateApplication: async (applicationId, update) => {
+          applicationUpdates.push({ applicationId, update });
+        },
+      },
+      scheduledTasks: {
+        listScheduledTasks: async () => [
+          {
+            id: "application-processing-task",
+            name: "Application Processing",
+            type: "apply",
+            cron_expression: "*/30 * * * *",
+            is_enabled: true,
+            last_run: null,
+            next_run: "2026-05-28T09:30:00.000Z",
+            config: {
+              cadence: { kind: "interval", minutes: 30 },
+            },
+            created_at: "2026-05-28T09:00:00.000Z",
+          },
+        ],
+        updateScheduledTaskRun: async (id, update) => {
+          scheduledTaskUpdates.push({ id, update });
+        },
+      },
+    });
+
+    await expect(runtime.runDueScheduledTasks()).resolves.toEqual({
+      scanned: 1,
+      due: 1,
+      completed: 1,
+      failed: 0,
+      skipped: 0,
+    });
+
+    expect(runtime.workflowEngine.registeredWorkflows()).toContain("application-processing");
+    expect(applicationSteps).toEqual(["prepare:app-1", "resume:app-1", "cover:app-1", "fill:app-1"]);
+    expect(applicationUpdates).toEqual([
+      { applicationId: "app-1", update: { status: "preparing" } },
+      {
+        applicationId: "app-1",
+        update: { status: "resume_generated", resumePath: "/tmp/app-1-resume.pdf" },
+      },
+      {
+        applicationId: "app-1",
+        update: {
+          status: "cover_letter_generated",
+          coverLetterPath: "/tmp/app-1-cover-letter.pdf",
+        },
+      },
+      { applicationId: "app-1", update: { status: "form_filling" } },
+      {
+        applicationId: "app-1",
+        update: {
+          status: "review_pending",
+          submissionUrl: "https://ats.example/app-1/review",
+        },
+      },
+    ]);
+    expect(scheduledTaskUpdates).toEqual([
+      {
+        id: "application-processing-task",
+        update: {
+          last_run: "2026-05-28T09:30:00.000Z",
+          next_run: "2026-05-28T10:00:00.000Z",
+        },
+      },
+    ]);
+  });
 });

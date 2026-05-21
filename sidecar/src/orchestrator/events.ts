@@ -44,6 +44,21 @@ export type CareerEventMap = {
     reason: string;
     failedAt: Date;
   };
+  "application.submitted": {
+    applicationId: string;
+    jobId: string;
+    companyName: string;
+    confirmationId: string | null;
+    submittedAt: Date;
+  };
+  "application.failed": {
+    applicationId: string;
+    jobId: string;
+    companyName: string;
+    status: "failed" | "permanently_failed";
+    reason: string;
+    failedAt: Date;
+  };
   "scheduled_task.started": {
     taskId: string;
     taskName: string;
