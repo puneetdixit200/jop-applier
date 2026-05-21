@@ -4,9 +4,10 @@ use serde::Serialize;
 use thiserror::Error;
 
 use super::models::{
-    Application, ApplicationEvent, Communication, Company, Contact, Document, Job, ScheduledTask,
-    Setting, SettingValue, UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact,
-    UpsertDocument, UpsertJob, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
+    AiCacheEntry, Application, ApplicationEvent, Communication, Company, Contact, Document, Job,
+    ScheduledTask, Setting, SettingValue, UpsertAiCacheEntry, UpsertApplication,
+    UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument, UpsertJob,
+    UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -33,6 +34,8 @@ pub enum QueryError {
     MissingCommunicationAfterSave,
     #[error("scheduled task save did not return a row")]
     MissingScheduledTaskAfterSave,
+    #[error("ai cache entry save did not return a row")]
+    MissingAiCacheEntryAfterSave,
 }
 
 pub type QueryResult<T> = Result<T, QueryError>;
@@ -669,6 +672,72 @@ pub fn save_scheduled_task(
         .ok_or(QueryError::MissingScheduledTaskAfterSave)
 }
 
+pub fn get_ai_cache_entry(
+    connection: &Connection,
+    prompt_hash: &str,
+) -> QueryResult<Option<AiCacheEntry>> {
+    let mut statement = connection.prepare(
+        "SELECT prompt_hash, model, response, tokens_used, created_at, expires_at
+         FROM ai_cache
+         WHERE prompt_hash = ?1
+           AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([prompt_hash])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    ai_cache_entry_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
+}
+
+pub fn save_ai_cache_entry(
+    connection: &Connection,
+    entry: UpsertAiCacheEntry,
+) -> QueryResult<AiCacheEntry> {
+    let prompt_hash = entry.prompt_hash.clone();
+    connection.execute(
+        "INSERT INTO ai_cache (prompt_hash, model, response, tokens_used, expires_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(prompt_hash) DO UPDATE SET
+             model = excluded.model,
+             response = excluded.response,
+             tokens_used = excluded.tokens_used,
+             created_at = CURRENT_TIMESTAMP,
+             expires_at = excluded.expires_at",
+        params![
+            entry.prompt_hash,
+            entry.model,
+            entry.response,
+            entry.tokens_used,
+            entry.expires_at,
+        ],
+    )?;
+
+    get_ai_cache_entry_by_hash(connection, &prompt_hash)?
+        .ok_or(QueryError::MissingAiCacheEntryAfterSave)
+}
+
+fn get_ai_cache_entry_by_hash(
+    connection: &Connection,
+    prompt_hash: &str,
+) -> QueryResult<Option<AiCacheEntry>> {
+    let mut statement = connection.prepare(
+        "SELECT prompt_hash, model, response, tokens_used, created_at, expires_at
+         FROM ai_cache
+         WHERE prompt_hash = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([prompt_hash])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    ai_cache_entry_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
+}
+
 fn get_communication_by_rowid(
     connection: &Connection,
     rowid: i64,
@@ -956,6 +1025,17 @@ fn company_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Company> {
         is_blacklisted: row.get(9)?,
         is_whitelisted: row.get(10)?,
         created_at: row.get(11)?,
+    })
+}
+
+fn ai_cache_entry_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AiCacheEntry> {
+    Ok(AiCacheEntry {
+        prompt_hash: row.get(0)?,
+        model: row.get(1)?,
+        response: row.get(2)?,
+        tokens_used: row.get(3)?,
+        created_at: row.get(4)?,
+        expires_at: row.get(5)?,
     })
 }
 

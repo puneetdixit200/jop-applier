@@ -293,3 +293,22 @@ pub struct UpsertScheduledTask {
     pub next_run: Option<String>,
     pub config: Value,
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AiCacheEntry {
+    pub prompt_hash: String,
+    pub model: String,
+    pub response: String,
+    pub tokens_used: Option<i64>,
+    pub created_at: String,
+    pub expires_at: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UpsertAiCacheEntry {
+    pub prompt_hash: String,
+    pub model: String,
+    pub response: String,
+    pub tokens_used: Option<i64>,
+    pub expires_at: Option<String>,
+}

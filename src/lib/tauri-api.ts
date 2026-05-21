@@ -174,6 +174,17 @@ export type ScheduledTask = {
 
 export type UpsertScheduledTask = Omit<ScheduledTask, "id" | "created_at">;
 
+export type AiCacheEntry = {
+  prompt_hash: string;
+  model: string;
+  response: string;
+  tokens_used: number | null;
+  created_at: string;
+  expires_at: string | null;
+};
+
+export type UpsertAiCacheEntry = Omit<AiCacheEntry, "created_at">;
+
 export function isDesktopRuntime() {
   return "__TAURI_INTERNALS__" in window;
 }
@@ -252,4 +263,12 @@ export async function listScheduledTasks() {
 
 export async function saveScheduledTask(task: UpsertScheduledTask) {
   return invoke<ScheduledTask>("save_scheduled_task_command", { task });
+}
+
+export async function getAiCacheEntry(promptHash: string) {
+  return invoke<AiCacheEntry | null>("get_ai_cache_entry_command", { promptHash });
+}
+
+export async function saveAiCacheEntry(entry: UpsertAiCacheEntry) {
+  return invoke<AiCacheEntry>("save_ai_cache_entry_command", { entry });
 }

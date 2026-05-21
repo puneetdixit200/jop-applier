@@ -1,10 +1,10 @@
 use crate::{
     db::{
         models::{
-            Application, ApplicationEvent, Communication, Company, Contact, Document, Job,
-            ScheduledTask, Setting, UpsertApplication, UpsertCommunication, UpsertCompany,
-            UpsertContact, UpsertDocument, UpsertJob, UpsertScheduledTask, UpsertSetting,
-            UpsertUserProfile, UserProfile,
+            AiCacheEntry, Application, ApplicationEvent, Communication, Company, Contact, Document,
+            Job, ScheduledTask, Setting, UpsertAiCacheEntry, UpsertApplication,
+            UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument, UpsertJob,
+            UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
         },
         queries, schema,
     },
@@ -229,4 +229,28 @@ pub fn save_scheduled_task_command(
         .lock()
         .map_err(|_| "database connection lock poisoned".to_string())?;
     queries::save_scheduled_task(&connection, task).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn get_ai_cache_entry_command(
+    state: State<'_, AppState>,
+    prompt_hash: String,
+) -> Result<Option<AiCacheEntry>, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::get_ai_cache_entry(&connection, &prompt_hash).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn save_ai_cache_entry_command(
+    state: State<'_, AppState>,
+    entry: UpsertAiCacheEntry,
+) -> Result<AiCacheEntry, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::save_ai_cache_entry(&connection, entry).map_err(|error| error.to_string())
 }

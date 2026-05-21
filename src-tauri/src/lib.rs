@@ -49,7 +49,9 @@ pub fn run() {
             commands::db::list_communications_command,
             commands::db::save_communication_command,
             commands::db::list_scheduled_tasks_command,
-            commands::db::save_scheduled_task_command
+            commands::db::save_scheduled_task_command,
+            commands::db::get_ai_cache_entry_command,
+            commands::db::save_ai_cache_entry_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
