@@ -4,9 +4,9 @@ use serde::Serialize;
 use thiserror::Error;
 
 use super::models::{
-    Application, ApplicationEvent, Communication, Contact, Document, Job, Setting, SettingValue,
-    UpsertApplication, UpsertCommunication, UpsertContact, UpsertDocument, UpsertJob,
-    UpsertSetting, UpsertUserProfile, UserProfile,
+    Application, ApplicationEvent, Communication, Contact, Document, Job, ScheduledTask, Setting,
+    SettingValue, UpsertApplication, UpsertCommunication, UpsertContact, UpsertDocument, UpsertJob,
+    UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -29,6 +29,8 @@ pub enum QueryError {
     MissingContactAfterSave,
     #[error("communication save did not return a row")]
     MissingCommunicationAfterSave,
+    #[error("scheduled task save did not return a row")]
+    MissingScheduledTaskAfterSave,
 }
 
 pub type QueryResult<T> = Result<T, QueryError>;
@@ -575,6 +577,43 @@ pub fn save_communication(
     Ok(saved)
 }
 
+pub fn list_scheduled_tasks(connection: &Connection) -> QueryResult<Vec<ScheduledTask>> {
+    let mut statement = connection.prepare(
+        "SELECT id, name, type, cron_expression, is_enabled, last_run, next_run, config, created_at
+         FROM scheduled_tasks
+         ORDER BY created_at DESC, rowid DESC",
+    )?;
+
+    let rows = statement.query_map([], scheduled_task_from_row)?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(QueryError::from)
+}
+
+pub fn save_scheduled_task(
+    connection: &Connection,
+    task: UpsertScheduledTask,
+) -> QueryResult<ScheduledTask> {
+    let config = to_json_text(&task.config)?;
+    connection.execute(
+        "INSERT INTO scheduled_tasks (
+             name, type, cron_expression, is_enabled, last_run, next_run, config
+         )
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            task.name,
+            task.task_type,
+            task.cron_expression,
+            task.is_enabled,
+            task.last_run,
+            task.next_run,
+            config,
+        ],
+    )?;
+
+    get_scheduled_task_by_rowid(connection, connection.last_insert_rowid())?
+        .ok_or(QueryError::MissingScheduledTaskAfterSave)
+}
+
 fn get_communication_by_rowid(
     connection: &Connection,
     rowid: i64,
@@ -591,6 +630,25 @@ fn get_communication_by_rowid(
         return Ok(None);
     };
     communication_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
+}
+
+fn get_scheduled_task_by_rowid(
+    connection: &Connection,
+    rowid: i64,
+) -> QueryResult<Option<ScheduledTask>> {
+    let mut statement = connection.prepare(
+        "SELECT id, name, type, cron_expression, is_enabled, last_run, next_run, config, created_at
+         FROM scheduled_tasks
+         WHERE rowid = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([rowid])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    scheduled_task_from_row(row)
         .map(Some)
         .map_err(QueryError::from)
 }
@@ -807,6 +865,25 @@ fn communication_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Communica
         sent_at: row.get(8)?,
         read_at: row.get(9)?,
         created_at: row.get(10)?,
+    })
+}
+
+fn scheduled_task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ScheduledTask> {
+    let config: Option<String> = row.get(7)?;
+    let config = serde_json::from_str(config.as_deref().unwrap_or("{}")).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(7, rusqlite::types::Type::Text, Box::new(error))
+    })?;
+
+    Ok(ScheduledTask {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        task_type: row.get(2)?,
+        cron_expression: row.get(3)?,
+        is_enabled: row.get(4)?,
+        last_run: row.get(5)?,
+        next_run: row.get(6)?,
+        config,
+        created_at: row.get(8)?,
     })
 }
 

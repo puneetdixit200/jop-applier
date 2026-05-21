@@ -237,3 +237,29 @@ pub struct UpsertCommunication {
     pub sent_at: Option<String>,
     pub read_at: Option<String>,
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ScheduledTask {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub task_type: String,
+    pub cron_expression: Option<String>,
+    pub is_enabled: bool,
+    pub last_run: Option<String>,
+    pub next_run: Option<String>,
+    pub config: Value,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UpsertScheduledTask {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub task_type: String,
+    pub cron_expression: Option<String>,
+    pub is_enabled: bool,
+    pub last_run: Option<String>,
+    pub next_run: Option<String>,
+    pub config: Value,
+}

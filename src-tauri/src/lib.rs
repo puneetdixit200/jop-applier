@@ -45,7 +45,9 @@ pub fn run() {
             commands::db::list_contacts_command,
             commands::db::save_contact_command,
             commands::db::list_communications_command,
-            commands::db::save_communication_command
+            commands::db::save_communication_command,
+            commands::db::list_scheduled_tasks_command,
+            commands::db::save_scheduled_task_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

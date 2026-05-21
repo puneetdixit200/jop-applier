@@ -1,9 +1,9 @@
 use crate::{
     db::{
         models::{
-            Application, ApplicationEvent, Communication, Contact, Document, Job, Setting,
-            UpsertApplication, UpsertCommunication, UpsertContact, UpsertDocument, UpsertJob,
-            UpsertSetting, UpsertUserProfile, UserProfile,
+            Application, ApplicationEvent, Communication, Contact, Document, Job, ScheduledTask,
+            Setting, UpsertApplication, UpsertCommunication, UpsertContact, UpsertDocument,
+            UpsertJob, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
         },
         queries, schema,
     },
@@ -184,4 +184,27 @@ pub fn save_communication_command(
         .lock()
         .map_err(|_| "database connection lock poisoned".to_string())?;
     queries::save_communication(&connection, communication).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn list_scheduled_tasks_command(
+    state: State<'_, AppState>,
+) -> Result<Vec<ScheduledTask>, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::list_scheduled_tasks(&connection).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn save_scheduled_task_command(
+    state: State<'_, AppState>,
+    task: UpsertScheduledTask,
+) -> Result<ScheduledTask, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::save_scheduled_task(&connection, task).map_err(|error| error.to_string())
 }

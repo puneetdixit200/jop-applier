@@ -143,6 +143,20 @@ export type Communication = {
 
 export type UpsertCommunication = Omit<Communication, "id" | "created_at">;
 
+export type ScheduledTask = {
+  id: string;
+  name: string;
+  type: string;
+  cron_expression: string | null;
+  is_enabled: boolean;
+  last_run: string | null;
+  next_run: string | null;
+  config: Record<string, unknown>;
+  created_at: string;
+};
+
+export type UpsertScheduledTask = Omit<ScheduledTask, "id" | "created_at">;
+
 export function isDesktopRuntime() {
   return "__TAURI_INTERNALS__" in window;
 }
@@ -205,4 +219,12 @@ export async function listCommunications(applicationId: string) {
 
 export async function saveCommunication(communication: UpsertCommunication) {
   return invoke<Communication>("save_communication_command", { communication });
+}
+
+export async function listScheduledTasks() {
+  return invoke<ScheduledTask[]>("list_scheduled_tasks_command");
+}
+
+export async function saveScheduledTask(task: UpsertScheduledTask) {
+  return invoke<ScheduledTask>("save_scheduled_task_command", { task });
 }
