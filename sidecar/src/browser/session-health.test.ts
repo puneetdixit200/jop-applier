@@ -32,6 +32,9 @@ describe("browser session health", () => {
             close: async () => {
               closedPlatforms.push(platform);
             },
+            newPage: async () => {
+              throw new Error("not used in this test");
+            },
           };
         },
         validateSession: async (target) => ({

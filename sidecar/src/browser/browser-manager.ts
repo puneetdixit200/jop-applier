@@ -1,5 +1,5 @@
 import path from "node:path";
-import { chromium } from "playwright-core";
+import { chromium, type BrowserContext } from "playwright-core";
 
 type PlaywrightLaunchPersistentContextOptions = NonNullable<
   Parameters<typeof chromium.launchPersistentContext>[1]
@@ -37,9 +37,7 @@ export type BrowserLaunchOptions = {
   viewport: BrowserViewport;
 };
 
-export type BrowserSession = {
-  close: () => Promise<void>;
-};
+export type BrowserSession = Pick<BrowserContext, "close" | "newPage">;
 
 export type BrowserAutomationAdapter = {
   launchPersistentContext: (

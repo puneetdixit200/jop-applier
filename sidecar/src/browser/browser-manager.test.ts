@@ -21,6 +21,9 @@ describe("browser manager", () => {
           close: async () => {
             closedSessions.push(userDataDir);
           },
+          newPage: async () => {
+            throw new Error("not used in this test");
+          },
         };
       },
     };
@@ -73,6 +76,9 @@ describe("browser manager", () => {
         launchedContexts.push({ userDataDir, options });
         return {
           close: async () => {},
+          newPage: async () => {
+            throw new Error("not used in this test");
+          },
         };
       },
     };

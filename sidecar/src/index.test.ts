@@ -69,6 +69,9 @@ describe("sidecar runtime", () => {
             close: async () => {
               closedPlatforms.push(platform);
             },
+            newPage: async () => {
+              throw new Error("not used in this test");
+            },
           };
         },
         validateSession: async (target) => ({
@@ -116,7 +119,7 @@ describe("sidecar runtime", () => {
         targets: [{ platform: "LinkedIn", isEnabled: true }],
         openSession: async (platform): Promise<BrowserSession> => {
           openedPlatforms.push(platform);
-          return { close: async () => {} };
+          return fakeBrowserSession();
         },
       },
       now: () => checkedAt,
@@ -171,7 +174,7 @@ describe("sidecar runtime", () => {
     const runtime = createSidecarRuntime({
       browserSessionHealth: {
         targets: [{ platform: "LinkedIn", isEnabled: true }],
-        openSession: async (): Promise<BrowserSession> => ({ close: async () => {} }),
+        openSession: async (): Promise<BrowserSession> => fakeBrowserSession(),
       },
       now: () => checkedAt,
       scheduledTasks: {
@@ -1278,3 +1281,12 @@ describe("sidecar runtime", () => {
     ]);
   });
 });
+
+function fakeBrowserSession(): BrowserSession {
+  return {
+    close: async () => {},
+    newPage: async () => {
+      throw new Error("not used in this test");
+    },
+  };
+}
