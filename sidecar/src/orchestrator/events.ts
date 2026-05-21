@@ -16,6 +16,11 @@ export type CareerEventMap = {
     model: string;
     local: boolean;
   };
+  "ai.provider.offline": {
+    provider: string;
+    model: string;
+    reason: string;
+  };
   "job.discovered": {
     jobId: string;
     platform: string;
@@ -23,4 +28,3 @@ export type CareerEventMap = {
     companyName: string;
   };
 };
-
