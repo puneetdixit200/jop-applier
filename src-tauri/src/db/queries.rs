@@ -4,10 +4,11 @@ use serde::Serialize;
 use thiserror::Error;
 
 use super::models::{
-    AiCacheEntry, Application, ApplicationDocumentContext, ApplicationEvent, Communication,
-    Company, Contact, Document, Job, ScheduledTask, ScheduledTaskRunUpdate, Setting, SettingValue,
-    UpsertAiCacheEntry, UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact,
-    UpsertDocument, UpsertJob, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
+    AiCacheEntry, Application, ApplicationDocumentContext, ApplicationEvent,
+    ApplicationWorkflowStateUpdate, Communication, Company, Contact, Document, Job, ScheduledTask,
+    ScheduledTaskRunUpdate, Setting, SettingValue, UpsertAiCacheEntry, UpsertApplication,
+    UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument, UpsertJob,
+    UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -522,6 +523,95 @@ pub fn upsert_application(
     Ok(saved)
 }
 
+pub fn update_application_workflow_state(
+    connection: &Connection,
+    application_id: &str,
+    update: ApplicationWorkflowStateUpdate,
+) -> QueryResult<Option<Application>> {
+    let Some(existing) = get_application_by_id(connection, application_id)? else {
+        return Ok(None);
+    };
+
+    let status = update.status.as_deref();
+    let resume_path_changed = update.resume_path.is_some();
+    let resume_path = update
+        .resume_path
+        .as_ref()
+        .and_then(|value| value.as_deref());
+    let cover_letter_path_changed = update.cover_letter_path.is_some();
+    let cover_letter_path = update
+        .cover_letter_path
+        .as_ref()
+        .and_then(|value| value.as_deref());
+    let submitted_at_changed = update.submitted_at.is_some();
+    let submitted_at = update
+        .submitted_at
+        .as_ref()
+        .and_then(|value| value.as_deref());
+    let submission_url_changed = update.submission_url.is_some();
+    let submission_url = update
+        .submission_url
+        .as_ref()
+        .and_then(|value| value.as_deref());
+    let confirmation_id_changed = update.confirmation_id.is_some();
+    let confirmation_id = update
+        .confirmation_id
+        .as_ref()
+        .and_then(|value| value.as_deref());
+    let retry_count = update.retry_count;
+    let error_message_changed = update.error_message.is_some();
+    let error_message = update
+        .error_message
+        .as_ref()
+        .and_then(|value| value.as_deref());
+
+    connection.execute(
+        "UPDATE applications
+         SET status = COALESCE(?1, status),
+             resume_path = CASE WHEN ?2 THEN ?3 ELSE resume_path END,
+             cover_letter_path = CASE WHEN ?4 THEN ?5 ELSE cover_letter_path END,
+             submitted_at = CASE WHEN ?6 THEN ?7 ELSE submitted_at END,
+             submission_url = CASE WHEN ?8 THEN ?9 ELSE submission_url END,
+             confirmation_id = CASE WHEN ?10 THEN ?11 ELSE confirmation_id END,
+             retry_count = COALESCE(?12, retry_count),
+             error_message = CASE WHEN ?13 THEN ?14 ELSE error_message END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?15",
+        params![
+            status,
+            resume_path_changed,
+            resume_path,
+            cover_letter_path_changed,
+            cover_letter_path,
+            submitted_at_changed,
+            submitted_at,
+            submission_url_changed,
+            submission_url,
+            confirmation_id_changed,
+            confirmation_id,
+            retry_count,
+            error_message_changed,
+            error_message,
+            application_id,
+        ],
+    )?;
+
+    let saved = get_application_by_id(connection, application_id)?
+        .ok_or(QueryError::MissingApplicationAfterSave)?;
+    if let Some(next_status) = status {
+        if existing.status != next_status {
+            record_status_change_event(
+                connection,
+                &saved.id,
+                Some(existing.status.as_str()),
+                next_status,
+            )?;
+        }
+    }
+
+    Ok(Some(saved))
+}
+
 pub fn list_application_events(
     connection: &Connection,
     application_id: &str,
@@ -990,6 +1080,30 @@ fn get_application_by_job_id(
          LIMIT 1",
     )?;
     let mut rows = statement.query([job_id])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    application_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
+}
+
+fn get_application_by_id(
+    connection: &Connection,
+    application_id: &str,
+) -> QueryResult<Option<Application>> {
+    let mut statement = connection.prepare(
+        "SELECT a.id, a.job_id, j.title, j.company_name, a.status, a.mode,
+                a.resume_path, a.cover_letter_path, a.last_follow_up, a.follow_up_count,
+                a.next_follow_up, a.response_date, a.response_type, a.response_notes,
+                a.submitted_at, a.submission_url, a.confirmation_id, a.error_message,
+                a.retry_count, a.max_retries, a.notes, a.tags
+         FROM applications a
+         INNER JOIN jobs j ON j.id = a.job_id
+         WHERE a.id = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([application_id])?;
     let Some(row) = rows.next()? else {
         return Ok(None);
     };

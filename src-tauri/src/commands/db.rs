@@ -1,11 +1,11 @@
 use crate::{
     db::{
         models::{
-            AiCacheEntry, Application, ApplicationEvent, Communication, Company, Contact, Document,
-            Job, ScheduledTask, ScheduledTaskRunUpdate, Setting, UpsertAiCacheEntry,
-            UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument,
-            UpsertJob, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
-            ApplicationDocumentContext,
+            AiCacheEntry, Application, ApplicationDocumentContext, ApplicationEvent,
+            ApplicationWorkflowStateUpdate, Communication, Company, Contact, Document, Job,
+            ScheduledTask, ScheduledTaskRunUpdate, Setting, UpsertAiCacheEntry, UpsertApplication,
+            UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument, UpsertJob,
+            UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
         },
         queries, schema,
     },
@@ -125,6 +125,20 @@ pub fn save_application_command(
         .lock()
         .map_err(|_| "database connection lock poisoned".to_string())?;
     queries::upsert_application(&connection, application).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn update_application_workflow_state_command(
+    state: State<'_, AppState>,
+    application_id: String,
+    update: ApplicationWorkflowStateUpdate,
+) -> Result<Option<Application>, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::update_application_workflow_state(&connection, &application_id, update)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

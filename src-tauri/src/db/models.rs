@@ -1,5 +1,13 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
+
+fn deserialize_nullable_field<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UserProfile {
@@ -188,6 +196,24 @@ pub struct UpsertApplication {
     pub error_message: Option<String>,
     pub notes: Option<String>,
     pub tags: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ApplicationWorkflowStateUpdate {
+    pub status: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_nullable_field")]
+    pub resume_path: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_nullable_field")]
+    pub cover_letter_path: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_nullable_field")]
+    pub submitted_at: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_nullable_field")]
+    pub submission_url: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_nullable_field")]
+    pub confirmation_id: Option<Option<String>>,
+    pub retry_count: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_nullable_field")]
+    pub error_message: Option<Option<String>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -41,6 +41,7 @@ pub fn run() {
             commands::db::save_job_command,
             commands::db::list_applications_command,
             commands::db::save_application_command,
+            commands::db::update_application_workflow_state_command,
             commands::db::list_application_events_command,
             commands::db::list_documents_command,
             commands::db::get_application_document_context_command,

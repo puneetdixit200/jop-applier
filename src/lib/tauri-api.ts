@@ -118,6 +118,17 @@ export type UpsertApplication = {
   tags: string[];
 };
 
+export type ApplicationWorkflowStateUpdate = {
+  status?: string;
+  resume_path?: string | null;
+  cover_letter_path?: string | null;
+  submitted_at?: string | null;
+  submission_url?: string | null;
+  confirmation_id?: string | null;
+  retry_count?: number;
+  error_message?: string | null;
+};
+
 export type ApplicationEvent = {
   id: string;
   application_id: string;
@@ -253,6 +264,16 @@ export async function listApplications() {
 
 export async function saveApplication(application: UpsertApplication) {
   return invoke<Application>("save_application_command", { application });
+}
+
+export async function updateApplicationWorkflowState(
+  applicationId: string,
+  update: ApplicationWorkflowStateUpdate,
+) {
+  return invoke<Application | null>("update_application_workflow_state_command", {
+    applicationId,
+    update,
+  });
 }
 
 export async function listApplicationEvents(applicationId: string) {
