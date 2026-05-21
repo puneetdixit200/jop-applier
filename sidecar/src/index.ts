@@ -12,8 +12,17 @@ import {
   runBrowserSessionHealthCheck,
   type BrowserSessionHealthTarget,
 } from "./browser/session-health.js";
+import { DEFAULT_WORKFLOWS_BY_TASK_TYPE } from "./orchestrator/default-schedules.js";
 import { EventBus } from "./orchestrator/event-bus.js";
 import type { CareerEventMap } from "./orchestrator/events.js";
+import {
+  createScheduledTaskRunnerDependencies,
+  type ScheduledTaskPersistence,
+} from "./orchestrator/scheduled-task-persistence.js";
+import {
+  runDueScheduledTasks,
+  type ScheduledTaskRunnerResult,
+} from "./orchestrator/scheduled-task-runner.js";
 import { WorkflowEngine } from "./orchestrator/workflow-engine.js";
 
 class OfflineProvider implements AIProvider {
@@ -82,6 +91,7 @@ export type SidecarRuntimeOptions = {
     openSession?: (platform: string) => Promise<BrowserSession>;
     validateSession?: Parameters<typeof runBrowserSessionHealthCheck>[0]["validateSession"];
   };
+  scheduledTasks?: ScheduledTaskPersistence;
 };
 
 export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
@@ -91,6 +101,7 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   const aiEngine = createAIEngineFromEnv(env);
   const browserManager = new BrowserManager(createPlaywrightBrowserAdapter());
   const now = options.now ?? (() => new Date());
+  const scheduledTaskPersistence = options.scheduledTasks ?? createEmptyScheduledTaskPersistence();
 
   workflowEngine.register({
     id: "daily-discovery",
@@ -115,12 +126,30 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
         },
       ),
   });
+  const scheduledTaskRunnerDependencies = createScheduledTaskRunnerDependencies(
+    scheduledTaskPersistence,
+    (workflowId) => workflowEngine.run(workflowId),
+  );
+  const runDueRuntimeScheduledTasks = (runAt: Date = now()): Promise<ScheduledTaskRunnerResult> =>
+    runDueScheduledTasks(scheduledTaskRunnerDependencies, {
+      now: runAt,
+      workflowsByTaskType: DEFAULT_WORKFLOWS_BY_TASK_TYPE,
+      eventBus,
+    });
 
   return {
     aiEngine,
     browserManager,
     eventBus,
+    runDueScheduledTasks: runDueRuntimeScheduledTasks,
     workflowEngine,
+  };
+}
+
+function createEmptyScheduledTaskPersistence(): ScheduledTaskPersistence {
+  return {
+    listScheduledTasks: async () => [],
+    updateScheduledTaskRun: async () => undefined,
   };
 }
 
