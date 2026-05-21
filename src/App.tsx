@@ -21,13 +21,17 @@ import {
   runSidecarWorkflow,
   saveSetting,
   saveUserProfile,
-  type Job,
   type UpsertUserProfile,
   type UserProfile,
 } from "./lib/tauri-api";
 import {
+  runDiscoveryControl,
+  loadJobSummaries,
+  type DiscoveryControlDependencies,
+  type JobSummary,
+} from "./lib/discovery-control";
+import {
   loadRuntimeControlStatus,
-  runRuntimeWorkflow,
   type RuntimeControlDependencies,
   type RuntimeControlStatus,
 } from "./lib/runtime-control";
@@ -50,15 +54,6 @@ type AutomationSettings = {
   reviewBeforeSubmit: boolean;
   cacheResponses: boolean;
   maxDailyApplications: number;
-};
-
-type JobSummary = {
-  title: string;
-  company: string;
-  score: number | null;
-  source: string;
-  location: string;
-  priority: string;
 };
 
 const routes: Array<{ id: RouteId; label: string; icon: typeof BarChart3 }> = [
@@ -113,6 +108,11 @@ const runtimeDependencies: RuntimeControlDependencies = {
   isDesktopRuntime,
   getSidecarStatus,
   runSidecarWorkflow,
+};
+
+const discoveryDependencies: DiscoveryControlDependencies = {
+  ...runtimeDependencies,
+  listJobs,
 };
 
 const initialRuntimeStatus: RuntimeControlStatus = {
@@ -186,7 +186,7 @@ export function App() {
         setProfile(profileFromRecord(storedProfile));
       }
       if (storedJobs.length > 0) {
-        setPersistedJobs(storedJobs.map(jobFromRecord));
+        setPersistedJobs(await loadJobSummaries(() => Promise.resolve(storedJobs)));
       }
       setSettings((current) => ({
         provider: typeof storedProvider?.value === "string" ? storedProvider.value : current.provider,
@@ -206,10 +206,13 @@ export function App() {
     setIsRunningDiscovery(true);
     setWorkflowStatus("job-discovery running");
     try {
-      const result = await runRuntimeWorkflow(runtimeDependencies, "job-discovery");
-      setWorkflowStatus(result.statusMessage);
-      if (result.ok) {
-        setRuntimeStatus(await loadRuntimeControlStatus(runtimeDependencies));
+      const result = await runDiscoveryControl(discoveryDependencies);
+      setWorkflowStatus(result.workflowStatus);
+      if (result.runtimeStatus) {
+        setRuntimeStatus(result.runtimeStatus);
+      }
+      if (result.jobs) {
+        setPersistedJobs(result.jobs);
       }
     } finally {
       setIsRunningDiscovery(false);
@@ -639,17 +642,6 @@ function profileFromRecord(profile: UserProfile): Profile {
     summary: profile.summary ?? "",
     skills: profile.skills.join(", "),
     targetRoles: profile.target_roles.join(", "),
-  };
-}
-
-function jobFromRecord(job: Job): JobSummary {
-  return {
-    title: job.title,
-    company: job.company_name,
-    score: job.match_score,
-    source: job.platform,
-    location: job.location ?? (job.is_remote ? "Remote" : "Location unknown"),
-    priority: job.ai_priority ?? "unscored",
   };
 }
 

@@ -1,0 +1,44 @@
+use careercaveman_lib::{
+    commands::sidecar::run_sidecar_workflow_and_persist_jobs_with_command,
+    db::{queries::list_jobs, schema::initialize_schema},
+    sidecar::SidecarCommand,
+};
+use rusqlite::Connection;
+use serde_json::json;
+use std::path::PathBuf;
+
+#[test]
+fn persists_jobs_returned_by_sidecar_discovery_into_sqlite() {
+    let connection = Connection::open_in_memory().expect("open in-memory database");
+    initialize_schema(&connection).expect("initialize schema");
+    let command = shell_sidecar(
+        r#"read line
+case "$line" in
+  *'"method":"workflow.run"'*'"workflowId":"job-discovery"'*) printf '{"id":"workflow-job-discovery","ok":true,"result":{"queries":1,"discovered":1,"stored":0,"jobs":[{"source_id":"linkedin-42","platform":"linkedin","url":"https://linkedin.example/jobs/42","title":"Frontend Engineer Intern","company_name":"Northstar Labs","location":"Remote","is_remote":true,"salary_min":900000,"salary_max":1400000,"salary_currency":"INR","job_type":"internship","experience_level":"intern","description":"React and TypeScript internship","requirements":["React","TypeScript"],"raw_html":"<main>job</main>","match_score":91,"match_confidence":0.86,"match_reasoning":"Strong React and TypeScript match","matched_skills":["React","TypeScript"],"missing_skills":["GraphQL"],"ai_tags":["good-fit"],"should_apply":true,"ai_priority":"high"}]}}\n' ;;
+  *) printf '{"id":null,"ok":false,"error":{"message":"unexpected request"}}\n' ;;
+esac"#,
+    );
+
+    let result =
+        run_sidecar_workflow_and_persist_jobs_with_command(&command, &connection, "job-discovery")
+            .expect("run job discovery workflow");
+
+    assert_eq!(result["queries"], json!(1));
+    assert_eq!(result["discovered"], json!(1));
+    assert_eq!(result["stored"], json!(1));
+
+    let jobs = list_jobs(&connection).expect("list persisted jobs");
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].source_id.as_deref(), Some("linkedin-42"));
+    assert_eq!(jobs[0].title, "Frontend Engineer Intern");
+    assert_eq!(jobs[0].company_name, "Northstar Labs");
+    assert_eq!(jobs[0].match_score, Some(91));
+    assert_eq!(jobs[0].ai_priority.as_deref(), Some("high"));
+}
+
+fn shell_sidecar(script: &str) -> SidecarCommand {
+    SidecarCommand {
+        program: PathBuf::from("/bin/sh"),
+        args: vec!["-c".to_string(), script.to_string()],
+    }
+}

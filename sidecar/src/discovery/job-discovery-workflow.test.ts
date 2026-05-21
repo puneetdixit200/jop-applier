@@ -95,6 +95,23 @@ describe("job discovery workflow", () => {
       queries: 2,
       discovered: 3,
       stored: 3,
+      jobs: [
+        expect.objectContaining({
+          url: "https://jobs.example/react",
+          title: "React Engineer",
+          company_name: "Northstar Labs",
+        }),
+        expect.objectContaining({
+          url: "https://jobs.example/ui",
+          title: "UI Engineer",
+          company_name: "Signal Ridge",
+        }),
+        expect.objectContaining({
+          url: "https://jobs.example/node",
+          title: "Node Engineer",
+          company_name: "Southline Systems",
+        }),
+      ],
     });
     expect(searchedQueries).toEqual(queries);
     expect(persistedBatches).toEqual([

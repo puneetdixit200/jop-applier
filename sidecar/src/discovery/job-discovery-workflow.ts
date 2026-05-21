@@ -24,6 +24,7 @@ export type JobDiscoveryWorkflowResult = {
   queries: number;
   discovered: number;
   stored: number;
+  jobs: UpsertJobPayload[];
 };
 
 export async function runJobDiscoveryWorkflow(
@@ -32,10 +33,12 @@ export async function runJobDiscoveryWorkflow(
 ): Promise<JobDiscoveryWorkflowResult> {
   let discovered = 0;
   let stored = 0;
+  const discoveredJobs: UpsertJobPayload[] = [];
 
   for (const query of dependencies.searchQueries) {
     const jobs = await dependencies.searchForPersistence(query);
     discovered += jobs.length;
+    discoveredJobs.push(...jobs);
 
     if (jobs.length === 0) {
       continue;
@@ -57,5 +60,6 @@ export async function runJobDiscoveryWorkflow(
     queries: dependencies.searchQueries.length,
     discovered,
     stored,
+    jobs: discoveredJobs,
   };
 }

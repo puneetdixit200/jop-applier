@@ -78,6 +78,13 @@ describe("sidecar runtime IPC", () => {
         queries: 1,
         discovered: 1,
         stored: 1,
+        jobs: [
+          expect.objectContaining({
+            url: "https://jobs.example/react",
+            title: "React Engineer",
+            company_name: "Northstar Labs",
+          }),
+        ],
       },
     });
     expect(persistedUrls).toEqual(["https://jobs.example/react"]);
