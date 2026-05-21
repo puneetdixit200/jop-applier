@@ -429,6 +429,107 @@ button:disabled {
   color: #2f6b4f;
 }
 
+.table-row.application-row {
+  width: 100%;
+  border: 0;
+  color: inherit;
+  text-align: left;
+}
+
+.table-row.application-row:hover,
+.table-row.application-row.selected {
+  background: #edf8f1;
+}
+
+.table-row.application-row.selected {
+  outline: 2px solid #9bd3ad;
+}
+
+.activity-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 18px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e1e8e3;
+}
+
+.activity-section {
+  min-width: 0;
+}
+
+.activity-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.activity-heading h4 {
+  margin: 0;
+  color: #24332b;
+  font-size: 0.98rem;
+}
+
+.activity-heading strong {
+  color: #2f6b4f;
+  font-size: 1rem;
+}
+
+.activity-heading.compact {
+  margin-bottom: 8px;
+}
+
+.activity-stack {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
+.activity-list,
+.compact-activity-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activity-list li {
+  display: grid;
+  grid-template-columns: 136px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 46px;
+}
+
+.activity-list time {
+  color: #2f6b4f;
+  font-weight: 800;
+}
+
+.activity-list div,
+.compact-activity-list li {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.activity-list strong,
+.compact-activity-list strong {
+  color: #1d2b23;
+}
+
+.activity-list span,
+.compact-activity-list span {
+  color: #5f6b65;
+  overflow-wrap: anywhere;
+}
+
+.activity-empty {
+  color: #909b95;
+}
+
 .form-panel,
 .settings-panel {
   display: grid;
@@ -584,6 +685,10 @@ legend {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .activity-detail {
+    grid-template-columns: 1fr;
+  }
+
   .settings-grid {
     grid-template-columns: 1fr;
   }
@@ -618,6 +723,10 @@ legend {
   }
 
   .tracker-lanes {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-list li {
     grid-template-columns: 1fr;
   }
 }

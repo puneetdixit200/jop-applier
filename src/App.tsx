@@ -17,7 +17,10 @@ import {
   getSetting,
   getUserProfile,
   isDesktopRuntime,
+  listApplicationEvents,
   listApplications,
+  listCommunications,
+  listDocuments,
   listJobs,
   listScheduledTasks,
   runDueScheduledTasks,
@@ -26,9 +29,17 @@ import {
   saveSetting,
   saveUserProfile,
   type Application,
+  type ApplicationEvent,
+  type Communication,
+  type Document,
   type UpsertUserProfile,
   type UserProfile,
 } from "./lib/tauri-api";
+import {
+  buildApplicationActivity,
+  type ApplicationActivity,
+  type ApplicationActivitySources,
+} from "./lib/application-activity";
 import {
   buildApplicationTracker,
   type ApplicationTracker,
@@ -147,6 +158,82 @@ const previewApplications: Application[] = [
   }),
 ];
 
+const emptyActivitySources: ApplicationActivitySources = {
+  events: [],
+  documents: [],
+  communications: [],
+};
+
+const previewActivitySources: Record<string, ApplicationActivitySources> = {
+  "preview-applied": {
+    events: [
+      applicationEventRecord({
+        id: "preview-applied-status",
+        application_id: "preview-applied",
+        event_type: "status_change",
+        old_value: "preparing",
+        new_value: "applied",
+        description: "Application status changed from preparing to applied",
+        created_at: "2026-05-21T10:00:00Z",
+      }),
+      applicationEventRecord({
+        id: "preview-applied-document",
+        application_id: "preview-applied",
+        event_type: "document_generated",
+        new_value: "astra-resume.pdf",
+        description: "Generated resume document astra-resume.pdf",
+        metadata: { document_id: "preview-applied-resume", document_type: "resume" },
+        created_at: "2026-05-21T11:00:00Z",
+      }),
+    ],
+    documents: [
+      documentRecord({
+        id: "preview-applied-resume",
+        application_id: "preview-applied",
+        type: "resume",
+        file_path: "/preview/astra-resume.pdf",
+        file_name: "astra-resume.pdf",
+        ai_model_used: "ollama",
+        created_at: "2026-05-21T11:00:00Z",
+      }),
+      documentRecord({
+        id: "preview-applied-cover",
+        application_id: "preview-applied",
+        type: "cover_letter",
+        file_path: "/preview/astra-cover.pdf",
+        file_name: "astra-cover.pdf",
+        created_at: "2026-05-21T11:30:00Z",
+      }),
+    ],
+    communications: [
+      communicationRecord({
+        id: "preview-applied-follow-up",
+        application_id: "preview-applied",
+        direction: "sent",
+        type: "follow_up",
+        subject: "Checking in",
+        sent_at: "2026-05-21T12:00:00Z",
+      }),
+    ],
+  },
+  "preview-preparing": {
+    events: [
+      applicationEventRecord({
+        id: "preview-preparing-status",
+        application_id: "preview-preparing",
+        event_type: "status_change",
+        old_value: "queued",
+        new_value: "preparing",
+        description: "Application status changed from queued to preparing",
+        created_at: "2026-05-21T09:00:00Z",
+      }),
+    ],
+    documents: [],
+    communications: [],
+  },
+  "preview-queued": emptyActivitySources,
+};
+
 const runtimeDependencies: RuntimeControlDependencies = {
   isDesktopRuntime,
   getSidecarStatus,
@@ -200,6 +287,10 @@ export function App() {
   });
   const [persistedJobs, setPersistedJobs] = useState<JobSummary[]>([]);
   const [persistedApplications, setPersistedApplications] = useState<Application[]>([]);
+  const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
+  const [applicationActivity, setApplicationActivity] = useState<ApplicationActivity>(() =>
+    buildApplicationActivity(emptyActivitySources),
+  );
   const [storageStatus, setStorageStatus] = useState("Ready");
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeControlStatus>(initialRuntimeStatus);
   const [workflowStatus, setWorkflowStatus] = useState("Idle");
@@ -215,6 +306,13 @@ export function App() {
     () => buildApplicationTracker(persistedApplications.length > 0 ? persistedApplications : previewApplications),
     [persistedApplications],
   );
+
+  useEffect(() => {
+    const selectedExists = applicationTracker.rows.some((application) => application.id === selectedApplicationId);
+    if (!selectedExists) {
+      setSelectedApplicationId(applicationTracker.rows[0]?.id ?? null);
+    }
+  }, [applicationTracker, selectedApplicationId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -293,6 +391,53 @@ export function App() {
 
     void loadPersistedState().catch(() => setStorageStatus("Storage unavailable"));
   }, []);
+
+  useEffect(() => {
+    if (!selectedApplicationId) {
+      setApplicationActivity(buildApplicationActivity(emptyActivitySources));
+      return;
+    }
+    const applicationId = selectedApplicationId;
+
+    const selectedPersistedApplication = persistedApplications.some(
+      (application) => application.id === applicationId,
+    );
+    if (persistedApplications.length > 0 && !selectedPersistedApplication) {
+      return;
+    }
+
+    if (!isDesktopRuntime() || persistedApplications.length === 0) {
+      setApplicationActivity(
+        buildApplicationActivity(previewActivitySources[applicationId] ?? emptyActivitySources),
+      );
+      return;
+    }
+
+    let isMounted = true;
+
+    async function loadApplicationActivity() {
+      try {
+        const [events, documents, communications] = await Promise.all([
+          listApplicationEvents(applicationId),
+          listDocuments(applicationId),
+          listCommunications(applicationId),
+        ]);
+        if (isMounted) {
+          setApplicationActivity(buildApplicationActivity({ events, documents, communications }));
+        }
+      } catch {
+        if (isMounted) {
+          setApplicationActivity(buildApplicationActivity(emptyActivitySources));
+        }
+      }
+    }
+
+    void loadApplicationActivity();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedApplicationId, persistedApplications]);
 
   useEffect(() => {
     const runner = createScheduleAutoRunner(
@@ -427,7 +572,14 @@ export function App() {
           />
         )}
         {route === "jobs" && <Jobs jobs={visibleJobs} />}
-        {route === "applications" && <Applications tracker={applicationTracker} />}
+        {route === "applications" && (
+          <Applications
+            tracker={applicationTracker}
+            activity={applicationActivity}
+            selectedApplicationId={selectedApplicationId}
+            onSelectApplication={setSelectedApplicationId}
+          />
+        )}
         {route === "profile" && (
           <ProfileEditor profile={profile} onChange={setProfile} onStatusChange={setStorageStatus} />
         )}
@@ -576,7 +728,19 @@ function Jobs({ jobs }: { jobs: JobSummary[] }) {
   );
 }
 
-function Applications({ tracker }: { tracker: ApplicationTracker }) {
+function Applications({
+  tracker,
+  activity,
+  selectedApplicationId,
+  onSelectApplication,
+}: {
+  tracker: ApplicationTracker;
+  activity: ApplicationActivity;
+  selectedApplicationId: string | null;
+  onSelectApplication: (applicationId: string) => void;
+}) {
+  const selectedApplication = tracker.rows.find((application) => application.id === selectedApplicationId);
+
   return (
     <section className="panel full">
       <div className="panel-heading">
@@ -614,13 +778,92 @@ function Applications({ tracker }: { tracker: ApplicationTracker }) {
       </div>
       <div className="table-list">
         {tracker.rows.map((application) => (
-          <div className="table-row application-row" key={application.id}>
+          <button
+            className={
+              application.id === selectedApplicationId
+                ? "table-row application-row selected"
+                : "table-row application-row"
+            }
+            key={application.id}
+            type="button"
+            onClick={() => onSelectApplication(application.id)}
+          >
             <span>{application.company}</span>
             <span>{application.role}</span>
             <span>{application.statusLabel} · {application.documentLabel}</span>
             <strong>{application.nextAction}</strong>
-          </div>
+          </button>
         ))}
+      </div>
+      <div className="activity-detail">
+        <section className="activity-section" aria-label="Application activity timeline">
+          <div className="activity-heading">
+            <div>
+              <p className="eyebrow">Activity</p>
+              <h4>{selectedApplication ? selectedApplication.company : "Timeline"}</h4>
+            </div>
+            <strong>{activity.summary.timelineCount}</strong>
+          </div>
+          <ul className="activity-list">
+            {activity.timeline.length > 0 ? (
+              activity.timeline.slice(0, 6).map((item) => (
+                <li key={item.id}>
+                  <time>{item.timestampLabel}</time>
+                  <div>
+                    <strong>{item.label}</strong>
+                    <span>{item.detail}</span>
+                  </div>
+                </li>
+              ))
+            ) : (
+              <li className="activity-empty">
+                <time>-</time>
+                <div>
+                  <strong>No activity yet</strong>
+                  <span>Waiting for workflow events</span>
+                </div>
+              </li>
+            )}
+          </ul>
+        </section>
+        <div className="activity-stack">
+          <section className="activity-section" aria-label="Application document history">
+            <div className="activity-heading compact">
+              <h4>Document history</h4>
+              <strong>{activity.summary.documentCount}</strong>
+            </div>
+            <ul className="compact-activity-list">
+              {activity.documents.length > 0 ? (
+                activity.documents.slice(0, 4).map((document) => (
+                  <li key={document.id}>
+                    <strong>{document.label}</strong>
+                    <span>{document.detail}</span>
+                  </li>
+                ))
+              ) : (
+                <li className="activity-empty">No documents</li>
+              )}
+            </ul>
+          </section>
+          <section className="activity-section" aria-label="Application communication log">
+            <div className="activity-heading compact">
+              <h4>Communication log</h4>
+              <strong>{activity.summary.communicationCount}</strong>
+            </div>
+            <ul className="compact-activity-list">
+              {activity.communications.length > 0 ? (
+                activity.communications.slice(0, 4).map((communication) => (
+                  <li key={communication.id}>
+                    <strong>{communication.label}</strong>
+                    <span>{communication.detail}</span>
+                  </li>
+                ))
+              ) : (
+                <li className="activity-empty">No communications</li>
+              )}
+            </ul>
+          </section>
+        </div>
       </div>
     </section>
   );
@@ -939,6 +1182,51 @@ function applicationRecord(overrides: Partial<Application>): Application {
     max_retries: 3,
     notes: null,
     tags: [],
+    ...overrides,
+  };
+}
+
+function applicationEventRecord(overrides: Partial<ApplicationEvent>): ApplicationEvent {
+  return {
+    id: "preview-event",
+    application_id: "preview-application",
+    event_type: "status_change",
+    old_value: null,
+    new_value: null,
+    description: null,
+    metadata: {},
+    created_at: "2026-05-21T10:00:00Z",
+    ...overrides,
+  };
+}
+
+function documentRecord(overrides: Partial<Document>): Document {
+  return {
+    id: "preview-document",
+    application_id: "preview-application",
+    type: "resume",
+    file_path: "/preview/resume.pdf",
+    file_name: "resume.pdf",
+    version: 1,
+    ai_model_used: null,
+    created_at: "2026-05-21T10:00:00Z",
+    ...overrides,
+  };
+}
+
+function communicationRecord(overrides: Partial<Communication>): Communication {
+  return {
+    id: "preview-communication",
+    application_id: "preview-application",
+    contact_id: null,
+    direction: "sent",
+    type: "follow_up",
+    subject: null,
+    body: null,
+    email_id: null,
+    sent_at: null,
+    read_at: null,
+    created_at: "2026-05-21T10:00:00Z",
     ...overrides,
   };
 }
