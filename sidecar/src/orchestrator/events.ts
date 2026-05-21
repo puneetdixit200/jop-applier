@@ -27,4 +27,21 @@ export type CareerEventMap = {
     title: string;
     companyName: string;
   };
+  "follow_up.sent": {
+    applicationId: string;
+    jobId: string;
+    companyName: string;
+    status: "follow_up_sent" | "ghosted";
+    followUpCount: number;
+    nextFollowUp: string | null;
+    communicationId: string | null;
+    sentAt: Date;
+  };
+  "follow_up.failed": {
+    applicationId: string;
+    jobId: string;
+    companyName: string;
+    reason: string;
+    failedAt: Date;
+  };
 };

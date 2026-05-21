@@ -108,8 +108,27 @@ export function bindNotificationManager(
       },
     });
   });
+  const unsubscribeFollowUpSent = bus.on("follow_up.sent", (event) => {
+    void manager.notify({
+      type: "follow_up.reminder",
+      title: event.status === "ghosted" ? "Application marked ghosted" : "Follow-up sent",
+      body:
+        event.status === "ghosted"
+          ? `Final follow-up sent to ${event.companyName}; application marked ghosted.`
+          : `Follow-up ${event.followUpCount} sent to ${event.companyName}.`,
+      metadata: {
+        applicationId: event.applicationId,
+        jobId: event.jobId,
+        companyName: event.companyName,
+        followUpCount: event.followUpCount,
+        nextFollowUp: event.nextFollowUp,
+        communicationId: event.communicationId,
+      },
+    });
+  });
 
   return () => {
     unsubscribeProviderOffline();
+    unsubscribeFollowUpSent();
   };
 }

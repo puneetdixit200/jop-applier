@@ -85,4 +85,58 @@ describe("NotificationManager", () => {
     expect(os.sent).toHaveLength(1);
     expect(inApp.sent).toHaveLength(1);
   });
+
+  it("subscribes to follow-up sent events and emits follow-up notifications", async () => {
+    const bus = new EventBus<CareerEventMap>();
+    const os = new RecordingAdapter("os");
+    const inApp = new RecordingAdapter("in_app");
+    const manager = new NotificationManager({ adapters: [os, inApp] });
+
+    const unsubscribe = bindNotificationManager(bus, manager);
+
+    bus.emit("follow_up.sent", {
+      applicationId: "app-1",
+      jobId: "job-1",
+      companyName: "Northstar Labs",
+      status: "follow_up_sent",
+      followUpCount: 1,
+      nextFollowUp: "2026-06-03T09:00:00.000Z",
+      communicationId: "comm-1",
+      sentAt: new Date("2026-05-27T09:00:00Z"),
+    });
+    await Promise.resolve();
+
+    expect(os.sent).toHaveLength(1);
+    expect(inApp.sent).toHaveLength(1);
+    expect(os.sent[0]).toMatchObject({
+      type: "follow_up.reminder",
+      priority: "medium",
+      title: "Follow-up sent",
+      body: "Follow-up 1 sent to Northstar Labs.",
+      metadata: {
+        applicationId: "app-1",
+        jobId: "job-1",
+        companyName: "Northstar Labs",
+        followUpCount: 1,
+        nextFollowUp: "2026-06-03T09:00:00.000Z",
+        communicationId: "comm-1",
+      },
+    });
+
+    unsubscribe();
+    bus.emit("follow_up.sent", {
+      applicationId: "app-2",
+      jobId: "job-2",
+      companyName: "Signal Ridge",
+      status: "follow_up_sent",
+      followUpCount: 1,
+      nextFollowUp: null,
+      communicationId: "comm-2",
+      sentAt: new Date("2026-05-27T09:00:00Z"),
+    });
+    await Promise.resolve();
+
+    expect(os.sent).toHaveLength(1);
+    expect(inApp.sent).toHaveLength(1);
+  });
 });
