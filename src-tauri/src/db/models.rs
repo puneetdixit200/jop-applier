@@ -307,6 +307,12 @@ pub struct UpsertScheduledTask {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ScheduledTaskRunUpdate {
+    pub last_run: String,
+    pub next_run: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AiCacheEntry {
     pub prompt_hash: String,
     pub model: String,

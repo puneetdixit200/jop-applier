@@ -186,6 +186,11 @@ export type ScheduledTask = {
 
 export type UpsertScheduledTask = Omit<ScheduledTask, "id" | "created_at">;
 
+export type ScheduledTaskRunUpdate = {
+  last_run: string;
+  next_run: string | null;
+};
+
 export type AiCacheEntry = {
   prompt_hash: string;
   model: string;
@@ -275,6 +280,10 @@ export async function listScheduledTasks() {
 
 export async function saveScheduledTask(task: UpsertScheduledTask) {
   return invoke<ScheduledTask>("save_scheduled_task_command", { task });
+}
+
+export async function updateScheduledTaskRun(id: string, update: ScheduledTaskRunUpdate) {
+  return invoke<ScheduledTask>("update_scheduled_task_run_command", { id, update });
 }
 
 export async function getAiCacheEntry(promptHash: string) {

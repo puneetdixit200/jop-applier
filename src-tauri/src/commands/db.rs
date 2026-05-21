@@ -2,9 +2,9 @@ use crate::{
     db::{
         models::{
             AiCacheEntry, Application, ApplicationEvent, Communication, Company, Contact, Document,
-            Job, ScheduledTask, Setting, UpsertAiCacheEntry, UpsertApplication,
-            UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument, UpsertJob,
-            UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
+            Job, ScheduledTask, ScheduledTaskRunUpdate, Setting, UpsertAiCacheEntry,
+            UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument,
+            UpsertJob, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
         },
         queries, schema,
     },
@@ -229,6 +229,19 @@ pub fn save_scheduled_task_command(
         .lock()
         .map_err(|_| "database connection lock poisoned".to_string())?;
     queries::save_scheduled_task(&connection, task).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn update_scheduled_task_run_command(
+    state: State<'_, AppState>,
+    id: String,
+    update: ScheduledTaskRunUpdate,
+) -> Result<ScheduledTask, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::update_scheduled_task_run(&connection, &id, update).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

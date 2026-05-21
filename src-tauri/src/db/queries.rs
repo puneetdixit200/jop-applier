@@ -5,9 +5,9 @@ use thiserror::Error;
 
 use super::models::{
     AiCacheEntry, Application, ApplicationEvent, Communication, Company, Contact, Document, Job,
-    ScheduledTask, Setting, SettingValue, UpsertAiCacheEntry, UpsertApplication,
-    UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument, UpsertJob,
-    UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
+    ScheduledTask, ScheduledTaskRunUpdate, Setting, SettingValue, UpsertAiCacheEntry,
+    UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument,
+    UpsertJob, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -34,6 +34,8 @@ pub enum QueryError {
     MissingCommunicationAfterSave,
     #[error("scheduled task save did not return a row")]
     MissingScheduledTaskAfterSave,
+    #[error("scheduled task run update did not return a row for id {0}")]
+    MissingScheduledTaskAfterRunUpdate(String),
     #[error("ai cache entry save did not return a row")]
     MissingAiCacheEntryAfterSave,
 }
@@ -692,6 +694,23 @@ pub fn save_scheduled_task(
         .ok_or(QueryError::MissingScheduledTaskAfterSave)
 }
 
+pub fn update_scheduled_task_run(
+    connection: &Connection,
+    id: &str,
+    update: ScheduledTaskRunUpdate,
+) -> QueryResult<ScheduledTask> {
+    connection.execute(
+        "UPDATE scheduled_tasks
+         SET last_run = ?1,
+             next_run = ?2
+         WHERE id = ?3",
+        params![update.last_run, update.next_run, id],
+    )?;
+
+    get_scheduled_task_by_id(connection, id)?
+        .ok_or_else(|| QueryError::MissingScheduledTaskAfterRunUpdate(id.to_string()))
+}
+
 pub fn get_ai_cache_entry(
     connection: &Connection,
     prompt_hash: &str,
@@ -789,6 +808,25 @@ fn get_scheduled_task_by_rowid(
          LIMIT 1",
     )?;
     let mut rows = statement.query([rowid])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    scheduled_task_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
+}
+
+fn get_scheduled_task_by_id(
+    connection: &Connection,
+    id: &str,
+) -> QueryResult<Option<ScheduledTask>> {
+    let mut statement = connection.prepare(
+        "SELECT id, name, type, cron_expression, is_enabled, last_run, next_run, config, created_at
+         FROM scheduled_tasks
+         WHERE id = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([id])?;
     let Some(row) = rows.next()? else {
         return Ok(None);
     };
