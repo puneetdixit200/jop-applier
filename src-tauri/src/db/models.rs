@@ -183,3 +183,27 @@ pub struct UpsertDocument {
     pub version: i64,
     pub ai_model_used: Option<String>,
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Contact {
+    pub id: String,
+    pub company_id: Option<String>,
+    pub name: String,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub linkedin_url: Option<String>,
+    pub role: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UpsertContact {
+    pub company_id: Option<String>,
+    pub name: String,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub linkedin_url: Option<String>,
+    pub role: Option<String>,
+    pub notes: Option<String>,
+}

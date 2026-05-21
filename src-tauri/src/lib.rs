@@ -41,7 +41,9 @@ pub fn run() {
             commands::db::save_application_command,
             commands::db::list_application_events_command,
             commands::db::list_documents_command,
-            commands::db::save_document_command
+            commands::db::save_document_command,
+            commands::db::list_contacts_command,
+            commands::db::save_contact_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

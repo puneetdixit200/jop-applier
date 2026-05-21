@@ -1,8 +1,9 @@
 use crate::{
     db::{
         models::{
-            Application, ApplicationEvent, Document, Job, Setting, UpsertApplication,
-            UpsertDocument, UpsertJob, UpsertSetting, UpsertUserProfile, UserProfile,
+            Application, ApplicationEvent, Contact, Document, Job, Setting, UpsertApplication,
+            UpsertContact, UpsertDocument, UpsertJob, UpsertSetting, UpsertUserProfile,
+            UserProfile,
         },
         queries, schema,
     },
@@ -138,4 +139,25 @@ pub fn save_document_command(
         .lock()
         .map_err(|_| "database connection lock poisoned".to_string())?;
     queries::save_document(&connection, document).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn list_contacts_command(state: State<'_, AppState>) -> Result<Vec<Contact>, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::list_contacts(&connection).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn save_contact_command(
+    state: State<'_, AppState>,
+    contact: UpsertContact,
+) -> Result<Contact, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::save_contact(&connection, contact).map_err(|error| error.to_string())
 }

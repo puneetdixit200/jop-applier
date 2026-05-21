@@ -4,8 +4,9 @@ use serde::Serialize;
 use thiserror::Error;
 
 use super::models::{
-    Application, ApplicationEvent, Document, Job, Setting, SettingValue, UpsertApplication,
-    UpsertDocument, UpsertJob, UpsertSetting, UpsertUserProfile, UserProfile,
+    Application, ApplicationEvent, Contact, Document, Job, Setting, SettingValue,
+    UpsertApplication, UpsertContact, UpsertDocument, UpsertJob, UpsertSetting,
+    UpsertUserProfile, UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -24,6 +25,8 @@ pub enum QueryError {
     MissingApplicationAfterSave,
     #[error("document save did not return a row")]
     MissingDocumentAfterSave,
+    #[error("contact save did not return a row")]
+    MissingContactAfterSave,
 }
 
 pub type QueryResult<T> = Result<T, QueryError>;
@@ -485,6 +488,52 @@ pub fn save_document(connection: &Connection, document: UpsertDocument) -> Query
     Ok(saved)
 }
 
+pub fn list_contacts(connection: &Connection) -> QueryResult<Vec<Contact>> {
+    let mut statement = connection.prepare(
+        "SELECT id, company_id, name, email, phone, linkedin_url, role, notes, created_at
+         FROM contacts
+         ORDER BY created_at DESC, rowid DESC",
+    )?;
+
+    let rows = statement.query_map([], contact_from_row)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(QueryError::from)
+}
+
+pub fn save_contact(connection: &Connection, contact: UpsertContact) -> QueryResult<Contact> {
+    connection.execute(
+        "INSERT INTO contacts (
+             company_id, name, email, phone, linkedin_url, role, notes
+         )
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            contact.company_id,
+            contact.name,
+            contact.email,
+            contact.phone,
+            contact.linkedin_url,
+            contact.role,
+            contact.notes,
+        ],
+    )?;
+
+    get_contact_by_rowid(connection, connection.last_insert_rowid())?
+        .ok_or(QueryError::MissingContactAfterSave)
+}
+
+fn get_contact_by_rowid(connection: &Connection, rowid: i64) -> QueryResult<Option<Contact>> {
+    let mut statement = connection.prepare(
+        "SELECT id, company_id, name, email, phone, linkedin_url, role, notes, created_at
+         FROM contacts
+         WHERE rowid = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([rowid])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    contact_from_row(row).map(Some).map_err(QueryError::from)
+}
+
 fn get_document_by_rowid(connection: &Connection, rowid: i64) -> QueryResult<Option<Document>> {
     let mut statement = connection.prepare(
         "SELECT id, application_id, type, file_path, file_name, version, ai_model_used, created_at
@@ -621,6 +670,20 @@ fn document_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Document> {
         version: row.get(5)?,
         ai_model_used: row.get(6)?,
         created_at: row.get(7)?,
+    })
+}
+
+fn contact_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Contact> {
+    Ok(Contact {
+        id: row.get(0)?,
+        company_id: row.get(1)?,
+        name: row.get(2)?,
+        email: row.get(3)?,
+        phone: row.get(4)?,
+        linkedin_url: row.get(5)?,
+        role: row.get(6)?,
+        notes: row.get(7)?,
+        created_at: row.get(8)?,
     })
 }
 

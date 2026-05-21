@@ -113,6 +113,20 @@ export type Document = {
 
 export type UpsertDocument = Omit<Document, "id" | "created_at">;
 
+export type Contact = {
+  id: string;
+  company_id: string | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
+  role: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+export type UpsertContact = Omit<Contact, "id" | "created_at">;
+
 export function isDesktopRuntime() {
   return "__TAURI_INTERNALS__" in window;
 }
@@ -159,4 +173,12 @@ export async function listDocuments(applicationId: string) {
 
 export async function saveDocument(document: UpsertDocument) {
   return invoke<Document>("save_document_command", { document });
+}
+
+export async function listContacts() {
+  return invoke<Contact[]>("list_contacts_command");
+}
+
+export async function saveContact(contact: UpsertContact) {
+  return invoke<Contact>("save_contact_command", { contact });
 }
