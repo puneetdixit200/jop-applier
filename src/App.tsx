@@ -54,6 +54,7 @@ import {
   runScheduleControl,
   type ScheduleControlDependencies,
 } from "./lib/schedule-control";
+import { createScheduleAutoRunner } from "./lib/schedule-auto-runner";
 
 type RouteId = "dashboard" | "jobs" | "applications" | "profile" | "settings";
 
@@ -140,6 +141,8 @@ const scheduleDependencies: ScheduleControlDependencies = {
   runDueScheduledTasks,
   listScheduledTasks,
 };
+
+const schedulePollIntervalMs = 60_000;
 
 const initialRuntimeStatus: RuntimeControlStatus = {
   providerLabel: "Checking",
@@ -257,6 +260,27 @@ export function App() {
     }
 
     void loadPersistedState().catch(() => setStorageStatus("Storage unavailable"));
+  }, []);
+
+  useEffect(() => {
+    const runner = createScheduleAutoRunner(
+      {
+        isDesktopRuntime,
+        runScheduleControl: () => runScheduleControl(scheduleDependencies),
+        onResult: (result) => {
+          setWorkflowStatus(result.workflowStatus);
+          if (result.schedules) {
+            setScheduleSummaries(result.schedules);
+          }
+        },
+        onError: () => setWorkflowStatus("scheduled tasks unavailable"),
+      },
+      { pollIntervalMs: schedulePollIntervalMs },
+    );
+
+    runner.start();
+
+    return () => runner.stop();
   }, []);
 
   async function startDiscovery() {
