@@ -5,6 +5,15 @@ import type { BrowserSessionHealthTarget } from "./browser/session-health.js";
 import type { CareerEventMap } from "./orchestrator/events.js";
 import type { PersistedScheduledTaskRunUpdate } from "./orchestrator/scheduled-task-persistence.js";
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+
+  return { promise, resolve };
+}
+
 describe("sidecar runtime", () => {
   it("registers and runs the session-health workflow with browser session dependencies", async () => {
     const checkedAt = new Date("2026-05-28T10:00:00Z");
@@ -116,5 +125,73 @@ describe("sidecar runtime", () => {
         },
       },
     ]);
+  });
+
+  it("exposes a scheduler service that polls due scheduled tasks", async () => {
+    const checkedAt = new Date("2026-05-28T10:00:00Z");
+    const updates: Array<{ id: string; update: PersistedScheduledTaskRunUpdate }> = [];
+    const updateRecorded = deferred();
+    const clearedHandles: string[] = [];
+    let intervalCallback: (() => void) | undefined;
+    const runtime = createSidecarRuntime({
+      browserSessionHealth: {
+        targets: [{ platform: "LinkedIn", isEnabled: true }],
+        openSession: async (): Promise<BrowserSession> => ({ close: async () => {} }),
+      },
+      now: () => checkedAt,
+      scheduledTasks: {
+        listScheduledTasks: async () => [
+          {
+            id: "session-health-task",
+            name: "Session Health",
+            type: "session_health",
+            cron_expression: "0 */2 * * *",
+            is_enabled: true,
+            last_run: null,
+            next_run: "2026-05-28T10:00:00.000Z",
+            config: {
+              cadence: { kind: "interval", minutes: 120 },
+            },
+            created_at: "2026-05-28T08:00:00.000Z",
+          },
+        ],
+        updateScheduledTaskRun: async (id, update) => {
+          updates.push({ id, update });
+          updateRecorded.resolve();
+        },
+      },
+      scheduler: {
+        pollIntervalMs: 120_000,
+        runOnStart: true,
+        setInterval: (callback, milliseconds) => {
+          intervalCallback = callback;
+          expect(milliseconds).toBe(120_000);
+          return "runtime-scheduler";
+        },
+        clearInterval: (handle) => {
+          clearedHandles.push(String(handle));
+        },
+      },
+    });
+
+    runtime.schedulerService.start();
+    await updateRecorded.promise;
+
+    expect(runtime.schedulerService.isRunning()).toBe(true);
+    expect(intervalCallback).toBeDefined();
+    expect(updates).toEqual([
+      {
+        id: "session-health-task",
+        update: {
+          last_run: "2026-05-28T10:00:00.000Z",
+          next_run: "2026-05-28T12:00:00.000Z",
+        },
+      },
+    ]);
+
+    runtime.schedulerService.stop();
+
+    expect(runtime.schedulerService.isRunning()).toBe(false);
+    expect(clearedHandles).toEqual(["runtime-scheduler"]);
   });
 });

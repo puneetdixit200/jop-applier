@@ -20,6 +20,10 @@ import {
   type ScheduledTaskPersistence,
 } from "./orchestrator/scheduled-task-persistence.js";
 import {
+  createSchedulerService,
+  type SchedulerServiceDependencies,
+} from "./orchestrator/scheduler-service.js";
+import {
   runDueScheduledTasks,
   type ScheduledTaskRunnerResult,
 } from "./orchestrator/scheduled-task-runner.js";
@@ -92,6 +96,13 @@ export type SidecarRuntimeOptions = {
     validateSession?: Parameters<typeof runBrowserSessionHealthCheck>[0]["validateSession"];
   };
   scheduledTasks?: ScheduledTaskPersistence;
+  scheduler?: {
+    pollIntervalMs?: number;
+    runOnStart?: boolean;
+    setInterval?: SchedulerServiceDependencies["setInterval"];
+    clearInterval?: SchedulerServiceDependencies["clearInterval"];
+    onError?: SchedulerServiceDependencies["onError"];
+  };
 };
 
 export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
@@ -136,12 +147,26 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
       workflowsByTaskType: DEFAULT_WORKFLOWS_BY_TASK_TYPE,
       eventBus,
     });
+  const schedulerService = createSchedulerService(
+    {
+      runDueTasks: runDueRuntimeScheduledTasks,
+      now,
+      setInterval: options.scheduler?.setInterval,
+      clearInterval: options.scheduler?.clearInterval,
+      onError: options.scheduler?.onError,
+    },
+    {
+      pollIntervalMs: options.scheduler?.pollIntervalMs ?? 60_000,
+      runOnStart: options.scheduler?.runOnStart,
+    },
+  );
 
   return {
     aiEngine,
     browserManager,
     eventBus,
     runDueScheduledTasks: runDueRuntimeScheduledTasks,
+    schedulerService,
     workflowEngine,
   };
 }
