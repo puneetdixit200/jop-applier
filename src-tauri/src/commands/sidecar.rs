@@ -7,7 +7,7 @@ use crate::{
     AppState,
 };
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use tauri::State;
 
 #[tauri::command]
@@ -62,27 +62,37 @@ fn workflow_params_from_settings(
         return Ok(json!({}));
     }
 
-    let Some(setting) = queries::get_setting(connection, "discovery.searchQueries")
-        .map_err(|error| error.to_string())?
+    let mut discovery = Map::new();
+    if let Some(search_queries) = discovery_setting_array(connection, "discovery.searchQueries")? {
+        discovery.insert("searchQueries".to_string(), Value::Array(search_queries));
+    }
+    if let Some(feed_sources) = discovery_setting_array(connection, "discovery.feedSources")? {
+        discovery.insert("feedSources".to_string(), Value::Array(feed_sources));
+    }
+
+    if discovery.is_empty() {
+        Ok(json!({}))
+    } else {
+        Ok(json!({ "discovery": discovery }))
+    }
+}
+
+fn discovery_setting_array(
+    connection: &Connection,
+    key: &str,
+) -> Result<Option<Vec<Value>>, String> {
+    let Some(setting) = queries::get_setting(connection, key).map_err(|error| error.to_string())?
     else {
-        return Ok(json!({}));
+        return Ok(None);
     };
 
     match setting.value {
-        SettingValue::Array(search_queries) if !search_queries.is_empty() => Ok(json!({
-            "discovery": {
-                "searchQueries": search_queries
-            }
-        })),
+        SettingValue::Array(values) if !values.is_empty() => Ok(Some(values)),
         SettingValue::Object(value) => match value.as_array() {
-            Some(search_queries) if !search_queries.is_empty() => Ok(json!({
-                "discovery": {
-                    "searchQueries": search_queries
-                }
-            })),
-            _ => Ok(json!({})),
+            Some(values) if !values.is_empty() => Ok(Some(values.to_vec())),
+            _ => Ok(None),
         },
-        _ => Ok(json!({})),
+        _ => Ok(None),
     }
 }
 

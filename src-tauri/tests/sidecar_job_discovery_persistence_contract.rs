@@ -62,6 +62,19 @@ fn sends_discovery_search_queries_from_settings_to_sidecar() {
         },
     )
     .expect("save discovery search query setting");
+    upsert_setting(
+        &connection,
+        UpsertSetting {
+            key: "discovery.feedSources".to_string(),
+            category: Some("discovery".to_string()),
+            value: SettingValue::Array(vec![json!({
+                "id": "custom-feed",
+                "platform": "custom",
+                "url": "https://feeds.example/jobs.json"
+            })]),
+        },
+    )
+    .expect("save discovery feed source setting");
     let request_path = std::env::temp_dir().join(format!(
         "careercaveman-sidecar-request-{}.json",
         std::process::id()
@@ -83,6 +96,14 @@ fn sends_discovery_search_queries_from_settings_to_sidecar() {
             "remote": true,
             "experienceLevel": "entry",
             "jobType": "fulltime"
+        }])
+    );
+    assert_eq!(
+        request["params"]["discovery"]["feedSources"],
+        json!([{
+            "id": "custom-feed",
+            "platform": "custom",
+            "url": "https://feeds.example/jobs.json"
         }])
     );
 }

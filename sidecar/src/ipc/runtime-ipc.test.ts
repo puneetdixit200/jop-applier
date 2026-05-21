@@ -1,5 +1,5 @@
 import { PassThrough } from "node:stream";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSidecarRuntime } from "../index.js";
 import type { UpsertJobPayload } from "../discovery/job-persistence.js";
 import { handleSidecarIpcRequest, runSidecarIpc } from "./runtime-ipc.js";
@@ -16,6 +16,10 @@ const expectedWorkflows = [
 ];
 
 describe("sidecar runtime IPC", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("returns runtime status over the IPC request handler", async () => {
     const runtime = createSidecarRuntime();
 
@@ -152,6 +156,85 @@ describe("sidecar runtime IPC", () => {
         jobType: "fulltime",
       },
     ]);
+  });
+
+  it("discovers jobs from configured HTTP JSON feed sources", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify([
+            {
+              id: "feed-react-1",
+              url: "https://jobs.example/feed-react",
+              title: "React Feed Engineer",
+              company: "Feed Labs",
+              location: "Remote",
+              remote: true,
+              description: "React and TypeScript job from a configured feed",
+              requirements: ["React", "TypeScript"],
+            },
+          ]),
+          { status: 200 },
+        ),
+      ),
+    );
+    const persistedUrls: string[] = [];
+    const runtime = createSidecarRuntime({
+      jobDiscovery: {
+        searchQueries: [],
+        searchForPersistence: async () => {
+          throw new Error("configured feed should provide search results");
+        },
+        upsertJobs: async (jobs) => {
+          persistedUrls.push(...jobs.map((job) => job.url));
+          return jobs.map((job, index) => ({
+            id: `feed-job-${index + 1}`,
+            platform: job.platform,
+            title: job.title,
+            company_name: job.company_name,
+          }));
+        },
+      },
+    });
+
+    await expect(
+      handleSidecarIpcRequest(runtime, {
+        id: "workflow-feed",
+        method: "workflow.run",
+        params: {
+          workflowId: "job-discovery",
+          discovery: {
+            feedSources: [
+              {
+                id: "configured",
+                platform: "custom",
+                url: "https://feeds.example/jobs.json",
+              },
+            ],
+            searchQueries: [{ keywords: ["react"], remote: true }],
+          },
+        },
+      }),
+    ).resolves.toEqual({
+      id: "workflow-feed",
+      ok: true,
+      result: expect.objectContaining({
+        queries: 1,
+        discovered: 1,
+        stored: 1,
+        jobs: [
+          expect.objectContaining({
+            source_id: "configured:feed-react-1",
+            platform: "custom",
+            url: "https://jobs.example/feed-react",
+            title: "React Feed Engineer",
+            company_name: "Feed Labs",
+          }),
+        ],
+      }),
+    });
+    expect(persistedUrls).toEqual(["https://jobs.example/feed-react"]);
   });
 
   it("serializes JSON-line responses for stdio IPC", async () => {

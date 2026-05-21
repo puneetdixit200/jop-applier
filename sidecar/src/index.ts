@@ -33,6 +33,11 @@ import {
   type JobDiscoveryWorkflowDependencies,
 } from "./discovery/job-discovery-workflow.js";
 import type { SearchQuery } from "./discovery/connectors/connector-interface.js";
+import { DiscoveryManager } from "./discovery/discovery-manager.js";
+import {
+  HttpJsonFeedConnector,
+  type HttpJsonFeedSource,
+} from "./discovery/connectors/http-json-feed-connector.js";
 import {
   runExportSyncWorker,
   type ExportSyncWorkerDependencies,
@@ -217,11 +222,17 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   workflowEngine.register({
     id: "job-discovery",
     description: "Search configured job queries and persist discovered jobs",
-    run: async (input) =>
-      runJobDiscoveryWorkflow(jobDiscovery, {
+    run: async (input) => {
+      const feedSources = discoveryFeedSourcesFromWorkflowInput(input);
+      const discoveryDependencies = feedSources
+        ? createHttpFeedDiscoveryDependencies(feedSources, jobDiscovery)
+        : jobDiscovery;
+
+      return runJobDiscoveryWorkflow(discoveryDependencies, {
         eventBus,
         searchQueries: discoverySearchQueriesFromWorkflowInput(input),
-      }),
+      });
+    },
   });
   workflowEngine.register({
     id: "application-processing",
@@ -345,6 +356,54 @@ function discoverySearchQueriesFromWorkflowInput(input: unknown): SearchQuery[] 
   }
 
   return searchQueries.filter(isSearchQuery);
+}
+
+function discoveryFeedSourcesFromWorkflowInput(input: unknown): HttpJsonFeedSource[] | undefined {
+  if (!isRecord(input) || !isRecord(input.discovery)) {
+    return undefined;
+  }
+  const { feedSources } = input.discovery;
+  if (!Array.isArray(feedSources)) {
+    return undefined;
+  }
+
+  const sources = feedSources.filter(isHttpJsonFeedSource);
+  return sources.length > 0 ? sources : undefined;
+}
+
+function createHttpFeedDiscoveryDependencies(
+  feedSources: HttpJsonFeedSource[],
+  base: JobDiscoveryWorkflowDependencies,
+): JobDiscoveryWorkflowDependencies {
+  const manager = new DiscoveryManager(
+    feedSources.map((source) => new HttpJsonFeedConnector(source)),
+  );
+
+  return {
+    searchQueries: base.searchQueries,
+    searchForPersistence: (query) => manager.searchForPersistence(query),
+    upsertJobs: base.upsertJobs,
+  };
+}
+
+function isHttpJsonFeedSource(value: unknown): value is HttpJsonFeedSource {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    value.id.trim().length > 0 &&
+    typeof value.url === "string" &&
+    value.url.trim().length > 0 &&
+    (value.platform === undefined || typeof value.platform === "string") &&
+    (value.name === undefined || typeof value.name === "string") &&
+    (value.headers === undefined || isStringRecord(value.headers))
+  );
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    isRecord(value) &&
+    Object.values(value).every((item) => typeof item === "string")
+  );
 }
 
 function isSearchQuery(value: unknown): value is SearchQuery {
