@@ -83,6 +83,12 @@ export type Application = {
   mode: string;
   resume_path: string | null;
   cover_letter_path: string | null;
+  last_follow_up: string | null;
+  follow_up_count: number;
+  next_follow_up: string | null;
+  response_date: string | null;
+  response_type: string | null;
+  response_notes: string | null;
   submitted_at: string | null;
   submission_url: string | null;
   confirmation_id: string | null;
@@ -99,6 +105,12 @@ export type UpsertApplication = {
   mode: string;
   resume_path: string | null;
   cover_letter_path: string | null;
+  last_follow_up: string | null;
+  follow_up_count: number;
+  next_follow_up: string | null;
+  response_date: string | null;
+  response_type: string | null;
+  response_notes: string | null;
   submission_url: string | null;
   confirmation_id: string | null;
   error_message: string | null;

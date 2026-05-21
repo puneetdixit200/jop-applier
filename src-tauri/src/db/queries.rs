@@ -408,9 +408,10 @@ fn get_company_by_rowid(connection: &Connection, rowid: i64) -> QueryResult<Opti
 pub fn list_applications(connection: &Connection) -> QueryResult<Vec<Application>> {
     let mut statement = connection.prepare(
         "SELECT a.id, a.job_id, j.title, j.company_name, a.status, a.mode,
-                a.resume_path, a.cover_letter_path, a.submitted_at, a.submission_url,
-                a.confirmation_id, a.error_message, a.retry_count, a.max_retries,
-                a.notes, a.tags
+                a.resume_path, a.cover_letter_path, a.last_follow_up, a.follow_up_count,
+                a.next_follow_up, a.response_date, a.response_type, a.response_notes,
+                a.submitted_at, a.submission_url, a.confirmation_id, a.error_message,
+                a.retry_count, a.max_retries, a.notes, a.tags
          FROM applications a
          INNER JOIN jobs j ON j.id = a.job_id
          ORDER BY a.created_at DESC",
@@ -437,18 +438,30 @@ pub fn upsert_application(
                  mode = ?2,
                  resume_path = ?3,
                  cover_letter_path = ?4,
-                 submission_url = ?5,
-                 confirmation_id = ?6,
-                 error_message = ?7,
-                 notes = ?8,
-                 tags = ?9,
+                 last_follow_up = ?5,
+                 follow_up_count = ?6,
+                 next_follow_up = ?7,
+                 response_date = ?8,
+                 response_type = ?9,
+                 response_notes = ?10,
+                 submission_url = ?11,
+                 confirmation_id = ?12,
+                 error_message = ?13,
+                 notes = ?14,
+                 tags = ?15,
                  updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?10",
+             WHERE id = ?16",
             params![
                 application.status,
                 application.mode,
                 application.resume_path,
                 application.cover_letter_path,
+                application.last_follow_up,
+                application.follow_up_count,
+                application.next_follow_up,
+                application.response_date,
+                application.response_type,
+                application.response_notes,
                 application.submission_url,
                 application.confirmation_id,
                 application.error_message,
@@ -471,16 +484,23 @@ pub fn upsert_application(
     } else {
         connection.execute(
             "INSERT INTO applications (
-                 job_id, status, mode, resume_path, cover_letter_path, submission_url,
-                 confirmation_id, error_message, notes, tags
+                 job_id, status, mode, resume_path, cover_letter_path, last_follow_up,
+                 follow_up_count, next_follow_up, response_date, response_type, response_notes,
+                 submission_url, confirmation_id, error_message, notes, tags
             )
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 &job_id,
                 application.status,
                 application.mode,
                 application.resume_path,
                 application.cover_letter_path,
+                application.last_follow_up,
+                application.follow_up_count,
+                application.next_follow_up,
+                application.response_date,
+                application.response_type,
+                application.response_notes,
                 application.submission_url,
                 application.confirmation_id,
                 application.error_message,
@@ -891,9 +911,10 @@ fn get_application_by_job_id(
 ) -> QueryResult<Option<Application>> {
     let mut statement = connection.prepare(
         "SELECT a.id, a.job_id, j.title, j.company_name, a.status, a.mode,
-                a.resume_path, a.cover_letter_path, a.submitted_at, a.submission_url,
-                a.confirmation_id, a.error_message, a.retry_count, a.max_retries,
-                a.notes, a.tags
+                a.resume_path, a.cover_letter_path, a.last_follow_up, a.follow_up_count,
+                a.next_follow_up, a.response_date, a.response_type, a.response_notes,
+                a.submitted_at, a.submission_url, a.confirmation_id, a.error_message,
+                a.retry_count, a.max_retries, a.notes, a.tags
          FROM applications a
          INNER JOIN jobs j ON j.id = a.job_id
          WHERE a.job_id = ?1
@@ -909,7 +930,7 @@ fn get_application_by_job_id(
 }
 
 fn application_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Application> {
-    let tags = json_cell(row, 15)?;
+    let tags = json_cell(row, 21)?;
 
     Ok(Application {
         id: row.get(0)?,
@@ -920,13 +941,19 @@ fn application_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Application
         mode: row.get(5)?,
         resume_path: row.get(6)?,
         cover_letter_path: row.get(7)?,
-        submitted_at: row.get(8)?,
-        submission_url: row.get(9)?,
-        confirmation_id: row.get(10)?,
-        error_message: row.get(11)?,
-        retry_count: row.get(12)?,
-        max_retries: row.get(13)?,
-        notes: row.get(14)?,
+        last_follow_up: row.get(8)?,
+        follow_up_count: row.get(9)?,
+        next_follow_up: row.get(10)?,
+        response_date: row.get(11)?,
+        response_type: row.get(12)?,
+        response_notes: row.get(13)?,
+        submitted_at: row.get(14)?,
+        submission_url: row.get(15)?,
+        confirmation_id: row.get(16)?,
+        error_message: row.get(17)?,
+        retry_count: row.get(18)?,
+        max_retries: row.get(19)?,
+        notes: row.get(20)?,
         tags,
     })
 }

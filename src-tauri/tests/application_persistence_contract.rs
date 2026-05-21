@@ -48,6 +48,12 @@ fn queues_updates_and_lists_applications_with_job_context() {
             mode: "semi-auto".to_string(),
             resume_path: None,
             cover_letter_path: None,
+            last_follow_up: None,
+            follow_up_count: 0,
+            next_follow_up: Some("2026-05-24 09:00:00".to_string()),
+            response_date: None,
+            response_type: None,
+            response_notes: None,
             submission_url: None,
             confirmation_id: None,
             error_message: None,
@@ -65,6 +71,12 @@ fn queues_updates_and_lists_applications_with_job_context() {
             mode: "semi-auto".to_string(),
             resume_path: Some("/tmp/resume.pdf".to_string()),
             cover_letter_path: Some("/tmp/cover-letter.pdf".to_string()),
+            last_follow_up: Some("2026-05-24 09:00:00".to_string()),
+            follow_up_count: 1,
+            next_follow_up: Some("2026-05-31 09:00:00".to_string()),
+            response_date: Some("2026-05-25 14:30:00".to_string()),
+            response_type: Some("positive".to_string()),
+            response_notes: Some("Recruiter asked for interview availability".to_string()),
             submission_url: None,
             confirmation_id: None,
             error_message: None,
@@ -88,6 +100,24 @@ fn queues_updates_and_lists_applications_with_job_context() {
     );
     assert_eq!(applications[0].retry_count, 0);
     assert_eq!(applications[0].max_retries, 3);
+    assert_eq!(
+        applications[0].last_follow_up.as_deref(),
+        Some("2026-05-24 09:00:00")
+    );
+    assert_eq!(applications[0].follow_up_count, 1);
+    assert_eq!(
+        applications[0].next_follow_up.as_deref(),
+        Some("2026-05-31 09:00:00")
+    );
+    assert_eq!(
+        applications[0].response_date.as_deref(),
+        Some("2026-05-25 14:30:00")
+    );
+    assert_eq!(applications[0].response_type.as_deref(), Some("positive"));
+    assert_eq!(
+        applications[0].response_notes.as_deref(),
+        Some("Recruiter asked for interview availability")
+    );
     assert_eq!(applications[0].tags, vec!["priority", "resume"]);
 
     let events =
