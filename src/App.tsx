@@ -20,6 +20,7 @@ import {
   listApplicationEvents,
   listApplications,
   listCommunications,
+  listContacts,
   listDocuments,
   listJobs,
   listScheduledTasks,
@@ -30,6 +31,7 @@ import {
   saveUserProfile,
   type Application,
   type ApplicationEvent,
+  type Contact,
   type Communication,
   type Document,
   type UpsertUserProfile,
@@ -44,6 +46,10 @@ import {
   buildApplicationTracker,
   type ApplicationTracker,
 } from "./lib/application-tracker";
+import {
+  buildContactCrm,
+  type ContactCrm,
+} from "./lib/contact-crm";
 import {
   runDiscoveryControl,
   loadJobSummaries,
@@ -155,6 +161,31 @@ const previewApplications: Application[] = [
     company_name: "DeltaStack",
     job_title: "Platform Engineer",
     status: "queued",
+  }),
+];
+
+const previewContacts: Contact[] = [
+  contactRecord({
+    id: "preview-recruiter",
+    name: "Priya Sharma",
+    email: "priya@example.com",
+    linkedin_url: "https://linkedin.example/in/priya",
+    role: "recruiter",
+    notes: "Handles frontend internship hiring",
+  }),
+  contactRecord({
+    id: "preview-manager",
+    name: "Arjun Mehta",
+    phone: "+91-555-0101",
+    role: "hiring_manager",
+    notes: "Technical interview owner",
+  }),
+  contactRecord({
+    id: "preview-referral",
+    name: "Nisha Rao",
+    linkedin_url: "https://linkedin.example/in/nisha",
+    role: "referral",
+    notes: "Alumni referral",
   }),
 ];
 
@@ -287,6 +318,7 @@ export function App() {
   });
   const [persistedJobs, setPersistedJobs] = useState<JobSummary[]>([]);
   const [persistedApplications, setPersistedApplications] = useState<Application[]>([]);
+  const [persistedContacts, setPersistedContacts] = useState<Contact[]>([]);
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
   const [applicationActivity, setApplicationActivity] = useState<ApplicationActivity>(() =>
     buildApplicationActivity(emptyActivitySources),
@@ -305,6 +337,10 @@ export function App() {
   const applicationTracker = useMemo(
     () => buildApplicationTracker(persistedApplications.length > 0 ? persistedApplications : previewApplications),
     [persistedApplications],
+  );
+  const contactCrm = useMemo(
+    () => buildContactCrm(persistedContacts.length > 0 ? persistedContacts : previewContacts),
+    [persistedContacts],
   );
 
   useEffect(() => {
@@ -349,6 +385,7 @@ export function App() {
         storedScheduledTasks,
         storedJobs,
         storedApplications,
+        storedContacts,
       ] = await Promise.all([
         getUserProfile(),
         getSetting("ai.provider"),
@@ -360,6 +397,7 @@ export function App() {
         loadOrSeedScheduledTasks({ listScheduledTasks, saveScheduledTask }),
         listJobs(),
         listApplications(),
+        listContacts(),
       ]);
 
       if (storedProfile) {
@@ -370,6 +408,9 @@ export function App() {
       }
       if (storedApplications.length > 0) {
         setPersistedApplications(storedApplications);
+      }
+      if (storedContacts.length > 0) {
+        setPersistedContacts(storedContacts);
       }
       setScheduleSummaries(scheduledTaskSummaries(storedScheduledTasks, 8));
       setSettings((current) => ({
@@ -576,6 +617,7 @@ export function App() {
           <Applications
             tracker={applicationTracker}
             activity={applicationActivity}
+            contactCrm={contactCrm}
             selectedApplicationId={selectedApplicationId}
             onSelectApplication={setSelectedApplicationId}
           />
@@ -731,11 +773,13 @@ function Jobs({ jobs }: { jobs: JobSummary[] }) {
 function Applications({
   tracker,
   activity,
+  contactCrm,
   selectedApplicationId,
   onSelectApplication,
 }: {
   tracker: ApplicationTracker;
   activity: ApplicationActivity;
+  contactCrm: ContactCrm;
   selectedApplicationId: string | null;
   onSelectApplication: (applicationId: string) => void;
 }) {
@@ -795,6 +839,47 @@ function Applications({
           </button>
         ))}
       </div>
+      <section className="contact-crm" aria-label="Recruiter contact CRM">
+        <div className="activity-heading">
+          <div>
+            <p className="eyebrow">Contacts</p>
+            <h4>Recruiter CRM</h4>
+          </div>
+          <strong>{contactCrm.summary.reachable}/{contactCrm.summary.total}</strong>
+        </div>
+        <div className="contact-metrics">
+          <span>
+            Recruiters <strong>{contactCrm.summary.recruiters}</strong>
+          </span>
+          <span>
+            Hiring managers <strong>{contactCrm.summary.hiringManagers}</strong>
+          </span>
+          <span>
+            Referrals <strong>{contactCrm.summary.referrals}</strong>
+          </span>
+        </div>
+        <div className="contact-grid">
+          {contactCrm.rows.length > 0 ? (
+            contactCrm.rows.slice(0, 4).map((contact) => (
+              <article className="contact-card" key={contact.id}>
+                <div>
+                  <strong>{contact.name}</strong>
+                  <span>{contact.roleLabel} · {contact.primaryChannel}</span>
+                </div>
+                <p>{contact.contactDetail}</p>
+                {contact.notes && <small>{contact.notes}</small>}
+              </article>
+            ))
+          ) : (
+            <article className="contact-card empty-contact">
+              <div>
+                <strong>No contacts yet</strong>
+                <span>Add recruiters and referrals</span>
+              </div>
+            </article>
+          )}
+        </div>
+      </section>
       <div className="activity-detail">
         <section className="activity-section" aria-label="Application activity timeline">
           <div className="activity-heading">
@@ -1226,6 +1311,21 @@ function communicationRecord(overrides: Partial<Communication>): Communication {
     email_id: null,
     sent_at: null,
     read_at: null,
+    created_at: "2026-05-21T10:00:00Z",
+    ...overrides,
+  };
+}
+
+function contactRecord(overrides: Partial<Contact>): Contact {
+  return {
+    id: "preview-contact",
+    company_id: null,
+    name: "Contact",
+    email: null,
+    phone: null,
+    linkedin_url: null,
+    role: null,
+    notes: null,
     created_at: "2026-05-21T10:00:00Z",
     ...overrides,
   };
