@@ -289,6 +289,17 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) 54px;
 }
 
+.job-row div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.job-row strong,
+.job-row span {
+  overflow-wrap: anywhere;
+}
+
 .job-row b {
   display: grid;
   width: 44px;

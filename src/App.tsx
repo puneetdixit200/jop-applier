@@ -13,16 +13,24 @@ import {
   UserRound,
 } from "lucide-react";
 import {
+  getSidecarStatus,
   getSetting,
   getUserProfile,
   isDesktopRuntime,
   listJobs,
+  runSidecarWorkflow,
   saveSetting,
   saveUserProfile,
   type Job,
   type UpsertUserProfile,
   type UserProfile,
 } from "./lib/tauri-api";
+import {
+  loadRuntimeControlStatus,
+  runRuntimeWorkflow,
+  type RuntimeControlDependencies,
+  type RuntimeControlStatus,
+} from "./lib/runtime-control";
 
 type RouteId = "dashboard" | "jobs" | "applications" | "profile" | "settings";
 
@@ -101,6 +109,19 @@ const metrics = [
   { label: "AI Cache Hits", value: "64%", tone: "violet" },
 ];
 
+const runtimeDependencies: RuntimeControlDependencies = {
+  isDesktopRuntime,
+  getSidecarStatus,
+  runSidecarWorkflow,
+};
+
+const initialRuntimeStatus: RuntimeControlStatus = {
+  providerLabel: "Checking",
+  runtimeStatus: "Checking",
+  statusMessage: "Checking sidecar",
+  workflowCount: 0,
+};
+
 export function App() {
   const [route, setRoute] = useState<RouteId>("dashboard");
   const [profile, setProfile] = useState<Profile>({
@@ -121,9 +142,29 @@ export function App() {
   });
   const [persistedJobs, setPersistedJobs] = useState<JobSummary[]>([]);
   const [storageStatus, setStorageStatus] = useState("Ready");
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeControlStatus>(initialRuntimeStatus);
+  const [workflowStatus, setWorkflowStatus] = useState("Idle");
+  const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
 
   const routeTitle = useMemo(() => routes.find((item) => item.id === route)?.label ?? "Dashboard", [route]);
   const visibleJobs = persistedJobs.length > 0 ? persistedJobs : previewJobs;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function refreshRuntimeStatus() {
+      const status = await loadRuntimeControlStatus(runtimeDependencies);
+      if (isMounted) {
+        setRuntimeStatus(status);
+      }
+    }
+
+    void refreshRuntimeStatus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isDesktopRuntime()) {
@@ -160,6 +201,20 @@ export function App() {
 
     void loadPersistedState().catch(() => setStorageStatus("Storage unavailable"));
   }, []);
+
+  async function startDiscovery() {
+    setIsRunningDiscovery(true);
+    setWorkflowStatus("job-discovery running");
+    try {
+      const result = await runRuntimeWorkflow(runtimeDependencies, "job-discovery");
+      setWorkflowStatus(result.statusMessage);
+      if (result.ok) {
+        setRuntimeStatus(await loadRuntimeControlStatus(runtimeDependencies));
+      }
+    } finally {
+      setIsRunningDiscovery(false);
+    }
+  }
 
   return (
     <main className="app-shell">
@@ -207,14 +262,27 @@ export function App() {
             <button className="icon-button" type="button" aria-label="Search">
               <Search size={18} aria-hidden="true" />
             </button>
-            <button className="primary-action" type="button">
+            <button
+              className="primary-action"
+              type="button"
+              onClick={startDiscovery}
+              disabled={isRunningDiscovery}
+            >
               <Play size={17} aria-hidden="true" />
-              Start Discovery
+              {isRunningDiscovery ? "Running" : "Start Discovery"}
             </button>
           </div>
         </header>
 
-        {route === "dashboard" && <Dashboard provider={settings.provider} storageStatus={storageStatus} jobs={visibleJobs} />}
+        {route === "dashboard" && (
+          <Dashboard
+            provider={settings.provider}
+            runtimeStatus={runtimeStatus}
+            workflowStatus={workflowStatus}
+            storageStatus={storageStatus}
+            jobs={visibleJobs}
+          />
+        )}
         {route === "jobs" && <Jobs jobs={visibleJobs} />}
         {route === "applications" && <Applications />}
         {route === "profile" && (
@@ -228,7 +296,19 @@ export function App() {
   );
 }
 
-function Dashboard({ provider, storageStatus, jobs }: { provider: string; storageStatus: string; jobs: JobSummary[] }) {
+function Dashboard({
+  provider,
+  runtimeStatus,
+  workflowStatus,
+  storageStatus,
+  jobs,
+}: {
+  provider: string;
+  runtimeStatus: RuntimeControlStatus;
+  workflowStatus: string;
+  storageStatus: string;
+  jobs: JobSummary[];
+}) {
   return (
     <div className="dashboard-grid">
       <section className="metric-grid" aria-label="Application metrics">
@@ -272,11 +352,17 @@ function Dashboard({ provider, storageStatus, jobs }: { provider: string; storag
         <dl className="status-list">
           <div>
             <dt>Active AI</dt>
-            <dd>{provider}</dd>
+            <dd>
+              {runtimeStatus.providerLabel === "Checking" ? provider : runtimeStatus.providerLabel}
+            </dd>
           </div>
           <div>
-            <dt>Browser</dt>
-            <dd>Idle</dd>
+            <dt>Sidecar</dt>
+            <dd>{runtimeStatus.statusMessage}</dd>
+          </div>
+          <div>
+            <dt>Workflow</dt>
+            <dd>{workflowStatus}</dd>
           </div>
           <div>
             <dt>Database</dt>
