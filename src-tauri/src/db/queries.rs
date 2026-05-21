@@ -4,9 +4,9 @@ use serde::Serialize;
 use thiserror::Error;
 
 use super::models::{
-    Application, ApplicationEvent, Contact, Document, Job, Setting, SettingValue,
-    UpsertApplication, UpsertContact, UpsertDocument, UpsertJob, UpsertSetting,
-    UpsertUserProfile, UserProfile,
+    Application, ApplicationEvent, Communication, Contact, Document, Job, Setting, SettingValue,
+    UpsertApplication, UpsertCommunication, UpsertContact, UpsertDocument, UpsertJob,
+    UpsertSetting, UpsertUserProfile, UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -27,6 +27,8 @@ pub enum QueryError {
     MissingDocumentAfterSave,
     #[error("contact save did not return a row")]
     MissingContactAfterSave,
+    #[error("communication save did not return a row")]
+    MissingCommunicationAfterSave,
 }
 
 pub type QueryResult<T> = Result<T, QueryError>;
@@ -459,7 +461,8 @@ pub fn list_documents(connection: &Connection, application_id: &str) -> QueryRes
     )?;
 
     let rows = statement.query_map([application_id], document_from_row)?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(QueryError::from)
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(QueryError::from)
 }
 
 pub fn save_document(connection: &Connection, document: UpsertDocument) -> QueryResult<Document> {
@@ -496,7 +499,8 @@ pub fn list_contacts(connection: &Connection) -> QueryResult<Vec<Contact>> {
     )?;
 
     let rows = statement.query_map([], contact_from_row)?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(QueryError::from)
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(QueryError::from)
 }
 
 pub fn save_contact(connection: &Connection, contact: UpsertContact) -> QueryResult<Contact> {
@@ -518,6 +522,77 @@ pub fn save_contact(connection: &Connection, contact: UpsertContact) -> QueryRes
 
     get_contact_by_rowid(connection, connection.last_insert_rowid())?
         .ok_or(QueryError::MissingContactAfterSave)
+}
+
+pub fn list_communications(
+    connection: &Connection,
+    application_id: &str,
+) -> QueryResult<Vec<Communication>> {
+    let mut statement = connection.prepare(
+        "SELECT id, application_id, contact_id, direction, type, subject, body, email_id,
+                sent_at, read_at, created_at
+         FROM communications
+         WHERE application_id = ?1
+         ORDER BY created_at DESC, rowid DESC",
+    )?;
+
+    let rows = statement.query_map([application_id], communication_from_row)?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(QueryError::from)
+}
+
+pub fn save_communication(
+    connection: &Connection,
+    communication: UpsertCommunication,
+) -> QueryResult<Communication> {
+    connection.execute(
+        "INSERT INTO communications (
+             application_id, contact_id, direction, type, subject, body, email_id, sent_at, read_at
+         )
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![
+            communication.application_id,
+            communication.contact_id,
+            communication.direction,
+            communication.communication_type,
+            communication.subject,
+            communication.body,
+            communication.email_id,
+            communication.sent_at,
+            communication.read_at,
+        ],
+    )?;
+
+    let saved = get_communication_by_rowid(connection, connection.last_insert_rowid())?
+        .ok_or(QueryError::MissingCommunicationAfterSave)?;
+
+    if saved.direction == "sent" {
+        if let Some(application_id) = saved.application_id.as_deref() {
+            record_email_sent_event(connection, application_id, &saved)?;
+        }
+    }
+
+    Ok(saved)
+}
+
+fn get_communication_by_rowid(
+    connection: &Connection,
+    rowid: i64,
+) -> QueryResult<Option<Communication>> {
+    let mut statement = connection.prepare(
+        "SELECT id, application_id, contact_id, direction, type, subject, body, email_id,
+                sent_at, read_at, created_at
+         FROM communications
+         WHERE rowid = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([rowid])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    communication_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
 }
 
 fn get_contact_by_rowid(connection: &Connection, rowid: i64) -> QueryResult<Option<Contact>> {
@@ -570,6 +645,38 @@ fn record_document_generated_event(
          )
          VALUES (?1, 'document_generated', NULL, ?2, ?3, ?4)",
         params![application_id, document.file_name, description, metadata],
+    )?;
+    Ok(())
+}
+
+fn record_email_sent_event(
+    connection: &Connection,
+    application_id: &str,
+    communication: &Communication,
+) -> QueryResult<()> {
+    let event_value = communication
+        .subject
+        .as_deref()
+        .or(communication.email_id.as_deref())
+        .unwrap_or(&communication.id);
+    let description = format!(
+        "Sent {} communication: {}",
+        communication.communication_type, event_value
+    );
+    let metadata = to_json_text(&serde_json::json!({
+        "communication_id": communication.id.as_str(),
+        "contact_id": communication.contact_id.as_deref(),
+        "direction": communication.direction.as_str(),
+        "communication_type": communication.communication_type.as_str(),
+        "email_id": communication.email_id.as_deref(),
+    }))?;
+
+    connection.execute(
+        "INSERT INTO application_events (
+             application_id, event_type, old_value, new_value, description, metadata
+         )
+         VALUES (?1, 'email_sent', NULL, ?2, ?3, ?4)",
+        params![application_id, event_value, description, metadata],
     )?;
     Ok(())
 }
@@ -684,6 +791,22 @@ fn contact_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Contact> {
         role: row.get(6)?,
         notes: row.get(7)?,
         created_at: row.get(8)?,
+    })
+}
+
+fn communication_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Communication> {
+    Ok(Communication {
+        id: row.get(0)?,
+        application_id: row.get(1)?,
+        contact_id: row.get(2)?,
+        direction: row.get(3)?,
+        communication_type: row.get(4)?,
+        subject: row.get(5)?,
+        body: row.get(6)?,
+        email_id: row.get(7)?,
+        sent_at: row.get(8)?,
+        read_at: row.get(9)?,
+        created_at: row.get(10)?,
     })
 }
 

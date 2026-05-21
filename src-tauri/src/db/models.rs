@@ -207,3 +207,33 @@ pub struct UpsertContact {
     pub role: Option<String>,
     pub notes: Option<String>,
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Communication {
+    pub id: String,
+    pub application_id: Option<String>,
+    pub contact_id: Option<String>,
+    pub direction: String,
+    #[serde(rename = "type")]
+    pub communication_type: String,
+    pub subject: Option<String>,
+    pub body: Option<String>,
+    pub email_id: Option<String>,
+    pub sent_at: Option<String>,
+    pub read_at: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UpsertCommunication {
+    pub application_id: Option<String>,
+    pub contact_id: Option<String>,
+    pub direction: String,
+    #[serde(rename = "type")]
+    pub communication_type: String,
+    pub subject: Option<String>,
+    pub body: Option<String>,
+    pub email_id: Option<String>,
+    pub sent_at: Option<String>,
+    pub read_at: Option<String>,
+}

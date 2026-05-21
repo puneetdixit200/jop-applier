@@ -127,6 +127,22 @@ export type Contact = {
 
 export type UpsertContact = Omit<Contact, "id" | "created_at">;
 
+export type Communication = {
+  id: string;
+  application_id: string | null;
+  contact_id: string | null;
+  direction: string;
+  type: string;
+  subject: string | null;
+  body: string | null;
+  email_id: string | null;
+  sent_at: string | null;
+  read_at: string | null;
+  created_at: string;
+};
+
+export type UpsertCommunication = Omit<Communication, "id" | "created_at">;
+
 export function isDesktopRuntime() {
   return "__TAURI_INTERNALS__" in window;
 }
@@ -181,4 +197,12 @@ export async function listContacts() {
 
 export async function saveContact(contact: UpsertContact) {
   return invoke<Contact>("save_contact_command", { contact });
+}
+
+export async function listCommunications(applicationId: string) {
+  return invoke<Communication[]>("list_communications_command", { applicationId });
+}
+
+export async function saveCommunication(communication: UpsertCommunication) {
+  return invoke<Communication>("save_communication_command", { communication });
 }
