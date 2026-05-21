@@ -18,7 +18,9 @@ import {
   getUserProfile,
   isDesktopRuntime,
   listJobs,
+  listScheduledTasks,
   runSidecarWorkflow,
+  saveScheduledTask,
   saveSetting,
   saveUserProfile,
   type UpsertUserProfile,
@@ -41,6 +43,12 @@ import {
   type RuntimeControlDependencies,
   type RuntimeControlStatus,
 } from "./lib/runtime-control";
+import {
+  buildDefaultScheduledTasks,
+  loadOrSeedScheduledTasks,
+  scheduledTaskSummaries,
+  type ScheduledTaskSummary,
+} from "./lib/schedule-settings";
 
 type RouteId = "dashboard" | "jobs" | "applications" | "profile" | "settings";
 
@@ -129,6 +137,12 @@ const initialRuntimeStatus: RuntimeControlStatus = {
   workflowCount: 0,
 };
 
+const previewScheduleTasks = buildDefaultScheduledTasks().map((task) => ({
+  id: `preview-${task.type}`,
+  created_at: new Date().toISOString(),
+  ...task,
+}));
+
 export function App() {
   const [route, setRoute] = useState<RouteId>("dashboard");
   const [profile, setProfile] = useState<Profile>({
@@ -153,6 +167,9 @@ export function App() {
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeControlStatus>(initialRuntimeStatus);
   const [workflowStatus, setWorkflowStatus] = useState("Idle");
   const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
+  const [scheduleSummaries, setScheduleSummaries] = useState<ScheduledTaskSummary[]>(() =>
+    scheduledTaskSummaries(previewScheduleTasks, 8),
+  );
 
   const routeTitle = useMemo(() => routes.find((item) => item.id === route)?.label ?? "Dashboard", [route]);
   const visibleJobs = persistedJobs.length > 0 ? persistedJobs : previewJobs;
@@ -189,6 +206,7 @@ export function App() {
         storedLimit,
         storedSearchQueries,
         storedFeedSources,
+        storedScheduledTasks,
         storedJobs,
       ] = await Promise.all([
         getUserProfile(),
@@ -198,6 +216,7 @@ export function App() {
         getSetting("application.maxDailyApplications"),
         getSetting("discovery.searchQueries"),
         getSetting("discovery.feedSources"),
+        loadOrSeedScheduledTasks({ listScheduledTasks, saveScheduledTask }),
         listJobs(),
       ]);
 
@@ -207,6 +226,7 @@ export function App() {
       if (storedJobs.length > 0) {
         setPersistedJobs(await loadJobSummaries(() => Promise.resolve(storedJobs)));
       }
+      setScheduleSummaries(scheduledTaskSummaries(storedScheduledTasks, 8));
       setSettings((current) => ({
         ...current,
         provider: typeof storedProvider?.value === "string" ? storedProvider.value : current.provider,
@@ -309,6 +329,7 @@ export function App() {
             workflowStatus={workflowStatus}
             storageStatus={storageStatus}
             jobs={visibleJobs}
+            schedules={scheduleSummaries}
           />
         )}
         {route === "jobs" && <Jobs jobs={visibleJobs} />}
@@ -330,12 +351,14 @@ function Dashboard({
   workflowStatus,
   storageStatus,
   jobs,
+  schedules,
 }: {
   provider: string;
   runtimeStatus: RuntimeControlStatus;
   workflowStatus: string;
   storageStatus: string;
   jobs: JobSummary[];
+  schedules: ScheduledTaskSummary[];
 }) {
   return (
     <div className="dashboard-grid">
@@ -408,9 +431,19 @@ function Dashboard({
           <CalendarClock size={19} aria-hidden="true" />
         </div>
         <ul className="timeline">
-          <li><span>09:00</span> Discover weekday roles</li>
-          <li><span>12:30</span> Score new jobs</li>
-          <li><span>17:00</span> Draft follow-ups</li>
+          {schedules.length > 0 ? (
+            schedules.map((schedule) => (
+              <li key={schedule.id}>
+                <span>{schedule.nextRunLabel}</span>
+                {schedule.name}
+              </li>
+            ))
+          ) : (
+            <li>
+              <span>-</span>
+              No scheduled tasks
+            </li>
+          )}
         </ul>
       </section>
     </div>

@@ -341,7 +341,7 @@ button:disabled {
 }
 
 .timeline span {
-  min-width: 52px;
+  min-width: 136px;
   color: #2f6b4f;
   font-weight: 800;
 }
