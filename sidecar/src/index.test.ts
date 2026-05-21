@@ -819,4 +819,264 @@ describe("sidecar runtime", () => {
       },
     ]);
   });
+
+  it("runs due export scheduled tasks through the export sync workflow", async () => {
+    const checkedAt = new Date("2026-05-29T06:00:00Z");
+    const syncedExports: Array<{ exporterId: string; payload: Record<string, unknown> }> = [];
+    const exportRuns: Array<Record<string, unknown>> = [];
+    const exportEvents: Array<CareerEventMap["export.synced"]> = [];
+    const scheduledTaskUpdates: Array<{ id: string; update: PersistedScheduledTaskRunUpdate }> = [];
+    const runtime = createSidecarRuntime({
+      now: () => checkedAt,
+      exportSync: {
+        loadExportPayload: async () => ({
+          applications: [
+            {
+              id: "app-1",
+              companyName: "Northstar Labs",
+              roleTitle: "Frontend Engineer",
+              status: "submitted",
+              updatedAt: "2026-05-28T12:00:00.000Z",
+            },
+            {
+              id: "app-2",
+              companyName: "Atlas Works",
+              roleTitle: "Backend Engineer",
+              status: "response_received",
+              updatedAt: "2026-05-28T13:00:00.000Z",
+            },
+          ],
+          analytics: {
+            totalApplications: 2,
+            responseRate: 50,
+          },
+        }),
+        listExporters: async () => [
+          {
+            id: "notion",
+            name: "Notion",
+            isEnabled: true,
+            sync: async (payload) => {
+              syncedExports.push({ exporterId: "notion", payload });
+              return { recordsWritten: 2, externalUrl: "https://notion.example/career" };
+            },
+          },
+          {
+            id: "sheets",
+            name: "Google Sheets",
+            isEnabled: true,
+            sync: async (payload) => {
+              syncedExports.push({ exporterId: "sheets", payload });
+              return { recordsWritten: 2, externalUrl: "https://sheets.example/career" };
+            },
+          },
+        ],
+        saveExportRun: async (run) => {
+          exportRuns.push(run);
+        },
+      },
+      scheduledTasks: {
+        listScheduledTasks: async () => [
+          {
+            id: "export-sync-task",
+            name: "Export Sync",
+            type: "export",
+            cron_expression: "0 */6 * * *",
+            is_enabled: true,
+            last_run: null,
+            next_run: "2026-05-29T06:00:00.000Z",
+            config: {
+              cadence: { kind: "interval", minutes: 360 },
+            },
+            created_at: "2026-05-29T00:00:00.000Z",
+          },
+        ],
+        updateScheduledTaskRun: async (id, update) => {
+          scheduledTaskUpdates.push({ id, update });
+        },
+      },
+    });
+
+    runtime.eventBus.on("export.synced", (event) => exportEvents.push(event));
+
+    await expect(runtime.runDueScheduledTasks()).resolves.toEqual({
+      scanned: 1,
+      due: 1,
+      completed: 1,
+      failed: 0,
+      skipped: 0,
+    });
+
+    expect(runtime.workflowEngine.registeredWorkflows()).toContain("export-sync");
+    expect(syncedExports).toEqual([
+      {
+        exporterId: "notion",
+        payload: {
+          generatedAt: "2026-05-29T06:00:00.000Z",
+          applications: [
+            {
+              id: "app-1",
+              companyName: "Northstar Labs",
+              roleTitle: "Frontend Engineer",
+              status: "submitted",
+              updatedAt: "2026-05-28T12:00:00.000Z",
+            },
+            {
+              id: "app-2",
+              companyName: "Atlas Works",
+              roleTitle: "Backend Engineer",
+              status: "response_received",
+              updatedAt: "2026-05-28T13:00:00.000Z",
+            },
+          ],
+          analytics: {
+            totalApplications: 2,
+            responseRate: 50,
+          },
+        },
+      },
+      {
+        exporterId: "sheets",
+        payload: {
+          generatedAt: "2026-05-29T06:00:00.000Z",
+          applications: [
+            {
+              id: "app-1",
+              companyName: "Northstar Labs",
+              roleTitle: "Frontend Engineer",
+              status: "submitted",
+              updatedAt: "2026-05-28T12:00:00.000Z",
+            },
+            {
+              id: "app-2",
+              companyName: "Atlas Works",
+              roleTitle: "Backend Engineer",
+              status: "response_received",
+              updatedAt: "2026-05-28T13:00:00.000Z",
+            },
+          ],
+          analytics: {
+            totalApplications: 2,
+            responseRate: 50,
+          },
+        },
+      },
+    ]);
+    expect(exportRuns).toEqual([
+      {
+        exporterId: "notion",
+        exporterName: "Notion",
+        status: "completed",
+        recordsWritten: 2,
+        externalUrl: "https://notion.example/career",
+        syncedAt: "2026-05-29T06:00:00.000Z",
+      },
+      {
+        exporterId: "sheets",
+        exporterName: "Google Sheets",
+        status: "completed",
+        recordsWritten: 2,
+        externalUrl: "https://sheets.example/career",
+        syncedAt: "2026-05-29T06:00:00.000Z",
+      },
+    ]);
+    expect(exportEvents).toEqual([
+      {
+        exporterId: "notion",
+        exporterName: "Notion",
+        recordsWritten: 2,
+        externalUrl: "https://notion.example/career",
+        syncedAt: checkedAt,
+      },
+      {
+        exporterId: "sheets",
+        exporterName: "Google Sheets",
+        recordsWritten: 2,
+        externalUrl: "https://sheets.example/career",
+        syncedAt: checkedAt,
+      },
+    ]);
+    expect(scheduledTaskUpdates).toEqual([
+      {
+        id: "export-sync-task",
+        update: {
+          last_run: "2026-05-29T06:00:00.000Z",
+          next_run: "2026-05-29T12:00:00.000Z",
+        },
+      },
+    ]);
+  });
+
+  it("runs due cleanup scheduled tasks through the cleanup workflow", async () => {
+    const checkedAt = new Date("2026-05-31T03:00:00Z");
+    const cleanupCalls: Array<Record<string, unknown>> = [];
+    const cleanupEvents: Array<CareerEventMap["cleanup.completed"]> = [];
+    const scheduledTaskUpdates: Array<{ id: string; update: PersistedScheduledTaskRunUpdate }> = [];
+    const runtime = createSidecarRuntime({
+      now: () => checkedAt,
+      cleanup: {
+        purgeExpiredAiCache: async (now) => {
+          cleanupCalls.push({ action: "purge-ai-cache", now: now.toISOString() });
+          return { deleted: 4 };
+        },
+        archiveOldJobs: async (cutoff) => {
+          cleanupCalls.push({ action: "archive-old-jobs", cutoff: cutoff.toISOString() });
+          return { archived: 7 };
+        },
+      },
+      scheduledTasks: {
+        listScheduledTasks: async () => [
+          {
+            id: "cleanup-task",
+            name: "Cleanup",
+            type: "cleanup",
+            cron_expression: "0 3 * * 0",
+            is_enabled: true,
+            last_run: null,
+            next_run: "2026-05-31T03:00:00.000Z",
+            config: {
+              cadence: { kind: "weekly", dayOfWeek: 0, hour: 3, minute: 0 },
+            },
+            created_at: "2026-05-24T03:00:00.000Z",
+          },
+        ],
+        updateScheduledTaskRun: async (id, update) => {
+          scheduledTaskUpdates.push({ id, update });
+        },
+      },
+    });
+
+    runtime.eventBus.on("cleanup.completed", (event) => cleanupEvents.push(event));
+
+    await expect(runtime.runDueScheduledTasks()).resolves.toEqual({
+      scanned: 1,
+      due: 1,
+      completed: 1,
+      failed: 0,
+      skipped: 0,
+    });
+
+    expect(runtime.workflowEngine.registeredWorkflows()).toContain("cleanup");
+    expect(cleanupCalls).toEqual([
+      { action: "purge-ai-cache", now: "2026-05-31T03:00:00.000Z" },
+      { action: "archive-old-jobs", cutoff: "2026-05-01T03:00:00.000Z" },
+    ]);
+    expect(cleanupEvents).toEqual([
+      {
+        completedAt: checkedAt,
+        expiredAiCacheDeleted: 4,
+        archivedJobs: 7,
+        archiveCutoff: "2026-05-01T03:00:00.000Z",
+      },
+    ]);
+    expect(scheduledTaskUpdates).toEqual([
+      {
+        id: "cleanup-task",
+        update: {
+          last_run: "2026-05-31T03:00:00.000Z",
+          next_run: "2026-06-07T03:00:00.000Z",
+        },
+      },
+    ]);
+  });
 });

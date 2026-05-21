@@ -81,6 +81,25 @@ export type CareerEventMap = {
     interviewRate: number;
     offerRate: number;
   };
+  "export.synced": {
+    exporterId: string;
+    exporterName: string;
+    recordsWritten: number;
+    externalUrl: string | null;
+    syncedAt: Date;
+  };
+  "export.failed": {
+    exporterId: string;
+    exporterName: string;
+    reason: string;
+    failedAt: Date;
+  };
+  "cleanup.completed": {
+    completedAt: Date;
+    expiredAiCacheDeleted: number;
+    archivedJobs: number;
+    archiveCutoff: string;
+  };
   "scheduled_task.started": {
     taskId: string;
     taskName: string;

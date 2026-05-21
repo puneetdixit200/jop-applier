@@ -32,6 +32,14 @@ import {
   runJobDiscoveryWorkflow,
   type JobDiscoveryWorkflowDependencies,
 } from "./discovery/job-discovery-workflow.js";
+import {
+  runExportSyncWorker,
+  type ExportSyncWorkerDependencies,
+} from "./export/export-sync-worker.js";
+import {
+  runCleanupWorker,
+  type CleanupWorkerDependencies,
+} from "./maintenance/cleanup-worker.js";
 import { DEFAULT_WORKFLOWS_BY_TASK_TYPE } from "./orchestrator/default-schedules.js";
 import { EventBus } from "./orchestrator/event-bus.js";
 import type { CareerEventMap } from "./orchestrator/events.js";
@@ -123,6 +131,12 @@ export type SidecarEmailCheckOptions = EmailResponseWorkerDependencies & {
 
 export type SidecarAnalyticsOptions = AnalyticsRefreshWorkerDependencies;
 
+export type SidecarExportSyncOptions = ExportSyncWorkerDependencies;
+
+export type SidecarCleanupOptions = CleanupWorkerDependencies & {
+  archiveJobsOlderThanDays?: number;
+};
+
 export type SidecarRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
@@ -135,6 +149,8 @@ export type SidecarRuntimeOptions = {
   applicationProcessing?: SidecarApplicationProcessingOptions;
   analytics?: SidecarAnalyticsOptions;
   emailCheck?: SidecarEmailCheckOptions;
+  exportSync?: SidecarExportSyncOptions;
+  cleanup?: SidecarCleanupOptions;
   followUps?: SidecarFollowUpOptions;
   scheduledTasks?: ScheduledTaskPersistence;
   scheduler?: {
@@ -158,6 +174,8 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
     options.applicationProcessing ?? createEmptyApplicationWorkerDependencies();
   const analytics = options.analytics ?? createEmptyAnalyticsRefreshWorkerDependencies();
   const emailCheck = options.emailCheck ?? createEmptyEmailResponseWorkerDependencies();
+  const exportSync = options.exportSync ?? createEmptyExportSyncWorkerDependencies();
+  const cleanup = options.cleanup ?? createEmptyCleanupWorkerDependencies();
   const followUps = options.followUps ?? createEmptyFollowUpDependencies();
   const scheduledTaskPersistence = options.scheduledTasks ?? createEmptyScheduledTaskPersistence();
 
@@ -197,6 +215,15 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
       }),
   });
   workflowEngine.register({
+    id: "export-sync",
+    description: "Sync application and analytics data to configured exporters",
+    run: async () =>
+      runExportSyncWorker(exportSync, {
+        now: now(),
+        eventBus,
+      }),
+  });
+  workflowEngine.register({
     id: "follow-up-check",
     description: "Send due follow-ups for applications awaiting a response",
     run: async () =>
@@ -204,6 +231,16 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
         now: now(),
         followUpDelaysDays: options.followUps?.followUpDelaysDays ?? [3, 7, 14],
         maxFollowUps: options.followUps?.maxFollowUps ?? 3,
+        eventBus,
+      }),
+  });
+  workflowEngine.register({
+    id: "cleanup",
+    description: "Purge expired cache records and archive old jobs",
+    run: async () =>
+      runCleanupWorker(cleanup, {
+        now: now(),
+        archiveJobsOlderThanDays: options.cleanup?.archiveJobsOlderThanDays,
         eventBus,
       }),
   });
@@ -292,6 +329,21 @@ function createEmptyEmailResponseWorkerDependencies(): EmailResponseWorkerDepend
     saveCommunication: async () => ({ communicationId: null }),
     updateApplicationResponse: async () => undefined,
     markResponseProcessed: async () => undefined,
+  };
+}
+
+function createEmptyExportSyncWorkerDependencies(): ExportSyncWorkerDependencies {
+  return {
+    loadExportPayload: async () => ({ applications: [], analytics: null }),
+    listExporters: async () => [],
+    saveExportRun: async () => undefined,
+  };
+}
+
+function createEmptyCleanupWorkerDependencies(): CleanupWorkerDependencies {
+  return {
+    purgeExpiredAiCache: async () => ({ deleted: 0 }),
+    archiveOldJobs: async () => ({ archived: 0 }),
   };
 }
 
