@@ -142,6 +142,15 @@ export type Document = {
 
 export type UpsertDocument = Omit<Document, "id" | "created_at">;
 
+export type ApplicationDocumentContext = {
+  application_id: string;
+  job_id: string;
+  company_name: string;
+  resume_version: number;
+  profile: UserProfile;
+  job: Job;
+};
+
 export type Contact = {
   id: string;
   company_id: string | null;
@@ -252,6 +261,10 @@ export async function listApplicationEvents(applicationId: string) {
 
 export async function listDocuments(applicationId: string) {
   return invoke<Document[]>("list_documents_command", { applicationId });
+}
+
+export async function getApplicationDocumentContext(applicationId: string) {
+  return invoke<ApplicationDocumentContext | null>("get_application_document_context_command", { applicationId });
 }
 
 export async function saveDocument(document: UpsertDocument) {

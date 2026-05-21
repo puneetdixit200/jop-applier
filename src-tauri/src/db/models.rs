@@ -191,6 +191,16 @@ pub struct UpsertApplication {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ApplicationDocumentContext {
+    pub application_id: String,
+    pub job_id: String,
+    pub company_name: String,
+    pub resume_version: i64,
+    pub profile: UserProfile,
+    pub job: Job,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ApplicationEvent {
     pub id: String,
     pub application_id: String,

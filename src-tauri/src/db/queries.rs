@@ -4,10 +4,10 @@ use serde::Serialize;
 use thiserror::Error;
 
 use super::models::{
-    AiCacheEntry, Application, ApplicationEvent, Communication, Company, Contact, Document, Job,
-    ScheduledTask, ScheduledTaskRunUpdate, Setting, SettingValue, UpsertAiCacheEntry,
-    UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument,
-    UpsertJob, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
+    AiCacheEntry, Application, ApplicationDocumentContext, ApplicationEvent, Communication,
+    Company, Contact, Document, Job, ScheduledTask, ScheduledTaskRunUpdate, Setting, SettingValue,
+    UpsertAiCacheEntry, UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact,
+    UpsertDocument, UpsertJob, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -28,6 +28,10 @@ pub enum QueryError {
     MissingApplicationAfterSave,
     #[error("document save did not return a row")]
     MissingDocumentAfterSave,
+    #[error("user profile is required before generating application documents")]
+    MissingProfileForDocumentContext,
+    #[error("job {0} referenced by application is missing")]
+    MissingJobForDocumentContext(String),
     #[error("contact save did not return a row")]
     MissingContactAfterSave,
     #[error("communication save did not return a row")]
@@ -547,6 +551,33 @@ pub fn list_documents(connection: &Connection, application_id: &str) -> QueryRes
         .map_err(QueryError::from)
 }
 
+pub fn get_application_document_context(
+    connection: &Connection,
+    application_id: &str,
+) -> QueryResult<Option<ApplicationDocumentContext>> {
+    let Some((job_id, application_resume_version)) =
+        get_application_document_seed(connection, application_id)?
+    else {
+        return Ok(None);
+    };
+    let profile =
+        get_user_profile(connection)?.ok_or(QueryError::MissingProfileForDocumentContext)?;
+    let job = get_job_by_id(connection, &job_id)?
+        .ok_or_else(|| QueryError::MissingJobForDocumentContext(job_id.clone()))?;
+    let company_name = job.company_name.clone();
+    let resume_version =
+        next_document_version(connection, application_id, application_resume_version)?;
+
+    Ok(Some(ApplicationDocumentContext {
+        application_id: application_id.to_string(),
+        job_id,
+        company_name,
+        resume_version,
+        profile,
+        job,
+    }))
+}
+
 pub fn save_document(connection: &Connection, document: UpsertDocument) -> QueryResult<Document> {
     connection.execute(
         "INSERT INTO documents (
@@ -965,6 +996,44 @@ fn get_application_by_job_id(
     application_from_row(row)
         .map(Some)
         .map_err(QueryError::from)
+}
+
+fn get_application_document_seed(
+    connection: &Connection,
+    application_id: &str,
+) -> QueryResult<Option<(String, i64)>> {
+    let mut statement = connection.prepare(
+        "SELECT job_id, COALESCE(resume_version, 1)
+         FROM applications
+         WHERE id = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([application_id])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+
+    Ok(Some((row.get(0)?, row.get(1)?)))
+}
+
+fn next_document_version(
+    connection: &Connection,
+    application_id: &str,
+    application_resume_version: i64,
+) -> QueryResult<i64> {
+    let max_document_version: i64 = connection.query_row(
+        "SELECT COALESCE(MAX(version), 0)
+         FROM documents
+         WHERE application_id = ?1
+           AND type IN ('resume', 'resume_json', 'cover_letter')",
+        [application_id],
+        |row| row.get(0),
+    )?;
+
+    Ok(std::cmp::max(
+        application_resume_version,
+        max_document_version + 1,
+    ))
 }
 
 fn application_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Application> {

@@ -5,6 +5,7 @@ use crate::{
             Job, ScheduledTask, ScheduledTaskRunUpdate, Setting, UpsertAiCacheEntry,
             UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument,
             UpsertJob, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
+            ApplicationDocumentContext,
         },
         queries, schema,
     },
@@ -149,6 +150,19 @@ pub fn list_documents_command(
         .lock()
         .map_err(|_| "database connection lock poisoned".to_string())?;
     queries::list_documents(&connection, &application_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn get_application_document_context_command(
+    state: State<'_, AppState>,
+    application_id: String,
+) -> Result<Option<ApplicationDocumentContext>, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::get_application_document_context(&connection, &application_id)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
