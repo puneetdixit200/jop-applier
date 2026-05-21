@@ -30,9 +30,12 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::db::schema_version_command
+            commands::db::schema_version_command,
+            commands::db::get_user_profile_command,
+            commands::db::save_user_profile_command,
+            commands::db::get_setting_command,
+            commands::db::save_setting_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   Bot,
@@ -12,15 +12,34 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
+import {
+  getSetting,
+  getUserProfile,
+  isDesktopRuntime,
+  saveSetting,
+  saveUserProfile,
+  type UpsertUserProfile,
+  type UserProfile,
+} from "./lib/tauri-api";
 
 type RouteId = "dashboard" | "jobs" | "applications" | "profile" | "settings";
 
 type Profile = {
-  name: string;
+  fullName: string;
   headline: string;
+  email: string;
+  phone: string;
   location: string;
+  summary: string;
   skills: string;
   targetRoles: string;
+};
+
+type AutomationSettings = {
+  provider: string;
+  reviewBeforeSubmit: boolean;
+  cacheResponses: boolean;
+  maxDailyApplications: number;
 };
 
 const routes: Array<{ id: RouteId; label: string; icon: typeof BarChart3 }> = [
@@ -53,15 +72,56 @@ const metrics = [
 export function App() {
   const [route, setRoute] = useState<RouteId>("dashboard");
   const [profile, setProfile] = useState<Profile>({
-    name: "Deepak Kudi",
+    fullName: "Deepak Kudi",
     headline: "React and TypeScript engineer",
+    email: "",
+    phone: "",
     location: "India",
+    summary: "Builds local-first desktop tools.",
     skills: "React, TypeScript, Rust, Node.js",
     targetRoles: "Frontend Engineer, AI Product Intern, Desktop App Engineer",
   });
-  const [provider, setProvider] = useState("ollama");
+  const [settings, setSettings] = useState<AutomationSettings>({
+    provider: "ollama",
+    reviewBeforeSubmit: true,
+    cacheResponses: true,
+    maxDailyApplications: 12,
+  });
+  const [storageStatus, setStorageStatus] = useState("Ready");
 
   const routeTitle = useMemo(() => routes.find((item) => item.id === route)?.label ?? "Dashboard", [route]);
+
+  useEffect(() => {
+    if (!isDesktopRuntime()) {
+      setStorageStatus("Browser preview");
+      return;
+    }
+
+    async function loadPersistedState() {
+      const [storedProfile, storedProvider, storedReview, storedCache, storedLimit] = await Promise.all([
+        getUserProfile(),
+        getSetting("ai.provider"),
+        getSetting("application.reviewBeforeSubmit"),
+        getSetting("ai.cacheResponses"),
+        getSetting("application.maxDailyApplications"),
+      ]);
+
+      if (storedProfile) {
+        setProfile(profileFromRecord(storedProfile));
+      }
+      setSettings((current) => ({
+        provider: typeof storedProvider?.value === "string" ? storedProvider.value : current.provider,
+        reviewBeforeSubmit:
+          typeof storedReview?.value === "boolean" ? storedReview.value : current.reviewBeforeSubmit,
+        cacheResponses: typeof storedCache?.value === "boolean" ? storedCache.value : current.cacheResponses,
+        maxDailyApplications:
+          typeof storedLimit?.value === "number" ? storedLimit.value : current.maxDailyApplications,
+      }));
+      setStorageStatus("SQLite ready");
+    }
+
+    void loadPersistedState().catch(() => setStorageStatus("Storage unavailable"));
+  }, []);
 
   return (
     <main className="app-shell">
@@ -116,17 +176,21 @@ export function App() {
           </div>
         </header>
 
-        {route === "dashboard" && <Dashboard provider={provider} />}
+        {route === "dashboard" && <Dashboard provider={settings.provider} storageStatus={storageStatus} />}
         {route === "jobs" && <Jobs />}
         {route === "applications" && <Applications />}
-        {route === "profile" && <ProfileEditor profile={profile} onChange={setProfile} />}
-        {route === "settings" && <SettingsPanel provider={provider} onProviderChange={setProvider} />}
+        {route === "profile" && (
+          <ProfileEditor profile={profile} onChange={setProfile} onStatusChange={setStorageStatus} />
+        )}
+        {route === "settings" && (
+          <SettingsPanel settings={settings} onSettingsChange={setSettings} onStatusChange={setStorageStatus} />
+        )}
       </section>
     </main>
   );
 }
 
-function Dashboard({ provider }: { provider: string }) {
+function Dashboard({ provider, storageStatus }: { provider: string; storageStatus: string }) {
   return (
     <div className="dashboard-grid">
       <section className="metric-grid" aria-label="Application metrics">
@@ -178,7 +242,7 @@ function Dashboard({ provider }: { provider: string }) {
           </div>
           <div>
             <dt>Database</dt>
-            <dd>SQLite ready</dd>
+            <dd>{storageStatus}</dd>
           </div>
         </dl>
       </section>
@@ -247,8 +311,34 @@ function Applications() {
   );
 }
 
-function ProfileEditor({ profile, onChange }: { profile: Profile; onChange: (profile: Profile) => void }) {
+function ProfileEditor({
+  profile,
+  onChange,
+  onStatusChange,
+}: {
+  profile: Profile;
+  onChange: (profile: Profile) => void;
+  onStatusChange: (status: string) => void;
+}) {
   const update = (field: keyof Profile, value: string) => onChange({ ...profile, [field]: value });
+  const [isSaving, setIsSaving] = useState(false);
+
+  async function persistProfile() {
+    if (!isDesktopRuntime()) {
+      onStatusChange("Browser preview");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await saveUserProfile(profileToRecord(profile));
+      onStatusChange("SQLite ready");
+    } catch {
+      onStatusChange("Storage unavailable");
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
     <section className="panel full form-panel">
@@ -260,7 +350,15 @@ function ProfileEditor({ profile, onChange }: { profile: Profile; onChange: (pro
       </div>
       <label>
         Name
-        <input value={profile.name} onChange={(event) => update("name", event.target.value)} />
+        <input value={profile.fullName} onChange={(event) => update("fullName", event.target.value)} />
+      </label>
+      <label>
+        Email
+        <input value={profile.email} onChange={(event) => update("email", event.target.value)} />
+      </label>
+      <label>
+        Phone
+        <input value={profile.phone} onChange={(event) => update("phone", event.target.value)} />
       </label>
       <label>
         Headline
@@ -271,6 +369,10 @@ function ProfileEditor({ profile, onChange }: { profile: Profile; onChange: (pro
         <input value={profile.location} onChange={(event) => update("location", event.target.value)} />
       </label>
       <label>
+        Summary
+        <textarea value={profile.summary} onChange={(event) => update("summary", event.target.value)} rows={4} />
+      </label>
+      <label>
         Skills
         <textarea value={profile.skills} onChange={(event) => update("skills", event.target.value)} rows={3} />
       </label>
@@ -278,17 +380,54 @@ function ProfileEditor({ profile, onChange }: { profile: Profile; onChange: (pro
         Target roles
         <textarea value={profile.targetRoles} onChange={(event) => update("targetRoles", event.target.value)} rows={3} />
       </label>
+      <div className="form-actions">
+        <button className="primary-action" type="button" onClick={persistProfile} disabled={isSaving}>
+          {isSaving ? "Saving" : "Save Profile"}
+        </button>
+      </div>
     </section>
   );
 }
 
 function SettingsPanel({
-  provider,
-  onProviderChange,
+  settings,
+  onSettingsChange,
+  onStatusChange,
 }: {
-  provider: string;
-  onProviderChange: (provider: string) => void;
+  settings: AutomationSettings;
+  onSettingsChange: (settings: AutomationSettings) => void;
+  onStatusChange: (status: string) => void;
 }) {
+  const [isSaving, setIsSaving] = useState(false);
+  const update = <Key extends keyof AutomationSettings>(key: Key, value: AutomationSettings[Key]) =>
+    onSettingsChange({ ...settings, [key]: value });
+
+  async function persistSettings() {
+    if (!isDesktopRuntime()) {
+      onStatusChange("Browser preview");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await Promise.all([
+        saveSetting({ key: "ai.provider", value: settings.provider, category: "ai" }),
+        saveSetting({ key: "application.reviewBeforeSubmit", value: settings.reviewBeforeSubmit, category: "application" }),
+        saveSetting({ key: "ai.cacheResponses", value: settings.cacheResponses, category: "ai" }),
+        saveSetting({
+          key: "application.maxDailyApplications",
+          value: settings.maxDailyApplications,
+          category: "application",
+        }),
+      ]);
+      onStatusChange("SQLite ready");
+    } catch {
+      onStatusChange("Storage unavailable");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <section className="panel full settings-panel">
       <div className="panel-heading">
@@ -303,9 +442,9 @@ function SettingsPanel({
           {["ollama", "openrouter", "openai"].map((option) => (
             <button
               key={option}
-              className={provider === option ? "selected" : ""}
+              className={settings.provider === option ? "selected" : ""}
               type="button"
-              onClick={() => onProviderChange(option)}
+              onClick={() => update("provider", option)}
             >
               {option}
             </button>
@@ -313,18 +452,80 @@ function SettingsPanel({
         </div>
       </fieldset>
       <label className="toggle-row">
-        <input type="checkbox" defaultChecked />
+        <input
+          type="checkbox"
+          checked={settings.reviewBeforeSubmit}
+          onChange={(event) => update("reviewBeforeSubmit", event.target.checked)}
+        />
         <span>Semi-auto review before submit</span>
       </label>
       <label className="toggle-row">
-        <input type="checkbox" defaultChecked />
+        <input
+          type="checkbox"
+          checked={settings.cacheResponses}
+          onChange={(event) => update("cacheResponses", event.target.checked)}
+        />
         <span>Store AI responses in local cache</span>
       </label>
       <label className="range-row">
         Daily application limit
-        <input type="number" min="1" max="50" defaultValue="12" />
+        <input
+          type="number"
+          min="1"
+          max="50"
+          value={settings.maxDailyApplications}
+          onChange={(event) => update("maxDailyApplications", Number(event.target.value))}
+        />
       </label>
+      <div className="form-actions">
+        <button className="primary-action" type="button" onClick={persistSettings} disabled={isSaving}>
+          {isSaving ? "Saving" : "Save Settings"}
+        </button>
+      </div>
     </section>
   );
 }
 
+function profileToRecord(profile: Profile): UpsertUserProfile {
+  return {
+    full_name: profile.fullName,
+    headline: profile.headline,
+    email: nullableText(profile.email),
+    phone: nullableText(profile.phone),
+    location: nullableText(profile.location),
+    portfolio_url: null,
+    linkedin_url: null,
+    github_url: null,
+    summary: nullableText(profile.summary),
+    skills: splitList(profile.skills),
+    target_roles: splitList(profile.targetRoles),
+    preferences: {
+      remotePreference: "any",
+    },
+  };
+}
+
+function profileFromRecord(profile: UserProfile): Profile {
+  return {
+    fullName: profile.full_name,
+    headline: profile.headline,
+    email: profile.email ?? "",
+    phone: profile.phone ?? "",
+    location: profile.location ?? "",
+    summary: profile.summary ?? "",
+    skills: profile.skills.join(", "),
+    targetRoles: profile.target_roles.join(", "),
+  };
+}
+
+function splitList(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function nullableText(value: string) {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
