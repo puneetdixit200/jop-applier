@@ -159,10 +159,12 @@ button:disabled {
 .topbar-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
 .icon-button,
+.secondary-action,
 .primary-action {
   display: inline-flex;
   align-items: center;
@@ -175,6 +177,14 @@ button:disabled {
 .icon-button {
   width: 42px;
   height: 42px;
+}
+
+.secondary-action {
+  min-height: 42px;
+  gap: 8px;
+  padding: 0 14px;
+  color: #23362c;
+  font-weight: 700;
 }
 
 .primary-action {
@@ -520,6 +530,7 @@ legend {
     justify-content: space-between;
   }
 
+  .secondary-action,
   .primary-action {
     flex: 1;
   }

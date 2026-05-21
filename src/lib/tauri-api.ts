@@ -211,6 +211,14 @@ export type ScheduledTaskRunUpdate = {
   next_run: string | null;
 };
 
+export type ScheduledTaskRunResult = {
+  scanned: number;
+  due: number;
+  completed: number;
+  failed: number;
+  skipped: number;
+};
+
 export type AiCacheEntry = {
   prompt_hash: string;
   model: string;
@@ -330,6 +338,10 @@ export async function saveScheduledTask(task: UpsertScheduledTask) {
 
 export async function updateScheduledTaskRun(id: string, update: ScheduledTaskRunUpdate) {
   return invoke<ScheduledTask>("update_scheduled_task_run_command", { id, update });
+}
+
+export async function runDueScheduledTasks() {
+  return invoke<ScheduledTaskRunResult>("run_due_scheduled_tasks_command");
 }
 
 export async function getAiCacheEntry(promptHash: string) {

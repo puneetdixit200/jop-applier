@@ -19,6 +19,7 @@ import {
   isDesktopRuntime,
   listJobs,
   listScheduledTasks,
+  runDueScheduledTasks,
   runSidecarWorkflow,
   saveScheduledTask,
   saveSetting,
@@ -49,6 +50,10 @@ import {
   scheduledTaskSummaries,
   type ScheduledTaskSummary,
 } from "./lib/schedule-settings";
+import {
+  runScheduleControl,
+  type ScheduleControlDependencies,
+} from "./lib/schedule-control";
 
 type RouteId = "dashboard" | "jobs" | "applications" | "profile" | "settings";
 
@@ -130,6 +135,12 @@ const discoveryDependencies: DiscoveryControlDependencies = {
   listJobs,
 };
 
+const scheduleDependencies: ScheduleControlDependencies = {
+  isDesktopRuntime,
+  runDueScheduledTasks,
+  listScheduledTasks,
+};
+
 const initialRuntimeStatus: RuntimeControlStatus = {
   providerLabel: "Checking",
   runtimeStatus: "Checking",
@@ -167,6 +178,7 @@ export function App() {
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeControlStatus>(initialRuntimeStatus);
   const [workflowStatus, setWorkflowStatus] = useState("Idle");
   const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
+  const [isRunningSchedules, setIsRunningSchedules] = useState(false);
   const [scheduleSummaries, setScheduleSummaries] = useState<ScheduledTaskSummary[]>(() =>
     scheduledTaskSummaries(previewScheduleTasks, 8),
   );
@@ -264,6 +276,22 @@ export function App() {
     }
   }
 
+  async function startDueScheduledTasks() {
+    setIsRunningSchedules(true);
+    setWorkflowStatus("scheduled tasks running");
+    try {
+      const result = await runScheduleControl(scheduleDependencies);
+      setWorkflowStatus(result.workflowStatus);
+      if (result.schedules) {
+        setScheduleSummaries(result.schedules);
+      }
+    } catch {
+      setWorkflowStatus("scheduled tasks unavailable");
+    } finally {
+      setIsRunningSchedules(false);
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar" aria-label="Primary navigation">
@@ -309,6 +337,15 @@ export function App() {
           <div className="topbar-actions">
             <button className="icon-button" type="button" aria-label="Search">
               <Search size={18} aria-hidden="true" />
+            </button>
+            <button
+              className="secondary-action"
+              type="button"
+              onClick={startDueScheduledTasks}
+              disabled={isRunningSchedules}
+            >
+              <CalendarClock size={17} aria-hidden="true" />
+              {isRunningSchedules ? "Running" : "Run Due Tasks"}
             </button>
             <button
               className="primary-action"
