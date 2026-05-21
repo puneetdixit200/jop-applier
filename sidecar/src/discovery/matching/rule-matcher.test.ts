@@ -19,10 +19,12 @@ const baseJob: UpsertJobPayload = {
   requirements: ["React", "TypeScript", "Testing"],
   raw_html: null,
   match_score: null,
+  match_confidence: null,
   match_reasoning: null,
   matched_skills: [],
   missing_skills: [],
   ai_tags: [],
+  should_apply: null,
   ai_priority: null,
 };
 

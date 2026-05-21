@@ -78,10 +78,12 @@ pub struct Job {
     pub requirements: Vec<String>,
     pub raw_html: Option<String>,
     pub match_score: Option<i64>,
+    pub match_confidence: Option<f64>,
     pub match_reasoning: Option<String>,
     pub matched_skills: Vec<String>,
     pub missing_skills: Vec<String>,
     pub ai_tags: Vec<String>,
+    pub should_apply: Option<bool>,
     pub ai_priority: Option<String>,
 }
 
@@ -103,9 +105,11 @@ pub struct UpsertJob {
     pub requirements: Vec<String>,
     pub raw_html: Option<String>,
     pub match_score: Option<i64>,
+    pub match_confidence: Option<f64>,
     pub match_reasoning: Option<String>,
     pub matched_skills: Vec<String>,
     pub missing_skills: Vec<String>,
     pub ai_tags: Vec<String>,
+    pub should_apply: Option<bool>,
     pub ai_priority: Option<String>,
 }

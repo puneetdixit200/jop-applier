@@ -46,10 +46,12 @@ export type Job = {
   requirements: string[];
   raw_html: string | null;
   match_score: number | null;
+  match_confidence: number | null;
   match_reasoning: string | null;
   matched_skills: string[];
   missing_skills: string[];
   ai_tags: string[];
+  should_apply: boolean | null;
   ai_priority: string | null;
 };
 

@@ -156,8 +156,9 @@ pub fn list_jobs(connection: &Connection) -> QueryResult<Vec<Job>> {
     let mut statement = connection.prepare(
         "SELECT id, source_id, platform, url, title, company_name, location, is_remote,
                 salary_min, salary_max, salary_currency, job_type, experience_level,
-                description, requirements, raw_html, match_score, match_reasoning,
-                matched_skills, missing_skills, ai_tags, ai_priority
+                description, requirements, raw_html, match_score, match_confidence,
+                match_reasoning, matched_skills, missing_skills, ai_tags, should_apply,
+                ai_priority
          FROM jobs
          WHERE is_archived = FALSE
          ORDER BY COALESCE(match_score, -1) DESC, discovered_at DESC",
@@ -193,13 +194,15 @@ pub fn upsert_job(connection: &Connection, job: UpsertJob) -> QueryResult<Job> {
                  requirements = ?14,
                  raw_html = ?15,
                  match_score = ?16,
-                 match_reasoning = ?17,
-                 matched_skills = ?18,
-                 missing_skills = ?19,
-                 ai_tags = ?20,
-                 ai_priority = ?21,
+                 match_confidence = ?17,
+                 match_reasoning = ?18,
+                 matched_skills = ?19,
+                 missing_skills = ?20,
+                 ai_tags = ?21,
+                 should_apply = ?22,
+                 ai_priority = ?23,
                  updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?22",
+             WHERE id = ?24",
             params![
                 job.source_id,
                 job.platform,
@@ -217,10 +220,12 @@ pub fn upsert_job(connection: &Connection, job: UpsertJob) -> QueryResult<Job> {
                 requirements,
                 job.raw_html,
                 job.match_score,
+                job.match_confidence,
                 job.match_reasoning,
                 matched_skills,
                 missing_skills,
                 ai_tags,
+                job.should_apply,
                 job.ai_priority,
                 existing.id,
             ],
@@ -232,10 +237,11 @@ pub fn upsert_job(connection: &Connection, job: UpsertJob) -> QueryResult<Job> {
         "INSERT INTO jobs (
              source_id, platform, url, title, company_name, location, is_remote,
              salary_min, salary_max, salary_currency, job_type, experience_level,
-             description, requirements, raw_html, match_score, match_reasoning,
-             matched_skills, missing_skills, ai_tags, ai_priority
+             description, requirements, raw_html, match_score, match_confidence,
+             match_reasoning, matched_skills, missing_skills, ai_tags, should_apply,
+             ai_priority
          )
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
         params![
             job.source_id,
             job.platform,
@@ -253,10 +259,12 @@ pub fn upsert_job(connection: &Connection, job: UpsertJob) -> QueryResult<Job> {
             requirements,
             job.raw_html,
             job.match_score,
+            job.match_confidence,
             job.match_reasoning,
             matched_skills,
             missing_skills,
             ai_tags,
+            job.should_apply,
             job.ai_priority,
         ],
     )?;
@@ -274,8 +282,9 @@ fn find_existing_job(connection: &Connection, job: &UpsertJob) -> QueryResult<Op
         let mut statement = connection.prepare(
             "SELECT id, source_id, platform, url, title, company_name, location, is_remote,
                     salary_min, salary_max, salary_currency, job_type, experience_level,
-                    description, requirements, raw_html, match_score, match_reasoning,
-                    matched_skills, missing_skills, ai_tags, ai_priority
+                    description, requirements, raw_html, match_score, match_confidence,
+                    match_reasoning, matched_skills, missing_skills, ai_tags, should_apply,
+                    ai_priority
              FROM jobs
              WHERE platform = ?1 AND source_id = ?2
              LIMIT 1",
@@ -294,8 +303,9 @@ fn get_job_by_id(connection: &Connection, id: &str) -> QueryResult<Option<Job>> 
     let mut statement = connection.prepare(
         "SELECT id, source_id, platform, url, title, company_name, location, is_remote,
                 salary_min, salary_max, salary_currency, job_type, experience_level,
-                description, requirements, raw_html, match_score, match_reasoning,
-                matched_skills, missing_skills, ai_tags, ai_priority
+                description, requirements, raw_html, match_score, match_confidence,
+                match_reasoning, matched_skills, missing_skills, ai_tags, should_apply,
+                ai_priority
          FROM jobs
          WHERE id = ?1
          LIMIT 1",
@@ -311,8 +321,9 @@ fn get_job_by_rowid(connection: &Connection, rowid: i64) -> QueryResult<Option<J
     let mut statement = connection.prepare(
         "SELECT id, source_id, platform, url, title, company_name, location, is_remote,
                 salary_min, salary_max, salary_currency, job_type, experience_level,
-                description, requirements, raw_html, match_score, match_reasoning,
-                matched_skills, missing_skills, ai_tags, ai_priority
+                description, requirements, raw_html, match_score, match_confidence,
+                match_reasoning, matched_skills, missing_skills, ai_tags, should_apply,
+                ai_priority
          FROM jobs
          WHERE rowid = ?1
          LIMIT 1",
@@ -326,9 +337,9 @@ fn get_job_by_rowid(connection: &Connection, rowid: i64) -> QueryResult<Option<J
 
 fn job_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
     let requirements = json_cell(row, 14)?;
-    let matched_skills = json_cell(row, 18)?;
-    let missing_skills = json_cell(row, 19)?;
-    let ai_tags = json_cell(row, 20)?;
+    let matched_skills = json_cell(row, 19)?;
+    let missing_skills = json_cell(row, 20)?;
+    let ai_tags = json_cell(row, 21)?;
 
     Ok(Job {
         id: row.get(0)?,
@@ -348,11 +359,13 @@ fn job_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
         requirements,
         raw_html: row.get(15)?,
         match_score: row.get(16)?,
-        match_reasoning: row.get(17)?,
+        match_confidence: row.get(17)?,
+        match_reasoning: row.get(18)?,
         matched_skills,
         missing_skills,
         ai_tags,
-        ai_priority: row.get(21)?,
+        should_apply: row.get(22)?,
+        ai_priority: row.get(23)?,
     })
 }
 

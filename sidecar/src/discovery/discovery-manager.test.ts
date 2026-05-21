@@ -130,10 +130,12 @@ describe("DiscoveryManager", () => {
     };
     const match: DiscoveryMatchResult = {
       score: 91,
+      confidence: 0.86,
       reasoning: "Strong match",
       matchedSkills: ["React"],
       missingSkills: [],
       tags: ["good-fit"],
+      shouldApply: true,
       priority: "high",
     };
     const manager = new DiscoveryManager([new InMemoryConnector("linkedin", [listing])]);

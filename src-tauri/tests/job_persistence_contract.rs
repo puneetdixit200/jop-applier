@@ -29,10 +29,12 @@ fn stores_updates_and_lists_discovered_jobs() {
             requirements: vec!["React".to_string(), "TypeScript".to_string()],
             raw_html: Some("<main>React job</main>".to_string()),
             match_score: Some(88),
+            match_confidence: Some(0.81),
             match_reasoning: Some("Strong React match".to_string()),
             matched_skills: vec!["React".to_string()],
             missing_skills: vec!["GraphQL".to_string()],
             ai_tags: vec!["good-fit".to_string()],
+            should_apply: Some(true),
             ai_priority: Some("high".to_string()),
         },
     )
@@ -57,10 +59,12 @@ fn stores_updates_and_lists_discovered_jobs() {
             requirements: vec!["React".to_string(), "Rust".to_string()],
             raw_html: Some("<main>Updated job</main>".to_string()),
             match_score: Some(94),
+            match_confidence: Some(0.93),
             match_reasoning: Some("React plus Rust desktop fit".to_string()),
             matched_skills: vec!["React".to_string(), "Rust".to_string()],
             missing_skills: Vec::new(),
             ai_tags: vec!["good-fit".to_string(), "desktop".to_string()],
+            should_apply: Some(true),
             ai_priority: Some("high".to_string()),
         },
     )
@@ -85,10 +89,12 @@ fn stores_updates_and_lists_discovered_jobs() {
             requirements: vec!["Node.js".to_string()],
             raw_html: None,
             match_score: Some(72),
+            match_confidence: Some(0.58),
             match_reasoning: Some("Some backend overlap".to_string()),
             matched_skills: vec!["Node.js".to_string()],
             missing_skills: vec!["Kubernetes".to_string()],
             ai_tags: vec!["stretch".to_string()],
+            should_apply: Some(false),
             ai_priority: Some("medium".to_string()),
         },
     )
@@ -103,5 +109,9 @@ fn stores_updates_and_lists_discovered_jobs() {
     assert_eq!(jobs[0].requirements, vec!["React", "Rust"]);
     assert_eq!(jobs[0].ai_tags, vec!["good-fit", "desktop"]);
     assert_eq!(jobs[0].match_score, Some(94));
+    assert_eq!(jobs[0].match_confidence, Some(0.93));
+    assert_eq!(jobs[0].should_apply, Some(true));
     assert_eq!(jobs[1].title, "Backend Engineer");
+    assert_eq!(jobs[1].match_confidence, Some(0.58));
+    assert_eq!(jobs[1].should_apply, Some(false));
 }

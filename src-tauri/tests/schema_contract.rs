@@ -24,6 +24,24 @@ fn phase_one_schema_creates_core_tables() {
         table_names,
         vec!["ai_cache", "applications", "jobs", "settings", "user_profiles"]
     );
-    assert_eq!(schema_version(&connection).expect("read schema version"), 1);
+    assert_eq!(schema_version(&connection).expect("read schema version"), 2);
 }
 
+#[test]
+fn jobs_schema_includes_ai_recommendation_fields() {
+    let connection = Connection::open_in_memory().expect("open in-memory database");
+
+    initialize_schema(&connection).expect("initialize schema");
+
+    let mut statement = connection
+        .prepare("PRAGMA table_info(jobs)")
+        .expect("prepare jobs columns query");
+    let column_names = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .expect("query jobs columns")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect jobs columns");
+
+    assert!(column_names.contains(&"match_confidence".to_string()));
+    assert!(column_names.contains(&"should_apply".to_string()));
+}

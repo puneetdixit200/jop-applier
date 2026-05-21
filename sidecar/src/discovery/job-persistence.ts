@@ -4,10 +4,12 @@ export type MatchPriority = "high" | "medium" | "low";
 
 export type DiscoveryMatchResult = {
   score: number;
+  confidence: number;
   reasoning: string;
   matchedSkills: string[];
   missingSkills: string[];
   tags: string[];
+  shouldApply: boolean;
   priority: MatchPriority;
 };
 
@@ -28,10 +30,12 @@ export type UpsertJobPayload = {
   requirements: string[];
   raw_html: string | null;
   match_score: number | null;
+  match_confidence: number | null;
   match_reasoning: string | null;
   matched_skills: string[];
   missing_skills: string[];
   ai_tags: string[];
+  should_apply: boolean | null;
   ai_priority: MatchPriority | null;
 };
 
@@ -65,10 +69,12 @@ export function mapDiscoveredJobToUpsertJob(
     requirements: job.details.requirements ?? [],
     raw_html: nullableText(job.details.rawHtml) ?? nullableText(job.listing.rawHtml),
     match_score: match?.score ?? null,
+    match_confidence: match?.confidence ?? null,
     match_reasoning: match?.reasoning ?? null,
     matched_skills: match?.matchedSkills ?? [],
     missing_skills: match?.missingSkills ?? [],
     ai_tags: match?.tags ?? [],
+    should_apply: match?.shouldApply ?? null,
     ai_priority: match?.priority ?? null,
   };
 }
@@ -94,4 +100,3 @@ function nullableText(value: string | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
 }
-

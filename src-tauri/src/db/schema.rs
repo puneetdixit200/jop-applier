@@ -8,10 +8,11 @@ pub struct Migration {
     pub sql: &'static str,
 }
 
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "phase_one_foundation",
-    sql: r#"
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "phase_one_foundation",
+        sql: r#"
 CREATE TABLE IF NOT EXISTS user_profiles (
     id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
     full_name       TEXT NOT NULL,
@@ -187,7 +188,16 @@ CREATE TABLE IF NOT EXISTS ai_cache (
     expires_at      DATETIME
 );
 "#,
-}];
+    },
+    Migration {
+        version: 2,
+        name: "job_ai_recommendation_fields",
+        sql: r#"
+ALTER TABLE jobs ADD COLUMN match_confidence REAL;
+ALTER TABLE jobs ADD COLUMN should_apply BOOLEAN;
+"#,
+    },
+];
 
 pub fn initialize_schema(connection: &Connection) -> SchemaResult<()> {
     let current_version = schema_version(connection)?;
@@ -203,4 +213,3 @@ pub fn initialize_schema(connection: &Connection) -> SchemaResult<()> {
 pub fn schema_version(connection: &Connection) -> SchemaResult<i32> {
     connection.pragma_query_value(None, "user_version", |row| row.get(0))
 }
-

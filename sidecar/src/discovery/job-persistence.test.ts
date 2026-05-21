@@ -27,10 +27,12 @@ describe("job persistence mapping", () => {
     expect(
       mapDiscoveredJobToUpsertJob(discoveredJob, {
         score: 91,
+        confidence: 0.86,
         reasoning: "Strong React and TypeScript match",
         matchedSkills: ["React", "TypeScript"],
         missingSkills: ["GraphQL"],
         tags: ["good-fit", "internship"],
+        shouldApply: true,
         priority: "high",
       }),
     ).toEqual({
@@ -50,10 +52,12 @@ describe("job persistence mapping", () => {
       requirements: ["React", "TypeScript"],
       raw_html: "<main>full details</main>",
       match_score: 91,
+      match_confidence: 0.86,
       match_reasoning: "Strong React and TypeScript match",
       matched_skills: ["React", "TypeScript"],
       missing_skills: ["GraphQL"],
       ai_tags: ["good-fit", "internship"],
+      should_apply: true,
       ai_priority: "high",
     });
   });
@@ -80,9 +84,11 @@ describe("job persistence mapping", () => {
       salary_max: null,
       salary_currency: "INR",
       match_score: null,
+      match_confidence: null,
       matched_skills: [],
       missing_skills: [],
       ai_tags: [],
+      should_apply: null,
       ai_priority: null,
     });
   });
@@ -92,10 +98,12 @@ describe("job persistence mapping", () => {
       mapDiscoveredJobsToUpsertJobs([discoveredJob], {
         [discoveredJob.listing.url]: {
           score: 72,
+          confidence: 0.61,
           reasoning: "Some overlap",
           matchedSkills: ["React"],
           missingSkills: ["Rust"],
           tags: ["stretch"],
+          shouldApply: false,
           priority: "medium",
         },
       }),
@@ -104,14 +112,15 @@ describe("job persistence mapping", () => {
       mapDiscoveredJobsToUpsertJobs([discoveredJob], {
         [discoveredJob.listing.url]: {
           score: 72,
+          confidence: 0.61,
           reasoning: "Some overlap",
           matchedSkills: ["React"],
           missingSkills: ["Rust"],
           tags: ["stretch"],
+          shouldApply: false,
           priority: "medium",
         },
       })[0].ai_priority,
     ).toBe("medium");
   });
 });
-
