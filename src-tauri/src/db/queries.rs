@@ -4,9 +4,9 @@ use serde::Serialize;
 use thiserror::Error;
 
 use super::models::{
-    Application, ApplicationEvent, Communication, Contact, Document, Job, ScheduledTask, Setting,
-    SettingValue, UpsertApplication, UpsertCommunication, UpsertContact, UpsertDocument, UpsertJob,
-    UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
+    Application, ApplicationEvent, Communication, Company, Contact, Document, Job, ScheduledTask,
+    Setting, SettingValue, UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact,
+    UpsertDocument, UpsertJob, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -19,6 +19,8 @@ pub enum QueryError {
     MissingProfileAfterSave,
     #[error("setting save did not return a row for key {0}")]
     MissingSettingAfterSave(String),
+    #[error("company save did not return a row")]
+    MissingCompanyAfterSave,
     #[error("job save did not return a row")]
     MissingJobAfterSave,
     #[error("application save did not return a row")]
@@ -162,6 +164,44 @@ pub fn upsert_setting(connection: &Connection, setting: UpsertSetting) -> QueryR
     )?;
 
     get_setting(connection, &setting.key)?.ok_or(QueryError::MissingSettingAfterSave(setting.key))
+}
+
+pub fn list_companies(connection: &Connection) -> QueryResult<Vec<Company>> {
+    let mut statement = connection.prepare(
+        "SELECT id, name, domain, careers_url, industry, size, linkedin_url, glassdoor_url,
+                notes, is_blacklisted, is_whitelisted, created_at
+         FROM companies
+         ORDER BY created_at DESC, rowid DESC",
+    )?;
+
+    let rows = statement.query_map([], company_from_row)?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(QueryError::from)
+}
+
+pub fn save_company(connection: &Connection, company: UpsertCompany) -> QueryResult<Company> {
+    connection.execute(
+        "INSERT INTO companies (
+             name, domain, careers_url, industry, size, linkedin_url, glassdoor_url, notes,
+             is_blacklisted, is_whitelisted
+         )
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        params![
+            company.name,
+            company.domain,
+            company.careers_url,
+            company.industry,
+            company.size,
+            company.linkedin_url,
+            company.glassdoor_url,
+            company.notes,
+            company.is_blacklisted,
+            company.is_whitelisted,
+        ],
+    )?;
+
+    get_company_by_rowid(connection, connection.last_insert_rowid())?
+        .ok_or(QueryError::MissingCompanyAfterSave)
 }
 
 pub fn list_jobs(connection: &Connection) -> QueryResult<Vec<Job>> {
@@ -345,6 +385,21 @@ fn get_job_by_rowid(connection: &Connection, rowid: i64) -> QueryResult<Option<J
         return Ok(None);
     };
     job_from_row(row).map(Some).map_err(QueryError::from)
+}
+
+fn get_company_by_rowid(connection: &Connection, rowid: i64) -> QueryResult<Option<Company>> {
+    let mut statement = connection.prepare(
+        "SELECT id, name, domain, careers_url, industry, size, linkedin_url, glassdoor_url,
+                notes, is_blacklisted, is_whitelisted, created_at
+         FROM companies
+         WHERE rowid = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([rowid])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    company_from_row(row).map(Some).map_err(QueryError::from)
 }
 
 pub fn list_applications(connection: &Connection) -> QueryResult<Vec<Application>> {
@@ -884,6 +939,23 @@ fn scheduled_task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Schedule
         next_run: row.get(6)?,
         config,
         created_at: row.get(8)?,
+    })
+}
+
+fn company_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Company> {
+    Ok(Company {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        domain: row.get(2)?,
+        careers_url: row.get(3)?,
+        industry: row.get(4)?,
+        size: row.get(5)?,
+        linkedin_url: row.get(6)?,
+        glassdoor_url: row.get(7)?,
+        notes: row.get(8)?,
+        is_blacklisted: row.get(9)?,
+        is_whitelisted: row.get(10)?,
+        created_at: row.get(11)?,
     })
 }
 

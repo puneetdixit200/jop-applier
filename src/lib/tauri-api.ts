@@ -28,6 +28,23 @@ export type Setting = {
 
 export type UpsertSetting = Setting;
 
+export type Company = {
+  id: string;
+  name: string;
+  domain: string | null;
+  careers_url: string | null;
+  industry: string | null;
+  size: string | null;
+  linkedin_url: string | null;
+  glassdoor_url: string | null;
+  notes: string | null;
+  is_blacklisted: boolean;
+  is_whitelisted: boolean;
+  created_at: string;
+};
+
+export type UpsertCompany = Omit<Company, "id" | "created_at">;
+
 export type Job = {
   id: string;
   source_id: string | null;
@@ -175,6 +192,14 @@ export async function getSetting(key: string) {
 
 export async function saveSetting(setting: UpsertSetting) {
   return invoke<Setting>("save_setting_command", { setting });
+}
+
+export async function listCompanies() {
+  return invoke<Company[]>("list_companies_command");
+}
+
+export async function saveCompany(company: UpsertCompany) {
+  return invoke<Company>("save_company_command", { company });
 }
 
 export async function listJobs() {

@@ -1,9 +1,10 @@
 use crate::{
     db::{
         models::{
-            Application, ApplicationEvent, Communication, Contact, Document, Job, ScheduledTask,
-            Setting, UpsertApplication, UpsertCommunication, UpsertContact, UpsertDocument,
-            UpsertJob, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
+            Application, ApplicationEvent, Communication, Company, Contact, Document, Job,
+            ScheduledTask, Setting, UpsertApplication, UpsertCommunication, UpsertCompany,
+            UpsertContact, UpsertDocument, UpsertJob, UpsertScheduledTask, UpsertSetting,
+            UpsertUserProfile, UserProfile,
         },
         queries, schema,
     },
@@ -63,6 +64,27 @@ pub fn save_setting_command(
         .lock()
         .map_err(|_| "database connection lock poisoned".to_string())?;
     queries::upsert_setting(&connection, setting).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn list_companies_command(state: State<'_, AppState>) -> Result<Vec<Company>, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::list_companies(&connection).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn save_company_command(
+    state: State<'_, AppState>,
+    company: UpsertCompany,
+) -> Result<Company, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::save_company(&connection, company).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

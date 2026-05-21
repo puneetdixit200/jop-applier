@@ -35,6 +35,8 @@ pub fn run() {
             commands::db::save_user_profile_command,
             commands::db::get_setting_command,
             commands::db::save_setting_command,
+            commands::db::list_companies_command,
+            commands::db::save_company_command,
             commands::db::list_jobs_command,
             commands::db::save_job_command,
             commands::db::list_applications_command,

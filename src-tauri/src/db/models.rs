@@ -60,6 +60,36 @@ pub struct UpsertSetting {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Company {
+    pub id: String,
+    pub name: String,
+    pub domain: Option<String>,
+    pub careers_url: Option<String>,
+    pub industry: Option<String>,
+    pub size: Option<String>,
+    pub linkedin_url: Option<String>,
+    pub glassdoor_url: Option<String>,
+    pub notes: Option<String>,
+    pub is_blacklisted: bool,
+    pub is_whitelisted: bool,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UpsertCompany {
+    pub name: String,
+    pub domain: Option<String>,
+    pub careers_url: Option<String>,
+    pub industry: Option<String>,
+    pub size: Option<String>,
+    pub linkedin_url: Option<String>,
+    pub glassdoor_url: Option<String>,
+    pub notes: Option<String>,
+    pub is_blacklisted: bool,
+    pub is_whitelisted: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Job {
     pub id: String,
     pub source_id: Option<String>,
