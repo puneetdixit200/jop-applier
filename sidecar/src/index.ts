@@ -56,6 +56,14 @@ import {
   type ScheduledTaskRunnerResult,
 } from "./orchestrator/scheduled-task-runner.js";
 import { WorkflowEngine } from "./orchestrator/workflow-engine.js";
+import {
+  createApplicationDocumentGenerators,
+  type ApplicationDocumentGeneratorDependencies,
+} from "./resume/application-document-generator.js";
+import {
+  renderCoverLetterPdf,
+  renderResumeArtifacts,
+} from "./resume/document-renderer.js";
 
 class OfflineProvider implements AIProvider {
   async *chat() {
@@ -120,9 +128,28 @@ export type SidecarFollowUpOptions = FollowUpWorkerDependencies & {
   maxFollowUps?: number;
 };
 
-export type SidecarApplicationProcessingOptions = ApplicationWorkerDependencies & {
+type ApplicationDocumentWorkerDependencies = Pick<
+  ApplicationWorkerDependencies,
+  "generateResume" | "generateCoverLetter"
+>;
+
+export type SidecarApplicationProcessingOptions = Omit<
+  ApplicationWorkerDependencies,
+  keyof ApplicationDocumentWorkerDependencies
+> &
+  Partial<ApplicationDocumentWorkerDependencies> & {
   maxApplications?: number;
   reviewBeforeSubmit?: boolean;
+};
+
+export type SidecarApplicationDocumentOptions = Pick<
+  ApplicationDocumentGeneratorDependencies,
+  "loadContext" | "saveDocument"
+> & {
+  outputDir: string;
+  ai?: ApplicationDocumentGeneratorDependencies["ai"];
+  renderResume?: ApplicationDocumentGeneratorDependencies["renderResume"];
+  renderCoverLetter?: ApplicationDocumentGeneratorDependencies["renderCoverLetter"];
 };
 
 export type SidecarEmailCheckOptions = EmailResponseWorkerDependencies & {
@@ -147,6 +174,7 @@ export type SidecarRuntimeOptions = {
   };
   jobDiscovery?: JobDiscoveryWorkflowDependencies;
   applicationProcessing?: SidecarApplicationProcessingOptions;
+  applicationDocuments?: SidecarApplicationDocumentOptions;
   analytics?: SidecarAnalyticsOptions;
   emailCheck?: SidecarEmailCheckOptions;
   exportSync?: SidecarExportSyncOptions;
@@ -170,8 +198,13 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   const browserManager = new BrowserManager(createPlaywrightBrowserAdapter());
   const now = options.now ?? (() => new Date());
   const jobDiscovery = options.jobDiscovery ?? createEmptyJobDiscoveryDependencies();
-  const applicationProcessing =
-    options.applicationProcessing ?? createEmptyApplicationWorkerDependencies();
+  const applicationProcessing = createApplicationWorkerDependencies(
+    options.applicationProcessing,
+    options.applicationDocuments,
+    aiEngine,
+    eventBus,
+    now,
+  );
   const analytics = options.analytics ?? createEmptyAnalyticsRefreshWorkerDependencies();
   const emailCheck = options.emailCheck ?? createEmptyEmailResponseWorkerDependencies();
   const exportSync = options.exportSync ?? createEmptyExportSyncWorkerDependencies();
@@ -301,6 +334,65 @@ function createEmptyJobDiscoveryDependencies(): JobDiscoveryWorkflowDependencies
     searchQueries: [],
     searchForPersistence: async () => [],
     upsertJobs: async () => [],
+  };
+}
+
+function createApplicationWorkerDependencies(
+  options: SidecarApplicationProcessingOptions | undefined,
+  documentOptions: SidecarApplicationDocumentOptions | undefined,
+  aiEngine: AIEngine,
+  eventBus: EventBus<CareerEventMap>,
+  now: () => Date,
+): ApplicationWorkerDependencies {
+  const empty = createEmptyApplicationWorkerDependencies();
+  const documentGenerators = documentOptions
+    ? createRuntimeDocumentGenerators(documentOptions, aiEngine, eventBus, now)
+    : null;
+
+  return {
+    listApplications: options?.listApplications ?? empty.listApplications,
+    prepareApplication: options?.prepareApplication ?? empty.prepareApplication,
+    generateResume:
+      options?.generateResume ?? documentGenerators?.generateResume ?? empty.generateResume,
+    generateCoverLetter:
+      options?.generateCoverLetter ??
+      documentGenerators?.generateCoverLetter ??
+      empty.generateCoverLetter,
+    fillApplicationForm: options?.fillApplicationForm ?? empty.fillApplicationForm,
+    submitApplication: options?.submitApplication ?? empty.submitApplication,
+    updateApplication: options?.updateApplication ?? empty.updateApplication,
+  };
+}
+
+function createRuntimeDocumentGenerators(
+  options: SidecarApplicationDocumentOptions,
+  aiEngine: AIEngine,
+  eventBus: EventBus<CareerEventMap>,
+  now: () => Date,
+): ApplicationDocumentWorkerDependencies {
+  const dependencies: ApplicationDocumentGeneratorDependencies = {
+    ai: options.ai ?? aiEngine,
+    loadContext: options.loadContext,
+    renderResume:
+      options.renderResume ??
+      ((input) => renderResumeArtifacts(input, { outputDir: options.outputDir })),
+    renderCoverLetter:
+      options.renderCoverLetter ??
+      ((input) => renderCoverLetterPdf(input, { outputDir: options.outputDir })),
+    saveDocument: options.saveDocument,
+  };
+
+  return {
+    generateResume: async (application) =>
+      createApplicationDocumentGenerators(dependencies, {
+        now: now(),
+        eventBus,
+      }).generateResume(application),
+    generateCoverLetter: async (application) =>
+      createApplicationDocumentGenerators(dependencies, {
+        now: now(),
+        eventBus,
+      }).generateCoverLetter(application),
   };
 }
 

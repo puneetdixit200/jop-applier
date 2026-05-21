@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createSidecarRuntime } from "./index.js";
 import type { BrowserSession } from "./browser/browser-manager.js";
@@ -526,6 +529,201 @@ describe("sidecar runtime", () => {
         },
       },
     ]);
+  });
+
+  it("wires document generation into due application processing tasks", async () => {
+    const checkedAt = new Date("2026-05-28T10:30:00Z");
+    const outputDir = await mkdtemp(join(tmpdir(), "careercaveman-runtime-docs-"));
+    const applicationUpdates: Array<{ applicationId: string; update: Record<string, unknown> }> = [];
+    const scheduledTaskUpdates: Array<{ id: string; update: PersistedScheduledTaskRunUpdate }> = [];
+    const savedDocuments: Array<Record<string, unknown>> = [];
+    const documentEvents: Array<CareerEventMap["document.generated"]> = [];
+    const aiCalls: string[] = [];
+
+    try {
+      const runtime = createSidecarRuntime({
+        now: () => checkedAt,
+        applicationProcessing: {
+          reviewBeforeSubmit: true,
+          listApplications: async () => [
+            {
+              id: "app-1",
+              jobId: "job-1",
+              companyName: "Northstar Labs",
+              status: "queued",
+              mode: "semi_auto",
+              resumePath: null,
+              coverLetterPath: null,
+              retryCount: 0,
+              maxRetries: 3,
+            },
+          ],
+          prepareApplication: async () => undefined,
+          fillApplicationForm: async (application) => ({
+            submissionUrl: `https://ats.example/${application.id}/review`,
+          }),
+          submitApplication: async (application) => ({
+            confirmationId: `confirmation-${application.id}`,
+          }),
+          updateApplication: async (applicationId, update) => {
+            applicationUpdates.push({ applicationId, update });
+          },
+        },
+        applicationDocuments: {
+          outputDir,
+          ai: {
+            activeProvider: () => ({ provider: "test-ai", model: "resume-model", local: true }),
+            tailorResume: async (resume, job) => {
+              aiCalls.push(`resume:${resume.fullName}:${job.title}`);
+              return {
+                summary: "React and Rust desktop automation engineer.",
+                skills: ["React", "TypeScript", "Rust", "Tauri"],
+                tailoringNotes: ["Focused the resume on local-first automation"],
+              };
+            },
+            generateCoverLetter: async (profile, job) => {
+              aiCalls.push(`cover:${profile.fullName}:${job.companyName}`);
+              return "Dear Northstar Labs team,\n\nI am excited to apply.";
+            },
+          },
+          loadContext: async (application) => ({
+            applicationId: application.id,
+            jobId: application.jobId,
+            companyName: application.companyName,
+            resumeVersion: 2,
+            profile: {
+              fullName: "Asha Rao",
+              headline: "React and Tauri engineer",
+              email: "asha@example.com",
+              skills: ["React", "TypeScript"],
+            },
+            job: {
+              title: "Desktop Automation Engineer",
+              companyName: application.companyName,
+              description: "Build Tauri and Rust automation.",
+              requirements: ["React", "Rust", "Tauri"],
+            },
+          }),
+          saveDocument: async (document) => {
+            savedDocuments.push(document);
+            return {
+              id: `doc-${savedDocuments.length}`,
+              ...document,
+            };
+          },
+        },
+        scheduledTasks: {
+          listScheduledTasks: async () => [
+            {
+              id: "application-processing-task",
+              name: "Application Processing",
+              type: "apply",
+              cron_expression: "*/30 * * * *",
+              is_enabled: true,
+              last_run: null,
+              next_run: "2026-05-28T10:30:00.000Z",
+              config: {
+                cadence: { kind: "interval", minutes: 30 },
+              },
+              created_at: "2026-05-28T09:00:00.000Z",
+            },
+          ],
+          updateScheduledTaskRun: async (id, update) => {
+            scheduledTaskUpdates.push({ id, update });
+          },
+        },
+      });
+      runtime.eventBus.on("document.generated", (event) => documentEvents.push(event));
+
+      await expect(runtime.runDueScheduledTasks()).resolves.toEqual({
+        scanned: 1,
+        due: 1,
+        completed: 1,
+        failed: 0,
+        skipped: 0,
+      });
+
+      expect(aiCalls).toEqual([
+        "resume:Asha Rao:Desktop Automation Engineer",
+        "cover:Asha Rao:Northstar Labs",
+      ]);
+      expect(applicationUpdates).toEqual([
+        { applicationId: "app-1", update: { status: "preparing" } },
+        {
+          applicationId: "app-1",
+          update: { status: "resume_generated", resumePath: join(outputDir, "app-1", "resume-v2.pdf") },
+        },
+        {
+          applicationId: "app-1",
+          update: {
+            status: "cover_letter_generated",
+            coverLetterPath: join(outputDir, "app-1", "cover-letter-v2.pdf"),
+          },
+        },
+        { applicationId: "app-1", update: { status: "form_filling" } },
+        {
+          applicationId: "app-1",
+          update: {
+            status: "review_pending",
+            submissionUrl: "https://ats.example/app-1/review",
+          },
+        },
+      ]);
+      expect(savedDocuments).toEqual([
+        expect.objectContaining({
+          applicationId: "app-1",
+          type: "resume",
+          filePath: join(outputDir, "app-1", "resume-v2.pdf"),
+          fileName: "resume-v2.pdf",
+          version: 2,
+          aiModelUsed: "test-ai:resume-model",
+        }),
+        expect.objectContaining({
+          applicationId: "app-1",
+          type: "resume_json",
+          filePath: join(outputDir, "app-1", "resume-v2.json"),
+          fileName: "resume-v2.json",
+          version: 2,
+          aiModelUsed: "test-ai:resume-model",
+        }),
+        expect.objectContaining({
+          applicationId: "app-1",
+          type: "cover_letter",
+          filePath: join(outputDir, "app-1", "cover-letter-v2.pdf"),
+          fileName: "cover-letter-v2.pdf",
+          version: 2,
+          aiModelUsed: "test-ai:resume-model",
+        }),
+      ]);
+      expect(documentEvents.map((event) => event.documentType)).toEqual([
+        "resume",
+        "resume_json",
+        "cover_letter",
+      ]);
+      await expect(readFile(join(outputDir, "app-1", "resume-v2.pdf"), "utf8")).resolves.toContain(
+        "React and Rust desktop automation engineer.",
+      );
+      await expect(readFile(join(outputDir, "app-1", "resume-v2.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        formFillProfile: {
+          fullName: "Asha Rao",
+          skills: ["React", "TypeScript", "Rust", "Tauri"],
+        },
+      });
+      await expect(readFile(join(outputDir, "app-1", "cover-letter-v2.pdf"), "utf8")).resolves.toContain(
+        "Dear Northstar Labs team,",
+      );
+      expect(scheduledTaskUpdates).toEqual([
+        {
+          id: "application-processing-task",
+          update: {
+            last_run: "2026-05-28T10:30:00.000Z",
+            next_run: "2026-05-28T11:00:00.000Z",
+          },
+        },
+      ]);
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
   });
 
   it("runs due email check scheduled tasks through the email response workflow", async () => {
