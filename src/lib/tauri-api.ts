@@ -57,6 +57,38 @@ export type Job = {
 
 export type UpsertJob = Omit<Job, "id">;
 
+export type Application = {
+  id: string;
+  job_id: string;
+  job_title: string;
+  company_name: string;
+  status: string;
+  mode: string;
+  resume_path: string | null;
+  cover_letter_path: string | null;
+  submitted_at: string | null;
+  submission_url: string | null;
+  confirmation_id: string | null;
+  error_message: string | null;
+  retry_count: number;
+  max_retries: number;
+  notes: string | null;
+  tags: string[];
+};
+
+export type UpsertApplication = {
+  job_id: string;
+  status: string;
+  mode: string;
+  resume_path: string | null;
+  cover_letter_path: string | null;
+  submission_url: string | null;
+  confirmation_id: string | null;
+  error_message: string | null;
+  notes: string | null;
+  tags: string[];
+};
+
 export function isDesktopRuntime() {
   return "__TAURI_INTERNALS__" in window;
 }
@@ -83,4 +115,12 @@ export async function listJobs() {
 
 export async function saveJob(job: UpsertJob) {
   return invoke<Job>("save_job_command", { job });
+}
+
+export async function listApplications() {
+  return invoke<Application[]>("list_applications_command");
+}
+
+export async function saveApplication(application: UpsertApplication) {
+  return invoke<Application>("save_application_command", { application });
 }

@@ -4,7 +4,8 @@ use serde::Serialize;
 use thiserror::Error;
 
 use super::models::{
-    Job, Setting, SettingValue, UpsertJob, UpsertSetting, UpsertUserProfile, UserProfile,
+    Application, Job, Setting, SettingValue, UpsertApplication, UpsertJob, UpsertSetting,
+    UpsertUserProfile, UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -19,6 +20,8 @@ pub enum QueryError {
     MissingSettingAfterSave(String),
     #[error("job save did not return a row")]
     MissingJobAfterSave,
+    #[error("application save did not return a row")]
+    MissingApplicationAfterSave,
 }
 
 pub type QueryResult<T> = Result<T, QueryError>;
@@ -333,6 +336,127 @@ fn get_job_by_rowid(connection: &Connection, rowid: i64) -> QueryResult<Option<J
         return Ok(None);
     };
     job_from_row(row).map(Some).map_err(QueryError::from)
+}
+
+pub fn list_applications(connection: &Connection) -> QueryResult<Vec<Application>> {
+    let mut statement = connection.prepare(
+        "SELECT a.id, a.job_id, j.title, j.company_name, a.status, a.mode,
+                a.resume_path, a.cover_letter_path, a.submitted_at, a.submission_url,
+                a.confirmation_id, a.error_message, a.retry_count, a.max_retries,
+                a.notes, a.tags
+         FROM applications a
+         INNER JOIN jobs j ON j.id = a.job_id
+         ORDER BY a.created_at DESC",
+    )?;
+
+    let rows = statement.query_map([], application_from_row)?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(QueryError::from)
+}
+
+pub fn upsert_application(
+    connection: &Connection,
+    application: UpsertApplication,
+) -> QueryResult<Application> {
+    let tags = to_json_text(&application.tags)?;
+    let job_id = application.job_id.clone();
+
+    if let Some(existing) = get_application_by_job_id(connection, &job_id)? {
+        connection.execute(
+            "UPDATE applications
+             SET status = ?1,
+                 mode = ?2,
+                 resume_path = ?3,
+                 cover_letter_path = ?4,
+                 submission_url = ?5,
+                 confirmation_id = ?6,
+                 error_message = ?7,
+                 notes = ?8,
+                 tags = ?9,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?10",
+            params![
+                application.status,
+                application.mode,
+                application.resume_path,
+                application.cover_letter_path,
+                application.submission_url,
+                application.confirmation_id,
+                application.error_message,
+                application.notes,
+                tags,
+                existing.id,
+            ],
+        )?;
+    } else {
+        connection.execute(
+            "INSERT INTO applications (
+                 job_id, status, mode, resume_path, cover_letter_path, submission_url,
+                 confirmation_id, error_message, notes, tags
+            )
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                &job_id,
+                application.status,
+                application.mode,
+                application.resume_path,
+                application.cover_letter_path,
+                application.submission_url,
+                application.confirmation_id,
+                application.error_message,
+                application.notes,
+                tags,
+            ],
+        )?;
+    }
+
+    get_application_by_job_id(connection, &job_id)?.ok_or(QueryError::MissingApplicationAfterSave)
+}
+
+fn get_application_by_job_id(
+    connection: &Connection,
+    job_id: &str,
+) -> QueryResult<Option<Application>> {
+    let mut statement = connection.prepare(
+        "SELECT a.id, a.job_id, j.title, j.company_name, a.status, a.mode,
+                a.resume_path, a.cover_letter_path, a.submitted_at, a.submission_url,
+                a.confirmation_id, a.error_message, a.retry_count, a.max_retries,
+                a.notes, a.tags
+         FROM applications a
+         INNER JOIN jobs j ON j.id = a.job_id
+         WHERE a.job_id = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([job_id])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    application_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
+}
+
+fn application_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Application> {
+    let tags = json_cell(row, 15)?;
+
+    Ok(Application {
+        id: row.get(0)?,
+        job_id: row.get(1)?,
+        job_title: row.get(2)?,
+        company_name: row.get(3)?,
+        status: row.get(4)?,
+        mode: row.get(5)?,
+        resume_path: row.get(6)?,
+        cover_letter_path: row.get(7)?,
+        submitted_at: row.get(8)?,
+        submission_url: row.get(9)?,
+        confirmation_id: row.get(10)?,
+        error_message: row.get(11)?,
+        retry_count: row.get(12)?,
+        max_retries: row.get(13)?,
+        notes: row.get(14)?,
+        tags,
+    })
 }
 
 fn job_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {

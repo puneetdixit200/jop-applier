@@ -113,3 +113,37 @@ pub struct UpsertJob {
     pub should_apply: Option<bool>,
     pub ai_priority: Option<String>,
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Application {
+    pub id: String,
+    pub job_id: String,
+    pub job_title: String,
+    pub company_name: String,
+    pub status: String,
+    pub mode: String,
+    pub resume_path: Option<String>,
+    pub cover_letter_path: Option<String>,
+    pub submitted_at: Option<String>,
+    pub submission_url: Option<String>,
+    pub confirmation_id: Option<String>,
+    pub error_message: Option<String>,
+    pub retry_count: i64,
+    pub max_retries: i64,
+    pub notes: Option<String>,
+    pub tags: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UpsertApplication {
+    pub job_id: String,
+    pub status: String,
+    pub mode: String,
+    pub resume_path: Option<String>,
+    pub cover_letter_path: Option<String>,
+    pub submission_url: Option<String>,
+    pub confirmation_id: Option<String>,
+    pub error_message: Option<String>,
+    pub notes: Option<String>,
+    pub tags: Vec<String>,
+}

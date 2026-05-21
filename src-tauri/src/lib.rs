@@ -36,7 +36,9 @@ pub fn run() {
             commands::db::get_setting_command,
             commands::db::save_setting_command,
             commands::db::list_jobs_command,
-            commands::db::save_job_command
+            commands::db::save_job_command,
+            commands::db::list_applications_command,
+            commands::db::save_application_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
