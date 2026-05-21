@@ -4,6 +4,7 @@ use tauri::Manager;
 
 pub mod commands;
 pub mod db;
+pub mod sidecar;
 
 pub struct AppState {
     pub connection: Mutex<Connection>,
@@ -54,7 +55,9 @@ pub fn run() {
             commands::db::save_scheduled_task_command,
             commands::db::update_scheduled_task_run_command,
             commands::db::get_ai_cache_entry_command,
-            commands::db::save_ai_cache_entry_command
+            commands::db::save_ai_cache_entry_command,
+            commands::sidecar::sidecar_status_command,
+            commands::sidecar::run_sidecar_workflow_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

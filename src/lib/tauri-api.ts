@@ -222,6 +222,18 @@ export type AiCacheEntry = {
 
 export type UpsertAiCacheEntry = Omit<AiCacheEntry, "created_at">;
 
+export type SidecarProvider = {
+  provider: string;
+  model: string;
+  local: boolean;
+};
+
+export type SidecarRuntimeStatus = {
+  status: string;
+  workflows: string[];
+  provider: SidecarProvider;
+};
+
 export function isDesktopRuntime() {
   return "__TAURI_INTERNALS__" in window;
 }
@@ -326,4 +338,12 @@ export async function getAiCacheEntry(promptHash: string) {
 
 export async function saveAiCacheEntry(entry: UpsertAiCacheEntry) {
   return invoke<AiCacheEntry>("save_ai_cache_entry_command", { entry });
+}
+
+export async function getSidecarStatus() {
+  return invoke<SidecarRuntimeStatus>("sidecar_status_command");
+}
+
+export async function runSidecarWorkflow(workflowId: string) {
+  return invoke<unknown>("run_sidecar_workflow_command", { workflowId });
 }
