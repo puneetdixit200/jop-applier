@@ -28,6 +28,33 @@ export type Setting = {
 
 export type UpsertSetting = Setting;
 
+export type Job = {
+  id: string;
+  source_id: string | null;
+  platform: string;
+  url: string;
+  title: string;
+  company_name: string;
+  location: string | null;
+  is_remote: boolean;
+  salary_min: number | null;
+  salary_max: number | null;
+  salary_currency: string;
+  job_type: string | null;
+  experience_level: string | null;
+  description: string | null;
+  requirements: string[];
+  raw_html: string | null;
+  match_score: number | null;
+  match_reasoning: string | null;
+  matched_skills: string[];
+  missing_skills: string[];
+  ai_tags: string[];
+  ai_priority: string | null;
+};
+
+export type UpsertJob = Omit<Job, "id">;
+
 export function isDesktopRuntime() {
   return "__TAURI_INTERNALS__" in window;
 }
@@ -48,3 +75,10 @@ export async function saveSetting(setting: UpsertSetting) {
   return invoke<Setting>("save_setting_command", { setting });
 }
 
+export async function listJobs() {
+  return invoke<Job[]>("list_jobs_command");
+}
+
+export async function saveJob(job: UpsertJob) {
+  return invoke<Job>("save_job_command", { job });
+}

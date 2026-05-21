@@ -16,8 +16,10 @@ import {
   getSetting,
   getUserProfile,
   isDesktopRuntime,
+  listJobs,
   saveSetting,
   saveUserProfile,
+  type Job,
   type UpsertUserProfile,
   type UserProfile,
 } from "./lib/tauri-api";
@@ -42,6 +44,15 @@ type AutomationSettings = {
   maxDailyApplications: number;
 };
 
+type JobSummary = {
+  title: string;
+  company: string;
+  score: number | null;
+  source: string;
+  location: string;
+  priority: string;
+};
+
 const routes: Array<{ id: RouteId; label: string; icon: typeof BarChart3 }> = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
   { id: "jobs", label: "Jobs", icon: BriefcaseBusiness },
@@ -50,10 +61,31 @@ const routes: Array<{ id: RouteId; label: string; icon: typeof BarChart3 }> = [
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
-const jobQueue = [
-  { title: "Frontend Engineer Intern", company: "Northstar Labs", score: 91, source: "LinkedIn" },
-  { title: "Rust Desktop Engineer", company: "Helio Systems", score: 87, source: "Careers" },
-  { title: "AI Product Intern", company: "SignalWorks", score: 79, source: "Indeed" },
+const previewJobs: JobSummary[] = [
+  {
+    title: "Frontend Engineer Intern",
+    company: "Northstar Labs",
+    score: 91,
+    source: "LinkedIn",
+    location: "Remote",
+    priority: "high",
+  },
+  {
+    title: "Rust Desktop Engineer",
+    company: "Helio Systems",
+    score: 87,
+    source: "Careers",
+    location: "Remote",
+    priority: "high",
+  },
+  {
+    title: "AI Product Intern",
+    company: "SignalWorks",
+    score: 79,
+    source: "Indeed",
+    location: "Bengaluru",
+    priority: "medium",
+  },
 ];
 
 const applications = [
@@ -87,9 +119,11 @@ export function App() {
     cacheResponses: true,
     maxDailyApplications: 12,
   });
+  const [persistedJobs, setPersistedJobs] = useState<JobSummary[]>([]);
   const [storageStatus, setStorageStatus] = useState("Ready");
 
   const routeTitle = useMemo(() => routes.find((item) => item.id === route)?.label ?? "Dashboard", [route]);
+  const visibleJobs = persistedJobs.length > 0 ? persistedJobs : previewJobs;
 
   useEffect(() => {
     if (!isDesktopRuntime()) {
@@ -98,16 +132,20 @@ export function App() {
     }
 
     async function loadPersistedState() {
-      const [storedProfile, storedProvider, storedReview, storedCache, storedLimit] = await Promise.all([
+      const [storedProfile, storedProvider, storedReview, storedCache, storedLimit, storedJobs] = await Promise.all([
         getUserProfile(),
         getSetting("ai.provider"),
         getSetting("application.reviewBeforeSubmit"),
         getSetting("ai.cacheResponses"),
         getSetting("application.maxDailyApplications"),
+        listJobs(),
       ]);
 
       if (storedProfile) {
         setProfile(profileFromRecord(storedProfile));
+      }
+      if (storedJobs.length > 0) {
+        setPersistedJobs(storedJobs.map(jobFromRecord));
       }
       setSettings((current) => ({
         provider: typeof storedProvider?.value === "string" ? storedProvider.value : current.provider,
@@ -176,8 +214,8 @@ export function App() {
           </div>
         </header>
 
-        {route === "dashboard" && <Dashboard provider={settings.provider} storageStatus={storageStatus} />}
-        {route === "jobs" && <Jobs />}
+        {route === "dashboard" && <Dashboard provider={settings.provider} storageStatus={storageStatus} jobs={visibleJobs} />}
+        {route === "jobs" && <Jobs jobs={visibleJobs} />}
         {route === "applications" && <Applications />}
         {route === "profile" && (
           <ProfileEditor profile={profile} onChange={setProfile} onStatusChange={setStorageStatus} />
@@ -190,7 +228,7 @@ export function App() {
   );
 }
 
-function Dashboard({ provider, storageStatus }: { provider: string; storageStatus: string }) {
+function Dashboard({ provider, storageStatus, jobs }: { provider: string; storageStatus: string; jobs: JobSummary[] }) {
   return (
     <div className="dashboard-grid">
       <section className="metric-grid" aria-label="Application metrics">
@@ -211,13 +249,13 @@ function Dashboard({ provider, storageStatus }: { provider: string; storageStatu
           <Bot size={19} aria-hidden="true" />
         </div>
         <div className="job-list">
-          {jobQueue.map((job) => (
+          {jobs.slice(0, 3).map((job) => (
             <article className="job-row" key={`${job.company}-${job.title}`}>
               <div>
                 <strong>{job.title}</strong>
                 <span>{job.company} · {job.source}</span>
               </div>
-              <b>{job.score}</b>
+              <b>{job.score ?? "-"}</b>
             </article>
           ))}
         </div>
@@ -265,7 +303,7 @@ function Dashboard({ provider, storageStatus }: { provider: string; storageStatu
   );
 }
 
-function Jobs() {
+function Jobs({ jobs }: { jobs: JobSummary[] }) {
   return (
     <section className="panel full">
       <div className="panel-heading">
@@ -275,12 +313,12 @@ function Jobs() {
         </div>
       </div>
       <div className="table-list">
-        {jobQueue.map((job) => (
-          <div className="table-row" key={job.title}>
+        {jobs.map((job) => (
+          <div className="table-row" key={`${job.source}-${job.company}-${job.title}`}>
             <span>{job.title}</span>
             <span>{job.company}</span>
-            <span>{job.source}</span>
-            <strong>{job.score}%</strong>
+            <span>{job.location} · {job.source}</span>
+            <strong>{job.score === null ? job.priority : `${job.score}%`}</strong>
           </div>
         ))}
       </div>
@@ -515,6 +553,17 @@ function profileFromRecord(profile: UserProfile): Profile {
     summary: profile.summary ?? "",
     skills: profile.skills.join(", "),
     targetRoles: profile.target_roles.join(", "),
+  };
+}
+
+function jobFromRecord(job: Job): JobSummary {
+  return {
+    title: job.title,
+    company: job.company_name,
+    score: job.match_score,
+    source: job.platform,
+    location: job.location ?? (job.is_remote ? "Remote" : "Location unknown"),
+    priority: job.ai_priority ?? "unscored",
   };
 }
 

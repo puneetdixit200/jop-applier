@@ -59,3 +59,53 @@ pub struct UpsertSetting {
     pub category: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Job {
+    pub id: String,
+    pub source_id: Option<String>,
+    pub platform: String,
+    pub url: String,
+    pub title: String,
+    pub company_name: String,
+    pub location: Option<String>,
+    pub is_remote: bool,
+    pub salary_min: Option<i64>,
+    pub salary_max: Option<i64>,
+    pub salary_currency: String,
+    pub job_type: Option<String>,
+    pub experience_level: Option<String>,
+    pub description: Option<String>,
+    pub requirements: Vec<String>,
+    pub raw_html: Option<String>,
+    pub match_score: Option<i64>,
+    pub match_reasoning: Option<String>,
+    pub matched_skills: Vec<String>,
+    pub missing_skills: Vec<String>,
+    pub ai_tags: Vec<String>,
+    pub ai_priority: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UpsertJob {
+    pub source_id: Option<String>,
+    pub platform: String,
+    pub url: String,
+    pub title: String,
+    pub company_name: String,
+    pub location: Option<String>,
+    pub is_remote: bool,
+    pub salary_min: Option<i64>,
+    pub salary_max: Option<i64>,
+    pub salary_currency: String,
+    pub job_type: Option<String>,
+    pub experience_level: Option<String>,
+    pub description: Option<String>,
+    pub requirements: Vec<String>,
+    pub raw_html: Option<String>,
+    pub match_score: Option<i64>,
+    pub match_reasoning: Option<String>,
+    pub matched_skills: Vec<String>,
+    pub missing_skills: Vec<String>,
+    pub ai_tags: Vec<String>,
+    pub ai_priority: Option<String>,
+}

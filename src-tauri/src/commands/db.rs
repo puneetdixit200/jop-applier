@@ -1,6 +1,6 @@
 use crate::{
     db::{
-        models::{Setting, UpsertSetting, UpsertUserProfile, UserProfile},
+        models::{Job, Setting, UpsertJob, UpsertSetting, UpsertUserProfile, UserProfile},
         queries, schema,
     },
     AppState,
@@ -38,7 +38,10 @@ pub fn save_user_profile_command(
 }
 
 #[tauri::command]
-pub fn get_setting_command(state: State<'_, AppState>, key: String) -> Result<Option<Setting>, String> {
+pub fn get_setting_command(
+    state: State<'_, AppState>,
+    key: String,
+) -> Result<Option<Setting>, String> {
     let connection = state
         .connection
         .lock()
@@ -56,4 +59,22 @@ pub fn save_setting_command(
         .lock()
         .map_err(|_| "database connection lock poisoned".to_string())?;
     queries::upsert_setting(&connection, setting).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn list_jobs_command(state: State<'_, AppState>) -> Result<Vec<Job>, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::list_jobs(&connection).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn save_job_command(state: State<'_, AppState>, job: UpsertJob) -> Result<Job, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::upsert_job(&connection, job).map_err(|error| error.to_string())
 }

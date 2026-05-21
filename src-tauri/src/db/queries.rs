@@ -3,7 +3,9 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use thiserror::Error;
 
-use super::models::{Setting, SettingValue, UpsertSetting, UpsertUserProfile, UserProfile};
+use super::models::{
+    Job, Setting, SettingValue, UpsertJob, UpsertSetting, UpsertUserProfile, UserProfile,
+};
 
 #[derive(Debug, Error)]
 pub enum QueryError {
@@ -15,6 +17,8 @@ pub enum QueryError {
     MissingProfileAfterSave,
     #[error("setting save did not return a row for key {0}")]
     MissingSettingAfterSave(String),
+    #[error("job save did not return a row")]
+    MissingJobAfterSave,
 }
 
 pub type QueryResult<T> = Result<T, QueryError>;
@@ -148,6 +152,221 @@ pub fn upsert_setting(connection: &Connection, setting: UpsertSetting) -> QueryR
     get_setting(connection, &setting.key)?.ok_or(QueryError::MissingSettingAfterSave(setting.key))
 }
 
+pub fn list_jobs(connection: &Connection) -> QueryResult<Vec<Job>> {
+    let mut statement = connection.prepare(
+        "SELECT id, source_id, platform, url, title, company_name, location, is_remote,
+                salary_min, salary_max, salary_currency, job_type, experience_level,
+                description, requirements, raw_html, match_score, match_reasoning,
+                matched_skills, missing_skills, ai_tags, ai_priority
+         FROM jobs
+         WHERE is_archived = FALSE
+         ORDER BY COALESCE(match_score, -1) DESC, discovered_at DESC",
+    )?;
+
+    let rows = statement.query_map([], job_from_row)?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(QueryError::from)
+}
+
+pub fn upsert_job(connection: &Connection, job: UpsertJob) -> QueryResult<Job> {
+    let requirements = to_json_text(&job.requirements)?;
+    let matched_skills = to_json_text(&job.matched_skills)?;
+    let missing_skills = to_json_text(&job.missing_skills)?;
+    let ai_tags = to_json_text(&job.ai_tags)?;
+
+    if let Some(existing) = find_existing_job(connection, &job)? {
+        connection.execute(
+            "UPDATE jobs
+             SET source_id = ?1,
+                 platform = ?2,
+                 url = ?3,
+                 title = ?4,
+                 company_name = ?5,
+                 location = ?6,
+                 is_remote = ?7,
+                 salary_min = ?8,
+                 salary_max = ?9,
+                 salary_currency = ?10,
+                 job_type = ?11,
+                 experience_level = ?12,
+                 description = ?13,
+                 requirements = ?14,
+                 raw_html = ?15,
+                 match_score = ?16,
+                 match_reasoning = ?17,
+                 matched_skills = ?18,
+                 missing_skills = ?19,
+                 ai_tags = ?20,
+                 ai_priority = ?21,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?22",
+            params![
+                job.source_id,
+                job.platform,
+                job.url,
+                job.title,
+                job.company_name,
+                job.location,
+                job.is_remote,
+                job.salary_min,
+                job.salary_max,
+                job.salary_currency,
+                job.job_type,
+                job.experience_level,
+                job.description,
+                requirements,
+                job.raw_html,
+                job.match_score,
+                job.match_reasoning,
+                matched_skills,
+                missing_skills,
+                ai_tags,
+                job.ai_priority,
+                existing.id,
+            ],
+        )?;
+        return get_job_by_id(connection, &existing.id)?.ok_or(QueryError::MissingJobAfterSave);
+    }
+
+    connection.execute(
+        "INSERT INTO jobs (
+             source_id, platform, url, title, company_name, location, is_remote,
+             salary_min, salary_max, salary_currency, job_type, experience_level,
+             description, requirements, raw_html, match_score, match_reasoning,
+             matched_skills, missing_skills, ai_tags, ai_priority
+         )
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+        params![
+            job.source_id,
+            job.platform,
+            job.url,
+            job.title,
+            job.company_name,
+            job.location,
+            job.is_remote,
+            job.salary_min,
+            job.salary_max,
+            job.salary_currency,
+            job.job_type,
+            job.experience_level,
+            job.description,
+            requirements,
+            job.raw_html,
+            job.match_score,
+            job.match_reasoning,
+            matched_skills,
+            missing_skills,
+            ai_tags,
+            job.ai_priority,
+        ],
+    )?;
+
+    get_job_by_rowid(connection, connection.last_insert_rowid())?
+        .ok_or(QueryError::MissingJobAfterSave)
+}
+
+fn find_existing_job(connection: &Connection, job: &UpsertJob) -> QueryResult<Option<Job>> {
+    if let Some(source_id) = job
+        .source_id
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        let mut statement = connection.prepare(
+            "SELECT id, source_id, platform, url, title, company_name, location, is_remote,
+                    salary_min, salary_max, salary_currency, job_type, experience_level,
+                    description, requirements, raw_html, match_score, match_reasoning,
+                    matched_skills, missing_skills, ai_tags, ai_priority
+             FROM jobs
+             WHERE platform = ?1 AND source_id = ?2
+             LIMIT 1",
+        )?;
+        let mut rows = statement.query(params![&job.platform, source_id])?;
+        let Some(row) = rows.next()? else {
+            return Ok(None);
+        };
+        return job_from_row(row).map(Some).map_err(QueryError::from);
+    }
+
+    Ok(None)
+}
+
+fn get_job_by_id(connection: &Connection, id: &str) -> QueryResult<Option<Job>> {
+    let mut statement = connection.prepare(
+        "SELECT id, source_id, platform, url, title, company_name, location, is_remote,
+                salary_min, salary_max, salary_currency, job_type, experience_level,
+                description, requirements, raw_html, match_score, match_reasoning,
+                matched_skills, missing_skills, ai_tags, ai_priority
+         FROM jobs
+         WHERE id = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([id])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    job_from_row(row).map(Some).map_err(QueryError::from)
+}
+
+fn get_job_by_rowid(connection: &Connection, rowid: i64) -> QueryResult<Option<Job>> {
+    let mut statement = connection.prepare(
+        "SELECT id, source_id, platform, url, title, company_name, location, is_remote,
+                salary_min, salary_max, salary_currency, job_type, experience_level,
+                description, requirements, raw_html, match_score, match_reasoning,
+                matched_skills, missing_skills, ai_tags, ai_priority
+         FROM jobs
+         WHERE rowid = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([rowid])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    job_from_row(row).map(Some).map_err(QueryError::from)
+}
+
+fn job_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
+    let requirements = json_cell(row, 14)?;
+    let matched_skills = json_cell(row, 18)?;
+    let missing_skills = json_cell(row, 19)?;
+    let ai_tags = json_cell(row, 20)?;
+
+    Ok(Job {
+        id: row.get(0)?,
+        source_id: row.get(1)?,
+        platform: row.get(2)?,
+        url: row.get(3)?,
+        title: row.get(4)?,
+        company_name: row.get(5)?,
+        location: row.get(6)?,
+        is_remote: row.get(7)?,
+        salary_min: row.get(8)?,
+        salary_max: row.get(9)?,
+        salary_currency: row.get(10)?,
+        job_type: row.get(11)?,
+        experience_level: row.get(12)?,
+        description: row.get(13)?,
+        requirements,
+        raw_html: row.get(15)?,
+        match_score: row.get(16)?,
+        match_reasoning: row.get(17)?,
+        matched_skills,
+        missing_skills,
+        ai_tags,
+        ai_priority: row.get(21)?,
+    })
+}
+
+fn json_cell<T: DeserializeOwned>(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<T> {
+    let value: Option<String> = row.get(index)?;
+    serde_json::from_str(value.as_deref().unwrap_or("[]")).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            index,
+            rusqlite::types::Type::Text,
+            Box::new(error),
+        )
+    })
+}
+
 fn to_json_text<T: Serialize>(value: &T) -> Result<String, serde_json::Error> {
     serde_json::to_string(value)
 }
@@ -158,4 +377,3 @@ fn from_json_text<T: DeserializeOwned>(value: String) -> Result<T, serde_json::E
 
 #[allow(dead_code)]
 fn _assert_setting_value_send_sync(_: SettingValue) {}
-
