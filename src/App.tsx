@@ -31,6 +31,12 @@ import {
   type JobSummary,
 } from "./lib/discovery-control";
 import {
+  defaultDiscoverySettings,
+  discoverySettingsFromStoredValues,
+  discoverySettingsToStoredValues,
+  type DiscoverySettings,
+} from "./lib/discovery-settings";
+import {
   loadRuntimeControlStatus,
   type RuntimeControlDependencies,
   type RuntimeControlStatus,
@@ -54,6 +60,7 @@ type AutomationSettings = {
   reviewBeforeSubmit: boolean;
   cacheResponses: boolean;
   maxDailyApplications: number;
+  discovery: DiscoverySettings;
 };
 
 const routes: Array<{ id: RouteId; label: string; icon: typeof BarChart3 }> = [
@@ -139,6 +146,7 @@ export function App() {
     reviewBeforeSubmit: true,
     cacheResponses: true,
     maxDailyApplications: 12,
+    discovery: defaultDiscoverySettings,
   });
   const [persistedJobs, setPersistedJobs] = useState<JobSummary[]>([]);
   const [storageStatus, setStorageStatus] = useState("Ready");
@@ -173,12 +181,23 @@ export function App() {
     }
 
     async function loadPersistedState() {
-      const [storedProfile, storedProvider, storedReview, storedCache, storedLimit, storedJobs] = await Promise.all([
+      const [
+        storedProfile,
+        storedProvider,
+        storedReview,
+        storedCache,
+        storedLimit,
+        storedSearchQueries,
+        storedFeedSources,
+        storedJobs,
+      ] = await Promise.all([
         getUserProfile(),
         getSetting("ai.provider"),
         getSetting("application.reviewBeforeSubmit"),
         getSetting("ai.cacheResponses"),
         getSetting("application.maxDailyApplications"),
+        getSetting("discovery.searchQueries"),
+        getSetting("discovery.feedSources"),
         listJobs(),
       ]);
 
@@ -189,12 +208,18 @@ export function App() {
         setPersistedJobs(await loadJobSummaries(() => Promise.resolve(storedJobs)));
       }
       setSettings((current) => ({
+        ...current,
         provider: typeof storedProvider?.value === "string" ? storedProvider.value : current.provider,
         reviewBeforeSubmit:
           typeof storedReview?.value === "boolean" ? storedReview.value : current.reviewBeforeSubmit,
         cacheResponses: typeof storedCache?.value === "boolean" ? storedCache.value : current.cacheResponses,
         maxDailyApplications:
           typeof storedLimit?.value === "number" ? storedLimit.value : current.maxDailyApplications,
+        discovery: discoverySettingsFromStoredValues(
+          storedSearchQueries?.value,
+          storedFeedSources?.value,
+          current.discovery,
+        ),
       }));
       setStorageStatus("SQLite ready");
     }
@@ -528,6 +553,11 @@ function SettingsPanel({
   const [isSaving, setIsSaving] = useState(false);
   const update = <Key extends keyof AutomationSettings>(key: Key, value: AutomationSettings[Key]) =>
     onSettingsChange({ ...settings, [key]: value });
+  const updateDiscovery = <Key extends keyof DiscoverySettings>(key: Key, value: DiscoverySettings[Key]) =>
+    onSettingsChange({
+      ...settings,
+      discovery: { ...settings.discovery, [key]: value },
+    });
 
   async function persistSettings() {
     if (!isDesktopRuntime()) {
@@ -535,6 +565,7 @@ function SettingsPanel({
       return;
     }
 
+    const discoveryValues = discoverySettingsToStoredValues(settings.discovery);
     setIsSaving(true);
     try {
       await Promise.all([
@@ -545,6 +576,16 @@ function SettingsPanel({
           key: "application.maxDailyApplications",
           value: settings.maxDailyApplications,
           category: "application",
+        }),
+        saveSetting({
+          key: "discovery.searchQueries",
+          value: discoveryValues.searchQueries,
+          category: "discovery",
+        }),
+        saveSetting({
+          key: "discovery.feedSources",
+          value: discoveryValues.feedSources,
+          category: "discovery",
         }),
       ]);
       onStatusChange("SQLite ready");
@@ -576,6 +617,60 @@ function SettingsPanel({
               {option}
             </button>
           ))}
+        </div>
+      </fieldset>
+      <fieldset className="settings-section">
+        <legend>Job discovery</legend>
+        <div className="settings-grid">
+          <label>
+            Search keywords
+            <input
+              value={settings.discovery.searchKeywords}
+              onChange={(event) => updateDiscovery("searchKeywords", event.target.value)}
+            />
+          </label>
+          <label>
+            Location
+            <input
+              value={settings.discovery.searchLocation}
+              onChange={(event) => updateDiscovery("searchLocation", event.target.value)}
+            />
+          </label>
+          <label className="toggle-row settings-toggle">
+            <input
+              type="checkbox"
+              checked={settings.discovery.remoteOnly}
+              onChange={(event) => updateDiscovery("remoteOnly", event.target.checked)}
+            />
+            <span>Remote jobs only</span>
+          </label>
+        </div>
+      </fieldset>
+      <fieldset className="settings-section">
+        <legend>JSON feed source</legend>
+        <div className="settings-grid">
+          <label>
+            Feed URL
+            <input
+              type="url"
+              value={settings.discovery.feedSourceUrl}
+              onChange={(event) => updateDiscovery("feedSourceUrl", event.target.value)}
+            />
+          </label>
+          <label>
+            Platform
+            <input
+              value={settings.discovery.feedSourcePlatform}
+              onChange={(event) => updateDiscovery("feedSourcePlatform", event.target.value)}
+            />
+          </label>
+          <label>
+            Feed name
+            <input
+              value={settings.discovery.feedSourceName}
+              onChange={(event) => updateDiscovery("feedSourceName", event.target.value)}
+            />
+          </label>
         </div>
       </fieldset>
       <label className="toggle-row">
