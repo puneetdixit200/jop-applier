@@ -74,6 +74,13 @@ export type CareerEventMap = {
     reason: string;
     failedAt: Date;
   };
+  "analytics.refreshed": {
+    generatedAt: Date;
+    totalApplications: number;
+    responseRate: number;
+    interviewRate: number;
+    offerRate: number;
+  };
   "scheduled_task.started": {
     taskId: string;
     taskName: string;

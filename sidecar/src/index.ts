@@ -4,6 +4,10 @@ import { OllamaProvider } from "./ai/providers/ollama-provider.js";
 import { OpenAIProvider } from "./ai/providers/openai-provider.js";
 import { OpenRouterProvider } from "./ai/providers/openrouter-provider.js";
 import {
+  runAnalyticsRefreshWorker,
+  type AnalyticsRefreshWorkerDependencies,
+} from "./analytics/analytics-refresh-worker.js";
+import {
   runApplicationWorker,
   type ApplicationWorkerDependencies,
 } from "./applications/application-worker.js";
@@ -117,6 +121,8 @@ export type SidecarEmailCheckOptions = EmailResponseWorkerDependencies & {
   maxResponses?: number;
 };
 
+export type SidecarAnalyticsOptions = AnalyticsRefreshWorkerDependencies;
+
 export type SidecarRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
@@ -127,6 +133,7 @@ export type SidecarRuntimeOptions = {
   };
   jobDiscovery?: JobDiscoveryWorkflowDependencies;
   applicationProcessing?: SidecarApplicationProcessingOptions;
+  analytics?: SidecarAnalyticsOptions;
   emailCheck?: SidecarEmailCheckOptions;
   followUps?: SidecarFollowUpOptions;
   scheduledTasks?: ScheduledTaskPersistence;
@@ -149,6 +156,7 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   const jobDiscovery = options.jobDiscovery ?? createEmptyJobDiscoveryDependencies();
   const applicationProcessing =
     options.applicationProcessing ?? createEmptyApplicationWorkerDependencies();
+  const analytics = options.analytics ?? createEmptyAnalyticsRefreshWorkerDependencies();
   const emailCheck = options.emailCheck ?? createEmptyEmailResponseWorkerDependencies();
   const followUps = options.followUps ?? createEmptyFollowUpDependencies();
   const scheduledTaskPersistence = options.scheduledTasks ?? createEmptyScheduledTaskPersistence();
@@ -167,6 +175,15 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
         eventBus,
         maxApplications: options.applicationProcessing?.maxApplications,
         reviewBeforeSubmit: options.applicationProcessing?.reviewBeforeSubmit,
+      }),
+  });
+  workflowEngine.register({
+    id: "analytics-refresh",
+    description: "Recalculate dashboard analytics metrics",
+    run: async () =>
+      runAnalyticsRefreshWorker(analytics, {
+        now: now(),
+        eventBus,
       }),
   });
   workflowEngine.register({
@@ -259,6 +276,13 @@ function createEmptyApplicationWorkerDependencies(): ApplicationWorkerDependenci
     fillApplicationForm: async () => ({ submissionUrl: null }),
     submitApplication: async () => ({ confirmationId: null }),
     updateApplication: async () => undefined,
+  };
+}
+
+function createEmptyAnalyticsRefreshWorkerDependencies(): AnalyticsRefreshWorkerDependencies {
+  return {
+    loadInputs: async () => ({ applications: [], jobs: [] }),
+    saveSnapshot: async () => undefined,
   };
 }
 

@@ -642,4 +642,181 @@ describe("sidecar runtime", () => {
       },
     ]);
   });
+
+  it("runs due analytics scheduled tasks through the analytics refresh workflow", async () => {
+    const checkedAt = new Date("2026-05-29T00:00:00Z");
+    const savedSnapshots: Array<Record<string, unknown>> = [];
+    const analyticsEvents: Array<CareerEventMap["analytics.refreshed"]> = [];
+    const scheduledTaskUpdates: Array<{ id: string; update: PersistedScheduledTaskRunUpdate }> = [];
+    const runtime = createSidecarRuntime({
+      now: () => checkedAt,
+      analytics: {
+        loadInputs: async () => ({
+          applications: [
+            {
+              id: "app-1",
+              companyName: "Northstar Labs",
+              platform: "linkedin",
+              status: "submitted",
+              appliedAt: "2026-05-20T00:00:00.000Z",
+              responseDate: "2026-05-22T00:00:00.000Z",
+              responseType: "interview",
+              followUpCount: 1,
+              resumeVersion: "frontend",
+            },
+            {
+              id: "app-2",
+              companyName: "Atlas Works",
+              platform: "indeed",
+              status: "submitted",
+              appliedAt: "2026-05-21T00:00:00.000Z",
+              responseDate: null,
+              responseType: null,
+              followUpCount: 0,
+              resumeVersion: "backend",
+            },
+            {
+              id: "app-3",
+              companyName: "Northstar Labs",
+              platform: "linkedin",
+              status: "submitted",
+              appliedAt: "2026-05-26T00:00:00.000Z",
+              responseDate: "2026-05-27T00:00:00.000Z",
+              responseType: "offer",
+              followUpCount: 0,
+              resumeVersion: "frontend",
+            },
+          ],
+          jobs: [
+            {
+              id: "job-1",
+              platform: "linkedin",
+              companyName: "Northstar Labs",
+              matchScore: 88,
+              requiredSkills: ["React", "TypeScript"],
+            },
+            {
+              id: "job-2",
+              platform: "indeed",
+              companyName: "Atlas Works",
+              matchScore: 64,
+              requiredSkills: ["React", "SQL"],
+            },
+            {
+              id: "job-3",
+              platform: "linkedin",
+              companyName: "Northstar Labs",
+              matchScore: 92,
+              requiredSkills: ["TypeScript"],
+            },
+          ],
+        }),
+        saveSnapshot: async (snapshot) => {
+          savedSnapshots.push(snapshot);
+        },
+      },
+      scheduledTasks: {
+        listScheduledTasks: async () => [
+          {
+            id: "analytics-refresh-task",
+            name: "Analytics Refresh",
+            type: "analytics",
+            cron_expression: "0 0 * * *",
+            is_enabled: true,
+            last_run: null,
+            next_run: "2026-05-29T00:00:00.000Z",
+            config: {
+              cadence: { kind: "daily", hour: 0, minute: 0 },
+            },
+            created_at: "2026-05-28T00:00:00.000Z",
+          },
+        ],
+        updateScheduledTaskRun: async (id, update) => {
+          scheduledTaskUpdates.push({ id, update });
+        },
+      },
+    });
+
+    runtime.eventBus.on("analytics.refreshed", (event) => analyticsEvents.push(event));
+
+    await expect(runtime.runDueScheduledTasks()).resolves.toEqual({
+      scanned: 1,
+      due: 1,
+      completed: 1,
+      failed: 0,
+      skipped: 0,
+    });
+
+    expect(runtime.workflowEngine.registeredWorkflows()).toContain("analytics-refresh");
+    expect(savedSnapshots).toEqual([
+      {
+        generatedAt: "2026-05-29T00:00:00.000Z",
+        metrics: {
+          totalApplications: 3,
+          applicationRate: { daily: 0.33, weekly: 2.33 },
+          responseRate: 66.67,
+          interviewRate: 33.33,
+          offerRate: 33.33,
+          averageTimeToResponseDays: 1.5,
+          topPlatforms: [
+            { label: "linkedin", count: 2 },
+            { label: "indeed", count: 1 },
+          ],
+          topCompanies: [
+            { label: "Northstar Labs", count: 2 },
+            { label: "Atlas Works", count: 1 },
+          ],
+          skillDemand: [
+            { label: "React", count: 2 },
+            { label: "TypeScript", count: 2 },
+            { label: "SQL", count: 1 },
+          ],
+          matchScoreDistribution: [
+            { bucket: "0-49", count: 0 },
+            { bucket: "50-69", count: 1 },
+            { bucket: "70-89", count: 1 },
+            { bucket: "90-100", count: 1 },
+          ],
+          followUpEffectiveness: {
+            withFollowUp: { applications: 1, responses: 1, responseRate: 100 },
+            withoutFollowUp: { applications: 2, responses: 1, responseRate: 50 },
+          },
+          resumeVersionPerformance: [
+            { label: "frontend", applications: 2, responses: 2, responseRate: 100 },
+            { label: "backend", applications: 1, responses: 0, responseRate: 0 },
+          ],
+          weeklyTrend: [
+            { week: "2026-05-18", applications: 2, responses: 1 },
+            { week: "2026-05-25", applications: 1, responses: 1 },
+          ],
+          funnel: {
+            discovered: 3,
+            matched: 3,
+            applied: 3,
+            response: 2,
+            interview: 1,
+            offer: 1,
+          },
+        },
+      },
+    ]);
+    expect(analyticsEvents).toEqual([
+      {
+        generatedAt: checkedAt,
+        totalApplications: 3,
+        responseRate: 66.67,
+        interviewRate: 33.33,
+        offerRate: 33.33,
+      },
+    ]);
+    expect(scheduledTaskUpdates).toEqual([
+      {
+        id: "analytics-refresh-task",
+        update: {
+          last_run: "2026-05-29T00:00:00.000Z",
+          next_run: "2026-05-30T00:00:00.000Z",
+        },
+      },
+    ]);
+  });
 });
