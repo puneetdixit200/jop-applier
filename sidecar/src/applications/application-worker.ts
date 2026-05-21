@@ -5,6 +5,7 @@ import {
   type ApplicationStatus,
   type ApplicationWorkflowContext,
 } from "./application-workflow.js";
+import type { ApplicationFormFillResult } from "./form-filler.js";
 
 export type ApplicationProcessingApplication = {
   id: string;
@@ -29,6 +30,10 @@ export type ApplicationProcessingUpdate = {
   errorMessage?: string | null;
 };
 
+export type ApplicationFormFillOutcome = {
+  submissionUrl: ApplicationFormFillResult["submissionUrl"] | null;
+} & Partial<Pick<ApplicationFormFillResult, "mappedFields" | "platform" | "requiredMissing">>;
+
 export type ApplicationWorkerDependencies = {
   listApplications: () => Promise<ApplicationProcessingApplication[]>;
   prepareApplication: (application: ApplicationProcessingApplication) => Promise<void>;
@@ -36,7 +41,7 @@ export type ApplicationWorkerDependencies = {
   generateCoverLetter: (
     application: ApplicationProcessingApplication,
   ) => Promise<{ coverLetterPath: string | null }>;
-  fillApplicationForm: (application: ApplicationProcessingApplication) => Promise<{ submissionUrl: string | null }>;
+  fillApplicationForm: (application: ApplicationProcessingApplication) => Promise<ApplicationFormFillOutcome>;
   submitApplication: (application: ApplicationProcessingApplication) => Promise<{ confirmationId: string | null }>;
   updateApplication: (applicationId: string, update: ApplicationProcessingUpdate) => Promise<void>;
 };
@@ -130,12 +135,25 @@ async function processQueuedApplication(
     reviewBeforeSubmit,
   });
   const form = await dependencies.fillApplicationForm(current);
+  const missingRequiredFields = normalizedMissingRequiredFields(form);
+
+  if (missingRequiredFields.length > 0 && !reviewBeforeSubmit) {
+    throw new Error(
+      `Application form is missing required fields before submission: ${missingRequiredFields.join(", ")}`,
+    );
+  }
 
   if (reviewBeforeSubmit) {
     await transitionApplication(
       current,
       "review_pending",
-      { status: "review_pending", submissionUrl: form.submissionUrl },
+      {
+        status: "review_pending",
+        submissionUrl: form.submissionUrl,
+        ...(missingRequiredFields.length > 0
+          ? { errorMessage: manualReviewRequiredMessage(missingRequiredFields) }
+          : {}),
+      },
       dependencies,
       { reviewBeforeSubmit },
     );
@@ -171,6 +189,14 @@ async function processQueuedApplication(
   });
 
   return "submitted";
+}
+
+function normalizedMissingRequiredFields(form: ApplicationFormFillOutcome): string[] {
+  return [...new Set((form.requiredMissing ?? []).map((field) => field.trim()).filter(Boolean))];
+}
+
+function manualReviewRequiredMessage(requiredMissing: string[]): string {
+  return `Manual review required for required fields: ${requiredMissing.join(", ")}`;
 }
 
 async function transitionApplication(
