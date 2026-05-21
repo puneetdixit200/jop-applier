@@ -159,3 +159,27 @@ pub struct ApplicationEvent {
     pub metadata: Value,
     pub created_at: String,
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Document {
+    pub id: String,
+    pub application_id: Option<String>,
+    #[serde(rename = "type")]
+    pub document_type: String,
+    pub file_path: String,
+    pub file_name: String,
+    pub version: i64,
+    pub ai_model_used: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UpsertDocument {
+    pub application_id: Option<String>,
+    #[serde(rename = "type")]
+    pub document_type: String,
+    pub file_path: String,
+    pub file_name: String,
+    pub version: i64,
+    pub ai_model_used: Option<String>,
+}

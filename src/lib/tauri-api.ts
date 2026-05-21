@@ -100,6 +100,19 @@ export type ApplicationEvent = {
   created_at: string;
 };
 
+export type Document = {
+  id: string;
+  application_id: string | null;
+  type: string;
+  file_path: string;
+  file_name: string;
+  version: number;
+  ai_model_used: string | null;
+  created_at: string;
+};
+
+export type UpsertDocument = Omit<Document, "id" | "created_at">;
+
 export function isDesktopRuntime() {
   return "__TAURI_INTERNALS__" in window;
 }
@@ -138,4 +151,12 @@ export async function saveApplication(application: UpsertApplication) {
 
 export async function listApplicationEvents(applicationId: string) {
   return invoke<ApplicationEvent[]>("list_application_events_command", { applicationId });
+}
+
+export async function listDocuments(applicationId: string) {
+  return invoke<Document[]>("list_documents_command", { applicationId });
+}
+
+export async function saveDocument(document: UpsertDocument) {
+  return invoke<Document>("save_document_command", { document });
 }

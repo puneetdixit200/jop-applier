@@ -4,8 +4,8 @@ use serde::Serialize;
 use thiserror::Error;
 
 use super::models::{
-    Application, ApplicationEvent, Job, Setting, SettingValue, UpsertApplication, UpsertJob,
-    UpsertSetting, UpsertUserProfile, UserProfile,
+    Application, ApplicationEvent, Document, Job, Setting, SettingValue, UpsertApplication,
+    UpsertDocument, UpsertJob, UpsertSetting, UpsertUserProfile, UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -22,6 +22,8 @@ pub enum QueryError {
     MissingJobAfterSave,
     #[error("application save did not return a row")]
     MissingApplicationAfterSave,
+    #[error("document save did not return a row")]
+    MissingDocumentAfterSave,
 }
 
 pub type QueryResult<T> = Result<T, QueryError>;
@@ -445,6 +447,84 @@ pub fn list_application_events(
         .map_err(QueryError::from)
 }
 
+pub fn list_documents(connection: &Connection, application_id: &str) -> QueryResult<Vec<Document>> {
+    let mut statement = connection.prepare(
+        "SELECT id, application_id, type, file_path, file_name, version, ai_model_used, created_at
+         FROM documents
+         WHERE application_id = ?1
+         ORDER BY created_at DESC, rowid DESC",
+    )?;
+
+    let rows = statement.query_map([application_id], document_from_row)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(QueryError::from)
+}
+
+pub fn save_document(connection: &Connection, document: UpsertDocument) -> QueryResult<Document> {
+    connection.execute(
+        "INSERT INTO documents (
+             application_id, type, file_path, file_name, version, ai_model_used
+         )
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            document.application_id,
+            document.document_type,
+            document.file_path,
+            document.file_name,
+            document.version,
+            document.ai_model_used,
+        ],
+    )?;
+
+    let saved = get_document_by_rowid(connection, connection.last_insert_rowid())?
+        .ok_or(QueryError::MissingDocumentAfterSave)?;
+
+    if let Some(application_id) = saved.application_id.as_deref() {
+        record_document_generated_event(connection, application_id, &saved)?;
+    }
+
+    Ok(saved)
+}
+
+fn get_document_by_rowid(connection: &Connection, rowid: i64) -> QueryResult<Option<Document>> {
+    let mut statement = connection.prepare(
+        "SELECT id, application_id, type, file_path, file_name, version, ai_model_used, created_at
+         FROM documents
+         WHERE rowid = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([rowid])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    document_from_row(row).map(Some).map_err(QueryError::from)
+}
+
+fn record_document_generated_event(
+    connection: &Connection,
+    application_id: &str,
+    document: &Document,
+) -> QueryResult<()> {
+    let metadata = to_json_text(&serde_json::json!({
+        "document_id": document.id,
+        "document_type": document.document_type,
+        "version": document.version,
+        "ai_model_used": document.ai_model_used,
+    }))?;
+    let description = format!(
+        "Generated {} document {}",
+        document.document_type, document.file_name
+    );
+
+    connection.execute(
+        "INSERT INTO application_events (
+             application_id, event_type, old_value, new_value, description, metadata
+         )
+         VALUES (?1, 'document_generated', NULL, ?2, ?3, ?4)",
+        params![application_id, document.file_name, description, metadata],
+    )?;
+    Ok(())
+}
+
 fn record_status_change_event(
     connection: &Connection,
     application_id: &str,
@@ -527,6 +607,19 @@ fn application_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Appli
         new_value: row.get(4)?,
         description: row.get(5)?,
         metadata,
+        created_at: row.get(7)?,
+    })
+}
+
+fn document_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Document> {
+    Ok(Document {
+        id: row.get(0)?,
+        application_id: row.get(1)?,
+        document_type: row.get(2)?,
+        file_path: row.get(3)?,
+        file_name: row.get(4)?,
+        version: row.get(5)?,
+        ai_model_used: row.get(6)?,
         created_at: row.get(7)?,
     })
 }
