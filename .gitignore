@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-sidecar/
+target/
+src-tauri/target/
+src-tauri/gen/schemas/
+data/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example

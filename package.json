@@ -1,0 +1,38 @@
+{
+  "name": "careercaveman",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "npm run build:sidecar && npm run build:frontend && npm run build:tauri-check",
+    "build:frontend": "tsc -p tsconfig.app.json && vite build",
+    "build:sidecar": "tsc -p sidecar/tsconfig.json",
+    "build:tauri-check": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "test": "npm run test:sidecar && npm run test:rust",
+    "test:sidecar": "vitest run sidecar/src",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "typecheck": "tsc -p tsconfig.app.json && tsc -p sidecar/tsconfig.json",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "lucide-react": "^0.475.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
+
