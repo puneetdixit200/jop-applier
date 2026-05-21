@@ -44,4 +44,27 @@ export type CareerEventMap = {
     reason: string;
     failedAt: Date;
   };
+  "scheduled_task.started": {
+    taskId: string;
+    taskName: string;
+    taskType: string;
+    workflowId: string;
+    startedAt: Date;
+  };
+  "scheduled_task.completed": {
+    taskId: string;
+    taskName: string;
+    taskType: string;
+    workflowId: string;
+    nextRun: string | null;
+    completedAt: Date;
+  };
+  "scheduled_task.failed": {
+    taskId: string;
+    taskName: string;
+    taskType: string;
+    workflowId: string | null;
+    reason: string;
+    failedAt: Date;
+  };
 };
