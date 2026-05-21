@@ -36,6 +36,7 @@ import {
   runExportSyncWorker,
   type ExportSyncWorkerDependencies,
 } from "./export/export-sync-worker.js";
+import { runSidecarIpc } from "./ipc/runtime-ipc.js";
 import {
   runCleanupWorker,
   type CleanupWorkerDependencies,
@@ -464,11 +465,18 @@ export function browserSessionTargetsFromEnv(env: NodeJS.ProcessEnv = process.en
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const runtime = createSidecarRuntime();
-  console.log(
-    JSON.stringify({
-      status: "ready",
-      workflows: runtime.workflowEngine.registeredWorkflows(),
-      provider: runtime.aiEngine.activeProvider(),
-    }),
-  );
+  if (process.argv.includes("--stdio")) {
+    runSidecarIpc(runtime).catch((error: unknown) => {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    });
+  } else {
+    console.log(
+      JSON.stringify({
+        status: "ready",
+        workflows: runtime.workflowEngine.registeredWorkflows(),
+        provider: runtime.aiEngine.activeProvider(),
+      }),
+    );
+  }
 }
