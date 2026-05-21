@@ -17,6 +17,7 @@ import {
   getSetting,
   getUserProfile,
   isDesktopRuntime,
+  listApplications,
   listJobs,
   listScheduledTasks,
   runDueScheduledTasks,
@@ -24,9 +25,14 @@ import {
   saveScheduledTask,
   saveSetting,
   saveUserProfile,
+  type Application,
   type UpsertUserProfile,
   type UserProfile,
 } from "./lib/tauri-api";
+import {
+  buildApplicationTracker,
+  type ApplicationTracker,
+} from "./lib/application-tracker";
 import {
   runDiscoveryControl,
   loadJobSummaries,
@@ -112,17 +118,33 @@ const previewJobs: JobSummary[] = [
   },
 ];
 
-const applications = [
-  { company: "AstraGrid", role: "React Engineer", status: "Applied", next: "Follow up Friday" },
-  { company: "Mosaic AI", role: "Product Intern", status: "Preparing", next: "Resume draft" },
-  { company: "DeltaStack", role: "Platform Engineer", status: "Queued", next: "Match review" },
-];
-
-const metrics = [
-  { label: "Matched Jobs", value: "38", tone: "green" },
-  { label: "Queued Applications", value: "12", tone: "blue" },
-  { label: "Follow-ups Due", value: "4", tone: "amber" },
-  { label: "AI Cache Hits", value: "64%", tone: "violet" },
+const previewApplications: Application[] = [
+  applicationRecord({
+    id: "preview-applied",
+    job_id: "preview-job-applied",
+    company_name: "AstraGrid",
+    job_title: "React Engineer",
+    status: "applied",
+    next_follow_up: "2026-05-23T08:00:00Z",
+    resume_path: "/preview/astra-resume.pdf",
+    cover_letter_path: "/preview/astra-cover.pdf",
+    tags: ["frontend"],
+  }),
+  applicationRecord({
+    id: "preview-preparing",
+    job_id: "preview-job-preparing",
+    company_name: "Mosaic AI",
+    job_title: "Product Intern",
+    status: "preparing",
+    tags: ["ai"],
+  }),
+  applicationRecord({
+    id: "preview-queued",
+    job_id: "preview-job-queued",
+    company_name: "DeltaStack",
+    job_title: "Platform Engineer",
+    status: "queued",
+  }),
 ];
 
 const runtimeDependencies: RuntimeControlDependencies = {
@@ -177,6 +199,7 @@ export function App() {
     discovery: defaultDiscoverySettings,
   });
   const [persistedJobs, setPersistedJobs] = useState<JobSummary[]>([]);
+  const [persistedApplications, setPersistedApplications] = useState<Application[]>([]);
   const [storageStatus, setStorageStatus] = useState("Ready");
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeControlStatus>(initialRuntimeStatus);
   const [workflowStatus, setWorkflowStatus] = useState("Idle");
@@ -188,6 +211,10 @@ export function App() {
 
   const routeTitle = useMemo(() => routes.find((item) => item.id === route)?.label ?? "Dashboard", [route]);
   const visibleJobs = persistedJobs.length > 0 ? persistedJobs : previewJobs;
+  const applicationTracker = useMemo(
+    () => buildApplicationTracker(persistedApplications.length > 0 ? persistedApplications : previewApplications),
+    [persistedApplications],
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -223,6 +250,7 @@ export function App() {
         storedFeedSources,
         storedScheduledTasks,
         storedJobs,
+        storedApplications,
       ] = await Promise.all([
         getUserProfile(),
         getSetting("ai.provider"),
@@ -233,6 +261,7 @@ export function App() {
         getSetting("discovery.feedSources"),
         loadOrSeedScheduledTasks({ listScheduledTasks, saveScheduledTask }),
         listJobs(),
+        listApplications(),
       ]);
 
       if (storedProfile) {
@@ -240,6 +269,9 @@ export function App() {
       }
       if (storedJobs.length > 0) {
         setPersistedJobs(await loadJobSummaries(() => Promise.resolve(storedJobs)));
+      }
+      if (storedApplications.length > 0) {
+        setPersistedApplications(storedApplications);
       }
       setScheduleSummaries(scheduledTaskSummaries(storedScheduledTasks, 8));
       setSettings((current) => ({
@@ -391,10 +423,11 @@ export function App() {
             storageStatus={storageStatus}
             jobs={visibleJobs}
             schedules={scheduleSummaries}
+            applicationTracker={applicationTracker}
           />
         )}
         {route === "jobs" && <Jobs jobs={visibleJobs} />}
-        {route === "applications" && <Applications />}
+        {route === "applications" && <Applications tracker={applicationTracker} />}
         {route === "profile" && (
           <ProfileEditor profile={profile} onChange={setProfile} onStatusChange={setStorageStatus} />
         )}
@@ -413,6 +446,7 @@ function Dashboard({
   storageStatus,
   jobs,
   schedules,
+  applicationTracker,
 }: {
   provider: string;
   runtimeStatus: RuntimeControlStatus;
@@ -420,7 +454,15 @@ function Dashboard({
   storageStatus: string;
   jobs: JobSummary[];
   schedules: ScheduledTaskSummary[];
+  applicationTracker: ApplicationTracker;
 }) {
+  const metrics = [
+    { label: "Matched Jobs", value: String(jobs.length), tone: "green" },
+    { label: "Queued Applications", value: String(applicationTracker.metrics.queued), tone: "blue" },
+    { label: "Follow-ups Due", value: String(applicationTracker.metrics.followUpsDue), tone: "amber" },
+    { label: "Active Applications", value: String(applicationTracker.metrics.active), tone: "violet" },
+  ];
+
   return (
     <div className="dashboard-grid">
       <section className="metric-grid" aria-label="Application metrics">
@@ -534,7 +576,7 @@ function Jobs({ jobs }: { jobs: JobSummary[] }) {
   );
 }
 
-function Applications() {
+function Applications({ tracker }: { tracker: ApplicationTracker }) {
   return (
     <section className="panel full">
       <div className="panel-heading">
@@ -543,13 +585,40 @@ function Applications() {
           <h3>Application CRM</h3>
         </div>
       </div>
+      <div className="tracker-summary" aria-label="Application tracker summary">
+        <span>
+          Total <strong>{tracker.metrics.total}</strong>
+        </span>
+        <span>
+          Active <strong>{tracker.metrics.active}</strong>
+        </span>
+        <span>
+          Follow-ups due <strong>{tracker.metrics.followUpsDue}</strong>
+        </span>
+      </div>
+      <div className="tracker-lanes" aria-label="Application status columns">
+        {tracker.columns.map((column) => (
+          <section className="tracker-lane" key={column.id}>
+            <div className="tracker-lane-heading">
+              <span>{column.label}</span>
+              <strong>{column.count}</strong>
+            </div>
+            <ul>
+              {column.rows.slice(0, 2).map((application) => (
+                <li key={application.id}>{application.company}</li>
+              ))}
+              {column.rows.length === 0 && <li className="empty-lane">No applications</li>}
+            </ul>
+          </section>
+        ))}
+      </div>
       <div className="table-list">
-        {applications.map((application) => (
-          <div className="table-row" key={`${application.company}-${application.role}`}>
+        {tracker.rows.map((application) => (
+          <div className="table-row application-row" key={application.id}>
             <span>{application.company}</span>
             <span>{application.role}</span>
-            <span>{application.status}</span>
-            <strong>{application.next}</strong>
+            <span>{application.statusLabel} · {application.documentLabel}</span>
+            <strong>{application.nextAction}</strong>
           </div>
         ))}
       </div>
@@ -844,4 +913,32 @@ function splitList(value: string) {
 function nullableText(value: string) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function applicationRecord(overrides: Partial<Application>): Application {
+  return {
+    id: "preview-application",
+    job_id: "preview-job",
+    job_title: "Application",
+    company_name: "Company",
+    status: "queued",
+    mode: "semi-auto",
+    resume_path: null,
+    cover_letter_path: null,
+    last_follow_up: null,
+    follow_up_count: 0,
+    next_follow_up: null,
+    response_date: null,
+    response_type: null,
+    response_notes: null,
+    submitted_at: null,
+    submission_url: null,
+    confirmation_id: null,
+    error_message: null,
+    retry_count: 0,
+    max_retries: 3,
+    notes: null,
+    tags: [],
+    ...overrides,
+  };
 }
