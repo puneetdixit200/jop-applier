@@ -7,6 +7,7 @@ import type {
   RawJobListing,
   SearchQuery,
 } from "./connectors/connector-interface.js";
+import type { MatchRules } from "./matching/rule-matcher.js";
 import type { DiscoveryMatchResult } from "./job-persistence.js";
 
 class InMemoryConnector implements JobConnector {
@@ -29,9 +30,10 @@ class InMemoryConnector implements JobConnector {
   }
 
   async getJobDetails(url: string): Promise<RawJobDetails> {
+    const listing = this.listings.find((candidate) => candidate.url === url);
     return {
       url,
-      description: `Detailed posting for ${url}`,
+      description: listing?.description ?? `Detailed posting for ${url}`,
       requirements: ["React", "TypeScript"],
       rawHtml: "<main>Detailed posting</main>",
     };
@@ -144,6 +146,43 @@ describe("DiscoveryManager", () => {
         company_name: "Northstar Labs",
         match_score: 91,
         ai_priority: "high",
+      }),
+    ]);
+  });
+
+  it("filters persistence payloads with rule matching when rules are provided", async () => {
+    const frontendListing: RawJobListing = {
+      sourceId: "linkedin-1",
+      platform: "linkedin",
+      url: "https://linkedin.example/jobs/1",
+      title: "Frontend Engineer Intern",
+      company: "Northstar Labs",
+      location: "Remote",
+    };
+    const seniorListing: RawJobListing = {
+      sourceId: "linkedin-2",
+      platform: "linkedin",
+      url: "https://linkedin.example/jobs/2",
+      title: "Senior Frontend Engineer",
+      company: "Northstar Labs",
+      location: "Remote",
+      description: "Requires React, TypeScript, and 10+ years of experience.",
+    };
+    const rules: MatchRules = {
+      mustHaveKeywords: ["React", "TypeScript"],
+      mustNotHaveKeywords: ["10+ years"],
+      locations: [],
+      remoteOnly: true,
+      maxExperienceYears: 2,
+      companyBlacklist: [],
+      companyWhitelist: [],
+    };
+    const manager = new DiscoveryManager([new InMemoryConnector("linkedin", [frontendListing, seniorListing])]);
+
+    await expect(manager.searchForPersistence({ keywords: ["frontend"] }, {}, rules)).resolves.toEqual([
+      expect.objectContaining({
+        source_id: "linkedin-1",
+        title: "Frontend Engineer Intern",
       }),
     ]);
   });

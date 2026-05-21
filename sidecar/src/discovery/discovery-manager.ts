@@ -11,6 +11,7 @@ import {
   type DiscoveryMatchResult,
   type UpsertJobPayload,
 } from "./job-persistence.js";
+import { filterJobsByRules, type MatchRules } from "./matching/rule-matcher.js";
 
 export type DiscoveredJob = {
   listing: RawJobListing;
@@ -55,8 +56,10 @@ export class DiscoveryManager {
   async searchForPersistence(
     query: SearchQuery,
     matchesByUrl: Record<string, DiscoveryMatchResult> = {},
+    rules?: MatchRules,
   ): Promise<UpsertJobPayload[]> {
-    return mapDiscoveredJobsToUpsertJobs(await this.search(query), matchesByUrl);
+    const jobs = mapDiscoveredJobsToUpsertJobs(await this.search(query), matchesByUrl);
+    return rules ? filterJobsByRules(jobs, rules).map((result) => result.job) : jobs;
   }
 
   private enabledConnectors(query: SearchQuery): JobConnector[] {
