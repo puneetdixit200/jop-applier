@@ -67,4 +67,14 @@ export type CareerEventMap = {
     reason: string;
     failedAt: Date;
   };
+  "browser.session.healthy": {
+    platform: string;
+    message: string;
+    checkedAt: Date;
+  };
+  "browser.session.unhealthy": {
+    platform: string;
+    reason: string;
+    checkedAt: Date;
+  };
 };
