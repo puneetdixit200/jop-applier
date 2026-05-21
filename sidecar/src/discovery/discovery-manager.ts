@@ -6,6 +6,11 @@ import type {
   SearchQuery,
 } from "./connectors/connector-interface.js";
 import { deduplicateListings } from "./deduplicator.js";
+import {
+  mapDiscoveredJobsToUpsertJobs,
+  type DiscoveryMatchResult,
+  type UpsertJobPayload,
+} from "./job-persistence.js";
 
 export type DiscoveredJob = {
   listing: RawJobListing;
@@ -47,6 +52,13 @@ export class DiscoveryManager {
     return Object.fromEntries(entries);
   }
 
+  async searchForPersistence(
+    query: SearchQuery,
+    matchesByUrl: Record<string, DiscoveryMatchResult> = {},
+  ): Promise<UpsertJobPayload[]> {
+    return mapDiscoveredJobsToUpsertJobs(await this.search(query), matchesByUrl);
+  }
+
   private enabledConnectors(query: SearchQuery): JobConnector[] {
     if (!query.companies && !query.excludeCompanies) {
       return this.connectors;
@@ -63,4 +75,3 @@ export class DiscoveryManager {
     return connector;
   }
 }
-

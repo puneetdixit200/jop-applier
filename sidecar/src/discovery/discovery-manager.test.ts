@@ -7,6 +7,7 @@ import type {
   RawJobListing,
   SearchQuery,
 } from "./connectors/connector-interface.js";
+import type { DiscoveryMatchResult } from "./job-persistence.js";
 
 class InMemoryConnector implements JobConnector {
   readonly name: string;
@@ -115,5 +116,35 @@ describe("DiscoveryManager", () => {
       linkedin: { ok: true, message: "ready" },
     });
   });
-});
 
+  it("maps discovered jobs into persistence payloads", async () => {
+    const listing: RawJobListing = {
+      sourceId: "linkedin-1",
+      platform: "linkedin",
+      url: "https://linkedin.example/jobs/1",
+      title: "Frontend Engineer Intern",
+      company: "Northstar Labs",
+      location: "Remote",
+    };
+    const match: DiscoveryMatchResult = {
+      score: 91,
+      reasoning: "Strong match",
+      matchedSkills: ["React"],
+      missingSkills: [],
+      tags: ["good-fit"],
+      priority: "high",
+    };
+    const manager = new DiscoveryManager([new InMemoryConnector("linkedin", [listing])]);
+
+    await expect(manager.searchForPersistence({ keywords: ["frontend"] }, { [listing.url]: match })).resolves.toEqual([
+      expect.objectContaining({
+        source_id: "linkedin-1",
+        platform: "linkedin",
+        title: "Frontend Engineer Intern",
+        company_name: "Northstar Labs",
+        match_score: 91,
+        ai_priority: "high",
+      }),
+    ]);
+  });
+});
