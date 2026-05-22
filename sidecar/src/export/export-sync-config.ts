@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { FetchLike } from "../ai/providers/http.js";
 import type {
   ExporterPlugin,
@@ -20,13 +22,20 @@ export type GoogleSheetsExporterConfig = {
   range?: string;
 };
 
+export type CsvExporterConfig = {
+  enabled: boolean;
+  outputPath: string;
+};
+
 export type NotionExporterFactory = (config: NotionExporterConfig) => ExporterPlugin;
 export type GoogleSheetsExporterFactory = (config: GoogleSheetsExporterConfig) => ExporterPlugin;
+export type CsvExporterFactory = (config: CsvExporterConfig) => ExporterPlugin;
 
 export type ConfiguredExportSyncOptions = {
   fallback: ExportSyncWorkerDependencies;
   createNotionExporter?: NotionExporterFactory;
   createGoogleSheetsExporter?: GoogleSheetsExporterFactory;
+  createCsvExporter?: CsvExporterFactory;
 };
 
 export function createExportSyncDependenciesFromWorkflowInput(
@@ -42,6 +51,7 @@ export function createExportSyncDependenciesFromWorkflowInput(
   const configuredExporters: ExporterPlugin[] = [];
   const notion = notionExporterConfig(exportSync.notion);
   const googleSheets = googleSheetsExporterConfig(exportSync.googleSheets);
+  const csv = csvExporterConfig(exportSync.csv);
 
   if (notion) {
     configuredExporters.push(
@@ -51,6 +61,11 @@ export function createExportSyncDependenciesFromWorkflowInput(
   if (googleSheets) {
     configuredExporters.push(
       (options.createGoogleSheetsExporter ?? createGoogleSheetsExporter)(googleSheets),
+    );
+  }
+  if (csv) {
+    configuredExporters.push(
+      (options.createCsvExporter ?? createCsvExporter)(csv),
     );
   }
 
@@ -144,6 +159,23 @@ export function createGoogleSheetsExporter(
   };
 }
 
+export function createCsvExporter(config: CsvExporterConfig): ExporterPlugin {
+  return {
+    id: "csv",
+    name: "CSV",
+    isEnabled: config.enabled && config.outputPath.trim().length > 0,
+    sync: async (payload) => {
+      await mkdir(dirname(config.outputPath), { recursive: true });
+      await writeFile(config.outputPath, csvRows(payload), "utf8");
+
+      return {
+        recordsWritten: payload.applications.length + (payload.analytics ? 1 : 0),
+        externalUrl: `file://${config.outputPath}`,
+      };
+    },
+  };
+}
+
 function exportSyncPayload(value: unknown): ExportSyncPayloadInput | null {
   if (!isRecord(value)) {
     return null;
@@ -184,6 +216,17 @@ function googleSheetsExporterConfig(value: unknown): GoogleSheetsExporterConfig 
     accessToken: nonEmptyString(value.accessToken) ?? undefined,
     apiKey: nonEmptyString(value.apiKey) ?? undefined,
     range: nonEmptyString(value.range) ?? undefined,
+  };
+}
+
+function csvExporterConfig(value: unknown): CsvExporterConfig | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    enabled: booleanValue(value.enabled),
+    outputPath: nonEmptyString(value.outputPath) ?? "",
   };
 }
 
@@ -294,6 +337,18 @@ function googleSheetsRows(payload: ExportSyncPayload): string[][] {
   }
 
   return rows;
+}
+
+function csvRows(payload: ExportSyncPayload): string {
+  return `${googleSheetsRows(payload).map((row) => row.map(csvCell).join(",")).join("\n")}\n`;
+}
+
+function csvCell(value: string): string {
+  if (!/[",\n\r]/.test(value)) {
+    return value;
+  }
+
+  return `"${value.replaceAll("\"", "\"\"")}"`;
 }
 
 function textValue(value: unknown, fallback: string): string {

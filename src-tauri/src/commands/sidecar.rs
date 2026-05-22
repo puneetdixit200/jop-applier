@@ -735,6 +735,9 @@ fn export_sync_workflow_params_from_settings(connection: &Connection) -> Result<
         if let Some(google_sheets) = google_sheets_export_settings(&export_config) {
             export_sync.insert("googleSheets".to_string(), Value::Object(google_sheets));
         }
+        if let Some(csv) = csv_export_settings(&export_config) {
+            export_sync.insert("csv".to_string(), Value::Object(csv));
+        }
     }
 
     if export_sync.is_empty() {
@@ -833,6 +836,23 @@ fn google_sheets_export_settings(config: &Map<String, Value>) -> Option<Map<Stri
     insert_string_config(&mut google_sheets, "apiKey", api_key);
     insert_string_config(&mut google_sheets, "range", range);
     Some(google_sheets)
+}
+
+fn csv_export_settings(config: &Map<String, Value>) -> Option<Map<String, Value>> {
+    let enabled = config
+        .get("csvEnabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let output_path = non_empty_config_string(config, "csvOutputPath");
+
+    if !enabled && output_path.is_none() {
+        return None;
+    }
+
+    let mut csv = Map::new();
+    csv.insert("enabled".to_string(), json!(enabled));
+    insert_string_config(&mut csv, "outputPath", output_path);
+    Some(csv)
 }
 
 fn insert_string_config(target: &mut Map<String, Value>, key: &str, value: Option<String>) {

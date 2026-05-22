@@ -113,7 +113,9 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
                 "googleSheetsEnabled": true,
                 "googleSheetsId": "sheet-1",
                 "googleSheetsAccessToken": "ya29-token",
-                "googleSheetsRange": "Applications!A1"
+                "googleSheetsRange": "Applications!A1",
+                "csvEnabled": true,
+                "csvOutputPath": "/tmp/careercaveman-applications.csv"
             })),
         },
     )
@@ -143,11 +145,11 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
             "id": "workflow-export-sync",
             "ok": true,
             "result": {
-                "exporters": 2,
-                "succeeded": 2,
+                "exporters": 3,
+                "succeeded": 3,
                 "failed": 0,
                 "skipped": 0,
-                "recordsWritten": 4,
+                "recordsWritten": 6,
                 "runs": [
                     {
                         "exporterId": "notion",
@@ -163,6 +165,14 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
                         "status": "completed",
                         "recordsWritten": 2,
                         "externalUrl": "https://docs.google.com/spreadsheets/d/sheet-1",
+                        "syncedAt": "2026-05-29T06:00:00.000Z"
+                    },
+                    {
+                        "exporterId": "csv",
+                        "exporterName": "CSV",
+                        "status": "completed",
+                        "recordsWritten": 2,
+                        "externalUrl": "file:///tmp/careercaveman-applications.csv",
                         "syncedAt": "2026-05-29T06:00:00.000Z"
                     }
                 ]
@@ -234,6 +244,13 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
             "range": "Applications!A1"
         })
     );
+    assert_eq!(
+        request["params"]["exportSync"]["csv"],
+        json!({
+            "enabled": true,
+            "outputPath": "/tmp/careercaveman-applications.csv"
+        })
+    );
 
     let setting = get_setting(&connection, "export.latestRuns")
         .expect("read export runs setting")
@@ -243,9 +260,10 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
         SettingValue::Object(serde_json::Value::Array(runs)) => runs,
         other => panic!("expected export run array, got {other:?}"),
     };
-    assert_eq!(runs.len(), 2);
+    assert_eq!(runs.len(), 3);
     assert_eq!(runs[0]["exporterId"], json!("notion"));
     assert_eq!(runs[1]["exporterId"], json!("google-sheets"));
+    assert_eq!(runs[2]["exporterId"], json!("csv"));
 }
 
 fn capture_request_sidecar_with_result(
