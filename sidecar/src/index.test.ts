@@ -430,6 +430,67 @@ describe("sidecar runtime", () => {
     }
   });
 
+  it("runs configured career page sources through the job-discovery workflow", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const requestUrl = String(url);
+      if (requestUrl === "https://northstar.example/careers") {
+        return new Response(`
+          <script type="application/ld+json">
+            {
+              "@type": "JobPosting",
+              "identifier": "react-intern",
+              "title": "React Intern",
+              "url": "/jobs/react-intern",
+              "jobLocationType": "TELECOMMUTE",
+              "description": "React internship"
+            }
+          </script>
+        `);
+      }
+      if (requestUrl === "https://northstar.example/jobs/react-intern") {
+        return new Response("<main><p>React internship</p><ul><li>React</li></ul></main>");
+      }
+
+      throw new Error(`unexpected fetch: ${requestUrl}`);
+    }) as typeof fetch;
+
+    try {
+      const runtime = createSidecarRuntime();
+
+      await expect(
+        runtime.workflowEngine.run("job-discovery", {
+          discovery: {
+            searchQueries: [{ keywords: ["React"], remote: true }],
+            careerPageSources: [
+              {
+                id: "northstar-careers",
+                company: "Northstar Labs",
+                url: "https://northstar.example/careers",
+              },
+            ],
+          },
+        }),
+      ).resolves.toMatchObject({
+        queries: 1,
+        discovered: 1,
+        jobs: [
+          {
+            source_id: "northstar-careers:react-intern",
+            platform: "company-career-page",
+            url: "https://northstar.example/jobs/react-intern",
+            title: "React Intern",
+            company_name: "Northstar Labs",
+            is_remote: true,
+            requirements: ["React"],
+          },
+        ],
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("runs due follow-up scheduled tasks through the follow-up workflow", async () => {
     const checkedAt = new Date("2026-05-28T09:00:00Z");
     const dueApplication: FollowUpApplication = {

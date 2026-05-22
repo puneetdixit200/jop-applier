@@ -20,6 +20,7 @@ export type DiscoveredJob = {
 
 export class DiscoveryManager {
   private readonly connectors: JobConnector[];
+  private readonly connectorByListingUrl = new Map<string, JobConnector>();
 
   constructor(connectors: JobConnector[]) {
     this.connectors = connectors;
@@ -30,6 +31,7 @@ export class DiscoveryManager {
 
     for (const connector of this.enabledConnectors(query)) {
       for await (const listing of connector.search(query)) {
+        this.connectorByListingUrl.set(listing.url, connector);
         listings.push(listing);
       }
     }
@@ -71,6 +73,11 @@ export class DiscoveryManager {
   }
 
   private connectorForListing(listing: RawJobListing): JobConnector {
+    const exactConnector = this.connectorByListingUrl.get(listing.url);
+    if (exactConnector) {
+      return exactConnector;
+    }
+
     const connector = this.connectors.find((candidate) => candidate.platform === listing.platform);
     if (!connector) {
       throw new Error(`No connector registered for platform: ${listing.platform}`);

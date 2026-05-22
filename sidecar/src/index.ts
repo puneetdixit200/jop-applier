@@ -57,6 +57,10 @@ import {
 } from "./discovery/job-discovery-workflow.js";
 import type { JobConnector, SearchQuery } from "./discovery/connectors/connector-interface.js";
 import { DiscoveryManager } from "./discovery/discovery-manager.js";
+import {
+  CareerPageConnector,
+  type CareerPageSource,
+} from "./discovery/connectors/career-page-connector.js";
 import { GreenhouseConnector } from "./discovery/connectors/greenhouse-connector.js";
 import {
   HttpJsonFeedConnector,
@@ -581,6 +585,9 @@ function discoveryConnectorsFromWorkflowInput(input: unknown): JobConnector[] {
       }
       return new LeverConnector({ company: source.company });
     }),
+    ...discoveryCareerPageSourcesFromWorkflowInput(input.discovery).map(
+      (source) => new CareerPageConnector(source),
+    ),
   ];
 }
 
@@ -604,6 +611,17 @@ function discoveryAtsSourcesFromWorkflowInput(discovery: Record<string, unknown>
   }
 
   return atsSources.filter(isDiscoveryAtsSource);
+}
+
+function discoveryCareerPageSourcesFromWorkflowInput(
+  discovery: Record<string, unknown>,
+): CareerPageSource[] {
+  const { careerPageSources } = discovery;
+  if (!Array.isArray(careerPageSources)) {
+    return [];
+  }
+
+  return careerPageSources.filter(isCareerPageSource);
 }
 
 function createConnectorDiscoveryDependencies(
@@ -644,6 +662,20 @@ function isDiscoveryAtsSource(value: unknown): value is DiscoveryAtsSource {
   }
 
   return false;
+}
+
+function isCareerPageSource(value: unknown): value is CareerPageSource {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    value.id.trim().length > 0 &&
+    typeof value.url === "string" &&
+    value.url.trim().length > 0 &&
+    (value.name === undefined || typeof value.name === "string") &&
+    (value.company === undefined || typeof value.company === "string") &&
+    (value.platform === undefined || typeof value.platform === "string") &&
+    (value.headers === undefined || isStringRecord(value.headers))
+  );
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {

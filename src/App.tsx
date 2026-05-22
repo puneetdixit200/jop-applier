@@ -482,6 +482,8 @@ export function App() {
         storedLimit,
         storedSearchQueries,
         storedFeedSources,
+        storedAtsSources,
+        storedCareerPageSources,
         storedEmailAccount,
         storedEmailCheck,
         storedScheduledTasks,
@@ -497,6 +499,8 @@ export function App() {
         getSetting("application.maxDailyApplications"),
         getSetting("discovery.searchQueries"),
         getSetting("discovery.feedSources"),
+        getSetting("discovery.atsSources"),
+        getSetting("discovery.careerPageSources"),
         getSetting("email.account"),
         getSetting("email.check"),
         loadOrSeedScheduledTasks({ listScheduledTasks, saveScheduledTask }),
@@ -531,6 +535,8 @@ export function App() {
         discovery: discoverySettingsFromStoredValues(
           storedSearchQueries?.value,
           storedFeedSources?.value,
+          storedAtsSources?.value,
+          storedCareerPageSources?.value,
           current.discovery,
         ),
         email: emailSettingsFromStoredValues(
@@ -1623,6 +1629,16 @@ function SettingsPanel({
           category: "discovery",
         }),
         saveSetting({
+          key: "discovery.atsSources",
+          value: discoveryValues.atsSources,
+          category: "discovery",
+        }),
+        saveSetting({
+          key: "discovery.careerPageSources",
+          value: discoveryValues.careerPageSources,
+          category: "discovery",
+        }),
+        saveSetting({
           key: "email.account",
           value: emailValues.account,
           category: "email",
@@ -1714,6 +1730,45 @@ function SettingsPanel({
             <input
               value={settings.discovery.feedSourceName}
               onChange={(event) => updateDiscovery("feedSourceName", event.target.value)}
+            />
+          </label>
+        </div>
+      </fieldset>
+      <fieldset className="settings-section">
+        <legend>ATS sources</legend>
+        <div className="settings-grid">
+          <label>
+            Greenhouse board token
+            <input
+              value={settings.discovery.greenhouseBoardToken}
+              onChange={(event) => updateDiscovery("greenhouseBoardToken", event.target.value)}
+            />
+          </label>
+          <label>
+            Lever company
+            <input
+              value={settings.discovery.leverCompany}
+              onChange={(event) => updateDiscovery("leverCompany", event.target.value)}
+            />
+          </label>
+        </div>
+      </fieldset>
+      <fieldset className="settings-section">
+        <legend>Company career page</legend>
+        <div className="settings-grid">
+          <label>
+            Career page URL
+            <input
+              type="url"
+              value={settings.discovery.careerPageUrl}
+              onChange={(event) => updateDiscovery("careerPageUrl", event.target.value)}
+            />
+          </label>
+          <label>
+            Company name
+            <input
+              value={settings.discovery.careerPageCompany}
+              onChange={(event) => updateDiscovery("careerPageCompany", event.target.value)}
             />
           </label>
         </div>

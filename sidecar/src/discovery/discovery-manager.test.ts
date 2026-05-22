@@ -31,9 +31,13 @@ class InMemoryConnector implements JobConnector {
 
   async getJobDetails(url: string): Promise<RawJobDetails> {
     const listing = this.listings.find((candidate) => candidate.url === url);
+    if (!listing) {
+      throw new Error(`${this.name} cannot load ${url}`);
+    }
+
     return {
       url,
-      description: listing?.description ?? `Detailed posting for ${url}`,
+      description: listing.description ?? `Detailed posting for ${url}`,
       requirements: ["React", "TypeScript"],
       rawHtml: "<main>Detailed posting</main>",
     };
@@ -117,6 +121,40 @@ describe("DiscoveryManager", () => {
     await expect(manager.health()).resolves.toEqual({
       linkedin: { ok: true, message: "ready" },
     });
+  });
+
+  it("loads details from the connector instance that returned the listing", async () => {
+    const atlasListing: RawJobListing = {
+      sourceId: "atlas-1",
+      platform: "company-career-page",
+      url: "https://atlas.example/jobs/1",
+      title: "Frontend Engineer",
+      company: "Atlas",
+      location: "Remote",
+    };
+    const northstarListing: RawJobListing = {
+      sourceId: "northstar-1",
+      platform: "company-career-page",
+      url: "https://northstar.example/jobs/1",
+      title: "Backend Engineer",
+      company: "Northstar",
+      location: "Remote",
+    };
+    const manager = new DiscoveryManager([
+      new InMemoryConnector("company-career-page", [atlasListing]),
+      new InMemoryConnector("company-career-page", [northstarListing]),
+    ]);
+
+    await expect(manager.search({ keywords: ["engineer"] })).resolves.toEqual([
+      expect.objectContaining({
+        listing: atlasListing,
+        details: expect.objectContaining({ url: atlasListing.url }),
+      }),
+      expect.objectContaining({
+        listing: northstarListing,
+        details: expect.objectContaining({ url: northstarListing.url }),
+      }),
+    ]);
   });
 
   it("maps discovered jobs into persistence payloads", async () => {

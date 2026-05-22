@@ -9,11 +9,17 @@ export type DiscoverySettings = {
   feedSourceUrl: string;
   feedSourcePlatform: string;
   feedSourceName: string;
+  greenhouseBoardToken: string;
+  leverCompany: string;
+  careerPageUrl: string;
+  careerPageCompany: string;
 };
 
 export type SerializedDiscoverySettings = {
   searchQueries: Array<Record<string, unknown>>;
   feedSources: Array<Record<string, unknown>>;
+  atsSources: Array<Record<string, unknown>>;
+  careerPageSources: Array<Record<string, unknown>>;
 };
 
 export const defaultDiscoverySettings: DiscoverySettings = {
@@ -23,17 +29,28 @@ export const defaultDiscoverySettings: DiscoverySettings = {
   feedSourceUrl: "",
   feedSourcePlatform: "custom",
   feedSourceName: "Custom JSON feed",
+  greenhouseBoardToken: "",
+  leverCompany: "",
+  careerPageUrl: "",
+  careerPageCompany: "",
 };
 
 export function discoverySettingsFromStoredValues(
   searchQueriesValue: SettingValue | undefined | null,
   feedSourcesValue: SettingValue | undefined | null,
+  atsSourcesValue: SettingValue | undefined | null = null,
+  careerPageSourcesValue: SettingValue | undefined | null = null,
   fallback: DiscoverySettings = defaultDiscoverySettings,
 ): DiscoverySettings {
   const searchQuery = firstSearchQuery(searchQueriesValue);
   const feedSource = firstFeedSource(feedSourcesValue);
+  const greenhouseSource = firstAtsSource(atsSourcesValue, "greenhouse");
+  const leverSource = firstAtsSource(atsSourcesValue, "lever");
+  const careerPageSource = firstCareerPageSource(careerPageSourcesValue);
   const hasStoredSearchQueries = Array.isArray(searchQueriesValue);
   const hasStoredFeedSources = Array.isArray(feedSourcesValue);
+  const hasStoredAtsSources = Array.isArray(atsSourcesValue);
+  const hasStoredCareerPageSources = Array.isArray(careerPageSourcesValue);
 
   return {
     searchKeywords: searchQuery
@@ -46,6 +63,11 @@ export function discoverySettingsFromStoredValues(
     feedSourceUrl: feedSource?.url ?? (hasStoredFeedSources ? "" : fallback.feedSourceUrl),
     feedSourcePlatform: textOrFallback(feedSource?.platform, fallback.feedSourcePlatform),
     feedSourceName: textOrFallback(feedSource?.name, fallback.feedSourceName),
+    greenhouseBoardToken:
+      greenhouseSource?.boardToken ?? (hasStoredAtsSources ? "" : fallback.greenhouseBoardToken),
+    leverCompany: leverSource?.company ?? (hasStoredAtsSources ? "" : fallback.leverCompany),
+    careerPageUrl: careerPageSource?.url ?? (hasStoredCareerPageSources ? "" : fallback.careerPageUrl),
+    careerPageCompany: textOrFallback(careerPageSource?.company, fallback.careerPageCompany),
   };
 }
 
@@ -54,6 +76,10 @@ export function discoverySettingsToStoredValues(
 ): SerializedDiscoverySettings {
   const keywords = splitKeywords(settings.searchKeywords);
   const feedSourceUrl = settings.feedSourceUrl.trim();
+  const greenhouseBoardToken = settings.greenhouseBoardToken.trim();
+  const leverCompany = settings.leverCompany.trim();
+  const careerPageUrl = settings.careerPageUrl.trim();
+  const careerPageCompany = settings.careerPageCompany.trim();
   const searchQueries =
     keywords.length > 0
       ? [
@@ -75,8 +101,22 @@ export function discoverySettingsToStoredValues(
           },
         ]
       : [];
+  const atsSources = [
+    ...(greenhouseBoardToken ? [{ type: "greenhouse", boardToken: greenhouseBoardToken }] : []),
+    ...(leverCompany ? [{ type: "lever", company: leverCompany }] : []),
+  ];
+  const careerPageSources =
+    careerPageUrl.length > 0
+      ? [
+          {
+            id: sourceIdFromText(careerPageCompany || careerPageUrl, "career-page"),
+            ...(careerPageCompany ? { company: careerPageCompany } : {}),
+            url: careerPageUrl,
+          },
+        ]
+      : [];
 
-  return { searchQueries, feedSources };
+  return { searchQueries, feedSources, atsSources, careerPageSources };
 }
 
 function splitKeywords(value: string) {
@@ -100,6 +140,24 @@ function firstFeedSource(value: SettingValue | undefined | null) {
   }
 
   return value.find(isFeedSource) ?? null;
+}
+
+function firstAtsSource(value: SettingValue | undefined | null, type: "greenhouse" | "lever") {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value.find((source): source is { type: typeof type; boardToken?: string; company?: string } =>
+    isAtsSource(source, type),
+  ) ?? null;
+}
+
+function firstCareerPageSource(value: SettingValue | undefined | null) {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value.find(isCareerPageSource) ?? null;
 }
 
 function isSearchQuery(value: unknown): value is {
@@ -130,6 +188,32 @@ function isFeedSource(value: unknown): value is {
   );
 }
 
+function isAtsSource(
+  value: unknown,
+  type: "greenhouse" | "lever",
+): value is { type: typeof type; boardToken?: string; company?: string } {
+  if (!isRecord(value) || value.type !== type) {
+    return false;
+  }
+  if (type === "greenhouse") {
+    return typeof value.boardToken === "string";
+  }
+
+  return typeof value.company === "string";
+}
+
+function isCareerPageSource(value: unknown): value is {
+  url: string;
+  company?: string;
+} {
+  return (
+    isRecord(value) &&
+    typeof value.url === "string" &&
+    value.url.trim().length > 0 &&
+    (value.company === undefined || typeof value.company === "string")
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -137,4 +221,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function textOrFallback(value: string | undefined, fallback: string) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : fallback;
+}
+
+function sourceIdFromText(value: string, fallback: string) {
+  const id = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return id || fallback;
 }

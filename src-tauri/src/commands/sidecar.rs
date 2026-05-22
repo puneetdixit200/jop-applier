@@ -516,6 +516,14 @@ fn discovery_workflow_params_from_settings(connection: &Connection) -> Result<Va
     if let Some(ats_sources) = discovery_setting_array(connection, "discovery.atsSources")? {
         discovery.insert("atsSources".to_string(), Value::Array(ats_sources));
     }
+    if let Some(career_page_sources) =
+        discovery_setting_array(connection, "discovery.careerPageSources")?
+    {
+        discovery.insert(
+            "careerPageSources".to_string(),
+            Value::Array(career_page_sources),
+        );
+    }
 
     if discovery.is_empty() {
         Ok(json!({}))

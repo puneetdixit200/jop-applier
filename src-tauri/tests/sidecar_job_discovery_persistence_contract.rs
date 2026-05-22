@@ -93,6 +93,19 @@ fn sends_discovery_search_queries_from_settings_to_sidecar() {
         },
     )
     .expect("save discovery ATS source setting");
+    upsert_setting(
+        &connection,
+        UpsertSetting {
+            key: "discovery.careerPageSources".to_string(),
+            category: Some("discovery".to_string()),
+            value: SettingValue::Array(vec![json!({
+                "id": "northstar-careers",
+                "company": "Northstar Labs",
+                "url": "https://northstar.example/careers"
+            })]),
+        },
+    )
+    .expect("save discovery career page source setting");
     let request_path = std::env::temp_dir().join(format!(
         "careercaveman-sidecar-request-{}.json",
         std::process::id()
@@ -136,6 +149,14 @@ fn sends_discovery_search_queries_from_settings_to_sidecar() {
                 "company": "atlas"
             }
         ])
+    );
+    assert_eq!(
+        request["params"]["discovery"]["careerPageSources"],
+        json!([{
+            "id": "northstar-careers",
+            "company": "Northstar Labs",
+            "url": "https://northstar.example/careers"
+        }])
     );
 }
 

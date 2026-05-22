@@ -16,6 +16,17 @@ describe("discovery settings", () => {
           url: "https://feeds.example/jobs.json",
         },
       ],
+      [
+        { type: "greenhouse", boardToken: "northstar" },
+        { type: "lever", company: "atlas" },
+      ],
+      [
+        {
+          id: "northstar-careers",
+          company: "Northstar Labs",
+          url: "https://northstar.example/careers",
+        },
+      ],
     );
 
     expect(settings).toEqual({
@@ -25,6 +36,10 @@ describe("discovery settings", () => {
       feedSourceUrl: "https://feeds.example/jobs.json",
       feedSourcePlatform: "greenhouse",
       feedSourceName: "Curated internships",
+      greenhouseBoardToken: "northstar",
+      leverCompany: "atlas",
+      careerPageUrl: "https://northstar.example/careers",
+      careerPageCompany: "Northstar Labs",
     });
   });
 
@@ -36,6 +51,10 @@ describe("discovery settings", () => {
       feedSourceUrl: "https://feeds.example/jobs.json",
       feedSourcePlatform: "greenhouse",
       feedSourceName: "Curated internships",
+      greenhouseBoardToken: "northstar",
+      leverCompany: "atlas",
+      careerPageUrl: "https://northstar.example/careers",
+      careerPageCompany: "Northstar Labs",
     });
 
     expect(values).toEqual({
@@ -46,6 +65,17 @@ describe("discovery settings", () => {
           name: "Curated internships",
           platform: "greenhouse",
           url: "https://feeds.example/jobs.json",
+        },
+      ],
+      atsSources: [
+        { type: "greenhouse", boardToken: "northstar" },
+        { type: "lever", company: "atlas" },
+      ],
+      careerPageSources: [
+        {
+          id: "northstar-labs",
+          company: "Northstar Labs",
+          url: "https://northstar.example/careers",
         },
       ],
     });
@@ -59,8 +89,17 @@ describe("discovery settings", () => {
       feedSourceUrl: "  ",
       feedSourcePlatform: "custom",
       feedSourceName: "Custom JSON feed",
+      greenhouseBoardToken: " ",
+      leverCompany: " ",
+      careerPageUrl: " ",
+      careerPageCompany: " ",
     });
 
-    expect(values).toEqual({ searchQueries: [], feedSources: [] });
+    expect(values).toEqual({
+      searchQueries: [],
+      feedSources: [],
+      atsSources: [],
+      careerPageSources: [],
+    });
   });
 });
