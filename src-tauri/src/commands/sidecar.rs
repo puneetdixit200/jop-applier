@@ -78,6 +78,9 @@ pub fn run_sidecar_workflow_and_persist_jobs_with_command(
     if workflow_id == "analytics-refresh" {
         persist_analytics_snapshot(connection, &mut result)?;
     }
+    if workflow_id == "export-sync" {
+        persist_export_runs(connection, &mut result)?;
+    }
     persist_sidecar_notifications(connection, &mut result)?;
 
     Ok(result)
@@ -495,6 +498,10 @@ fn workflow_params_from_settings(
         return analytics_refresh_workflow_params_from_database(connection);
     }
 
+    if workflow_id == "export-sync" {
+        return export_sync_workflow_params_from_settings(connection);
+    }
+
     Ok(json!({}))
 }
 
@@ -649,7 +656,9 @@ fn normalized_company_name(value: &str) -> String {
     value.trim().to_ascii_lowercase()
 }
 
-fn analytics_refresh_workflow_params_from_database(connection: &Connection) -> Result<Value, String> {
+fn analytics_refresh_workflow_params_from_database(
+    connection: &Connection,
+) -> Result<Value, String> {
     let applications = queries::list_applications(connection).map_err(|error| error.to_string())?;
     let jobs = queries::list_jobs(connection).map_err(|error| error.to_string())?;
     if applications.is_empty() && jobs.is_empty() {
@@ -700,6 +709,134 @@ fn analytics_refresh_workflow_params_from_database(connection: &Connection) -> R
             }
         }
     }))
+}
+
+fn export_sync_workflow_params_from_settings(connection: &Connection) -> Result<Value, String> {
+    let mut export_sync = Map::new();
+
+    if let Some(payload) = export_sync_payload_from_database(connection)? {
+        export_sync.insert("payload".to_string(), payload);
+    }
+    if let Some(export_config) = setting_object(connection, "export.config")? {
+        if let Some(notion) = notion_export_settings(&export_config) {
+            export_sync.insert("notion".to_string(), Value::Object(notion));
+        }
+        if let Some(google_sheets) = google_sheets_export_settings(&export_config) {
+            export_sync.insert("googleSheets".to_string(), Value::Object(google_sheets));
+        }
+    }
+
+    if export_sync.is_empty() {
+        Ok(json!({}))
+    } else {
+        Ok(json!({ "exportSync": export_sync }))
+    }
+}
+
+fn export_sync_payload_from_database(connection: &Connection) -> Result<Option<Value>, String> {
+    let applications = queries::list_applications(connection).map_err(|error| error.to_string())?;
+    let analytics = queries::get_setting(connection, "analytics.latestSnapshot")
+        .map_err(|error| error.to_string())?
+        .and_then(|setting| match setting.value {
+            SettingValue::Object(snapshot) => Some(snapshot),
+            _ => None,
+        });
+
+    if applications.is_empty() && analytics.is_none() {
+        return Ok(None);
+    }
+
+    let application_values = applications
+        .into_iter()
+        .map(|application| {
+            json!({
+                "id": application.id,
+                "jobId": application.job_id,
+                "jobTitle": application.job_title,
+                "companyName": application.company_name,
+                "status": application.status,
+                "mode": application.mode,
+                "resumePath": application.resume_path,
+                "coverLetterPath": application.cover_letter_path,
+                "submittedAt": application.submitted_at,
+                "submissionUrl": application.submission_url,
+                "confirmationId": application.confirmation_id,
+                "lastFollowUp": application.last_follow_up,
+                "nextFollowUp": application.next_follow_up,
+                "followUpCount": application.follow_up_count,
+                "responseDate": application.response_date,
+                "responseType": application.response_type,
+                "tags": application.tags,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    Ok(Some(json!({
+        "applications": application_values,
+        "analytics": analytics.unwrap_or(Value::Null),
+    })))
+}
+
+fn notion_export_settings(config: &Map<String, Value>) -> Option<Map<String, Value>> {
+    let enabled = config
+        .get("notionEnabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let api_key = non_empty_config_string(config, "notionApiKey");
+    let database_id = non_empty_config_string(config, "notionDatabaseId");
+
+    if !enabled && api_key.is_none() && database_id.is_none() {
+        return None;
+    }
+
+    let mut notion = Map::new();
+    notion.insert("enabled".to_string(), json!(enabled));
+    insert_string_config(&mut notion, "apiKey", api_key);
+    insert_string_config(&mut notion, "databaseId", database_id);
+    Some(notion)
+}
+
+fn google_sheets_export_settings(config: &Map<String, Value>) -> Option<Map<String, Value>> {
+    let enabled = config
+        .get("googleSheetsEnabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let spreadsheet_id = non_empty_config_string(config, "googleSheetsId");
+    let access_token = non_empty_config_string(config, "googleSheetsAccessToken");
+    let api_key = non_empty_config_string(config, "googleSheetsApiKey");
+    let range = non_empty_config_string(config, "googleSheetsRange");
+
+    if !enabled
+        && spreadsheet_id.is_none()
+        && access_token.is_none()
+        && api_key.is_none()
+        && range.is_none()
+    {
+        return None;
+    }
+
+    let mut google_sheets = Map::new();
+    google_sheets.insert("enabled".to_string(), json!(enabled));
+    insert_string_config(&mut google_sheets, "spreadsheetId", spreadsheet_id);
+    insert_string_config(&mut google_sheets, "accessToken", access_token);
+    insert_string_config(&mut google_sheets, "apiKey", api_key);
+    insert_string_config(&mut google_sheets, "range", range);
+    Some(google_sheets)
+}
+
+fn insert_string_config(target: &mut Map<String, Value>, key: &str, value: Option<String>) {
+    if let Some(value) = value {
+        target.insert(key.to_string(), json!(value));
+    }
+}
+
+fn non_empty_config_string(config: &Map<String, Value>, key: &str) -> Option<String> {
+    config
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
 }
 
 fn email_match_context_from_database(connection: &Connection) -> Result<Option<Value>, String> {
@@ -977,7 +1114,10 @@ fn persist_cold_emails(connection: &Connection, result: &mut Value) -> Result<()
 
     if let Some(payload) = result.as_object_mut() {
         payload.insert("storedColdEmails".to_string(), json!(stored));
-        payload.insert("coldEmails".to_string(), Value::Array(persisted_cold_emails));
+        payload.insert(
+            "coldEmails".to_string(),
+            Value::Array(persisted_cold_emails),
+        );
     }
 
     Ok(())
@@ -1071,6 +1211,28 @@ fn persist_analytics_snapshot(connection: &Connection, result: &mut Value) -> Re
 
     if let Some(payload) = result.as_object_mut() {
         payload.insert("storedAnalyticsSnapshot".to_string(), json!(true));
+    }
+
+    Ok(())
+}
+
+fn persist_export_runs(connection: &Connection, result: &mut Value) -> Result<(), String> {
+    let Some(runs) = result.get("runs").and_then(Value::as_array).cloned() else {
+        return Ok(());
+    };
+
+    queries::upsert_setting(
+        connection,
+        UpsertSetting {
+            key: "export.latestRuns".to_string(),
+            category: Some("export".to_string()),
+            value: SettingValue::Array(runs.clone()),
+        },
+    )
+    .map_err(|error| error.to_string())?;
+
+    if let Some(payload) = result.as_object_mut() {
+        payload.insert("storedExportRuns".to_string(), json!(runs.len()));
     }
 
     Ok(())

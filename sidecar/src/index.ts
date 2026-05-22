@@ -65,6 +65,9 @@ import {
   runExportSyncWorker,
   type ExportSyncWorkerDependencies,
 } from "./export/export-sync-worker.js";
+import {
+  createExportSyncDependenciesFromWorkflowInput,
+} from "./export/export-sync-config.js";
 import { runSidecarIpc } from "./ipc/runtime-ipc.js";
 import {
   runCleanupWorker,
@@ -344,11 +347,16 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   workflowEngine.register({
     id: "export-sync",
     description: "Sync application and analytics data to configured exporters",
-    run: async () =>
-      runExportSyncWorker(exportSync, {
+    run: async (input) => {
+      const configuredExportSync = createExportSyncDependenciesFromWorkflowInput(input, {
+        fallback: exportSync,
+      });
+
+      return runExportSyncWorker(configuredExportSync ?? exportSync, {
         now: now(),
         eventBus,
-      }),
+      });
+    },
   });
   workflowEngine.register({
     id: "follow-up-check",

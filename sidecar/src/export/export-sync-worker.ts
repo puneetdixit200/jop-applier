@@ -49,6 +49,7 @@ export type ExportSyncWorkerResult = {
   failed: number;
   skipped: number;
   recordsWritten: number;
+  runs: ExportRunRecord[];
 };
 
 export async function runExportSyncWorker(
@@ -69,6 +70,7 @@ export async function runExportSyncWorker(
     failed: 0,
     skipped: exporters.filter((exporter) => !exporter.isEnabled).length,
     recordsWritten: 0,
+    runs: [],
   };
 
   for (const exporter of exporters.filter((exporter) => exporter.isEnabled)) {
@@ -86,6 +88,7 @@ export async function runExportSyncWorker(
 
       result.succeeded += 1;
       result.recordsWritten += syncResult.recordsWritten;
+      result.runs.push(run);
       options.eventBus?.emit("export.synced", {
         exporterId: exporter.id,
         exporterName: exporter.name,
@@ -95,7 +98,7 @@ export async function runExportSyncWorker(
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      await dependencies.saveExportRun({
+      const run = {
         exporterId: exporter.id,
         exporterName: exporter.name,
         status: "failed",
@@ -103,9 +106,11 @@ export async function runExportSyncWorker(
         externalUrl: null,
         syncedAt: options.now.toISOString(),
         error: reason,
-      });
+      } satisfies ExportRunRecord;
+      await dependencies.saveExportRun(run);
 
       result.failed += 1;
+      result.runs.push(run);
       options.eventBus?.emit("export.failed", {
         exporterId: exporter.id,
         exporterName: exporter.name,
