@@ -399,6 +399,84 @@ button:disabled {
   font-size: 1.05rem;
 }
 
+.setup-wizard {
+  display: grid;
+  gap: 14px;
+}
+
+.setup-wizard .panel-heading {
+  margin-bottom: 0;
+}
+
+.setup-wizard .panel-heading strong {
+  color: #16422c;
+  font-size: 1.15rem;
+}
+
+.setup-progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e4ebe6;
+}
+
+.setup-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2f6b4f;
+}
+
+.setup-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.setup-step {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 9px;
+  min-height: 86px;
+  padding: 12px;
+  border: 1px solid #e3e9e5;
+  border-radius: 8px;
+  color: #8a3b45;
+  background: #fbf7f7;
+}
+
+.setup-step.complete {
+  color: #2f6b4f;
+  background: #f5fbf7;
+}
+
+.setup-step div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.setup-step strong,
+.setup-step span {
+  overflow-wrap: anywhere;
+}
+
+.setup-step span {
+  color: #5f6b65;
+  font-size: 0.82rem;
+}
+
+.setup-step .compact {
+  grid-column: 1 / -1;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.setup-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .job-list,
 .status-list,
 .timeline,
@@ -968,6 +1046,10 @@ legend {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .setup-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .activity-detail {
     grid-template-columns: 1fr;
   }
@@ -1028,6 +1110,10 @@ legend {
   }
 
   .tracker-lanes {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-steps {
     grid-template-columns: 1fr;
   }
 

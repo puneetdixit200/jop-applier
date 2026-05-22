@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  ArrowRight,
   BarChart3,
   Bell,
   Bot,
@@ -118,6 +119,11 @@ import {
   type NotificationInbox,
 } from "./lib/notification-inbox";
 import { deliverTauriWorkflowOsNotifications } from "./lib/tauri-notifications";
+import {
+  buildOnboardingStatus,
+  type OnboardingStatus,
+  type OnboardingStep,
+} from "./lib/onboarding";
 
 type RouteId = "dashboard" | "jobs" | "applications" | "profile" | "settings";
 
@@ -411,6 +417,7 @@ export function App() {
   const [isSavingContact, setIsSavingContact] = useState(false);
   const [draggedApplicationId, setDraggedApplicationId] = useState<string | null>(null);
   const [isNotificationInboxOpen, setIsNotificationInboxOpen] = useState(false);
+  const [isOnboardingDismissed, setIsOnboardingDismissed] = useState(false);
   const [scheduleSummaries, setScheduleSummaries] = useState<ScheduledTaskSummary[]>(() =>
     scheduledTaskSummaries(previewScheduleTasks, 8),
   );
@@ -435,6 +442,10 @@ export function App() {
   const notificationInbox = useMemo(
     () => buildNotificationInbox(visibleNotifications),
     [visibleNotifications],
+  );
+  const onboardingStatus = useMemo(
+    () => buildOnboardingStatus(profile, settings),
+    [profile, settings],
   );
 
   useEffect(() => {
@@ -480,6 +491,7 @@ export function App() {
         storedReview,
         storedCache,
         storedLimit,
+        storedOnboardingDismissed,
         storedSearchQueries,
         storedPortalSources,
         storedFeedSources,
@@ -498,6 +510,7 @@ export function App() {
         getSetting("application.reviewBeforeSubmit"),
         getSetting("ai.cacheResponses"),
         getSetting("application.maxDailyApplications"),
+        getSetting("app.onboardingDismissed"),
         getSetting("discovery.searchQueries"),
         getSetting("discovery.portalSources"),
         getSetting("discovery.feedSources"),
@@ -548,6 +561,9 @@ export function App() {
           current.email,
         ),
       }));
+      if (typeof storedOnboardingDismissed?.value === "boolean") {
+        setIsOnboardingDismissed(storedOnboardingDismissed.value);
+      }
       setStorageStatus("SQLite ready");
     }
 
@@ -637,6 +653,23 @@ export function App() {
     } finally {
       setIsRunningDiscovery(false);
     }
+  }
+
+  async function dismissOnboarding() {
+    setIsOnboardingDismissed(true);
+    if (!isDesktopRuntime()) {
+      return;
+    }
+
+    await saveSetting({
+      key: "app.onboardingDismissed",
+      value: true,
+      category: "app",
+    });
+  }
+
+  function openOnboardingStep(step: OnboardingStep) {
+    setRoute(step.target);
   }
 
   async function startDueScheduledTasks() {
@@ -900,6 +933,12 @@ export function App() {
             jobs={visibleJobs}
             schedules={scheduleSummaries}
             applicationTracker={applicationTracker}
+            onboardingStatus={onboardingStatus}
+            isOnboardingDismissed={isOnboardingDismissed}
+            onOpenOnboardingStep={openOnboardingStep}
+            onDismissOnboarding={() => {
+              void dismissOnboarding().catch(() => setStorageStatus("Onboarding status not saved"));
+            }}
           />
         )}
         {route === "jobs" && <Jobs jobs={visibleJobs} />}
@@ -1011,6 +1050,10 @@ function Dashboard({
   jobs,
   schedules,
   applicationTracker,
+  onboardingStatus,
+  isOnboardingDismissed,
+  onOpenOnboardingStep,
+  onDismissOnboarding,
 }: {
   provider: string;
   runtimeStatus: RuntimeControlStatus;
@@ -1019,6 +1062,10 @@ function Dashboard({
   jobs: JobSummary[];
   schedules: ScheduledTaskSummary[];
   applicationTracker: ApplicationTracker;
+  onboardingStatus: OnboardingStatus;
+  isOnboardingDismissed: boolean;
+  onOpenOnboardingStep: (step: OnboardingStep) => void;
+  onDismissOnboarding: () => void;
 }) {
   const metrics = [
     { label: "Matched Jobs", value: String(jobs.length), tone: "green" },
@@ -1029,6 +1076,14 @@ function Dashboard({
 
   return (
     <div className="dashboard-grid">
+      {!onboardingStatus.isComplete && !isOnboardingDismissed && (
+        <SetupWizard
+          status={onboardingStatus}
+          onOpenStep={onOpenOnboardingStep}
+          onDismiss={onDismissOnboarding}
+        />
+      )}
+
       <section className="metric-grid" aria-label="Application metrics">
         {metrics.map((metric) => (
           <article className={`metric-card ${metric.tone}`} key={metric.label}>
@@ -1114,6 +1169,58 @@ function Dashboard({
         </ul>
       </section>
     </div>
+  );
+}
+
+function SetupWizard({
+  status,
+  onOpenStep,
+  onDismiss,
+}: {
+  status: OnboardingStatus;
+  onOpenStep: (step: OnboardingStep) => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <section className="panel wide setup-wizard" aria-label="Setup wizard">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Setup wizard</p>
+          <h3>{status.completedRequired} of {status.requiredTotal} required steps ready</h3>
+        </div>
+        <strong>{status.percent}%</strong>
+      </div>
+      <div className="setup-progress" aria-hidden="true">
+        <span style={{ width: `${status.percent}%` }} />
+      </div>
+      <div className="setup-steps">
+        {status.steps.map((step) => (
+          <article className={step.complete ? "setup-step complete" : "setup-step"} key={step.id}>
+            {step.complete ? (
+              <CheckCircle2 size={18} aria-hidden="true" />
+            ) : (
+              <XCircle size={18} aria-hidden="true" />
+            )}
+            <div>
+              <strong>{step.label}</strong>
+              <span>{step.optional ? "Optional" : "Required"}</span>
+            </div>
+            {!step.complete && (
+              <button className="secondary-action compact" type="button" onClick={() => onOpenStep(step)}>
+                <ArrowRight size={16} aria-hidden="true" />
+                Open
+              </button>
+            )}
+          </article>
+        ))}
+      </div>
+      <div className="setup-actions">
+        <button className="secondary-action" type="button" onClick={onDismiss}>
+          <CheckCheck size={16} aria-hidden="true" />
+          Dismiss
+        </button>
+      </div>
+    </section>
   );
 }
 
