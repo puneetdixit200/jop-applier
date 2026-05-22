@@ -94,7 +94,7 @@ describe("sidecar runtime IPC", () => {
     expect(persistedUrls).toEqual(["https://jobs.example/react"]);
   });
 
-  it("returns in-app notifications emitted during workflow runs", async () => {
+  it("returns native and in-app notifications emitted during workflow runs", async () => {
     const checkedAt = new Date("2026-05-28T12:45:00Z");
     const runtime = createSidecarRuntime({
       now: () => checkedAt,
@@ -137,6 +137,21 @@ describe("sidecar runtime IPC", () => {
       result: expect.objectContaining({
         failed: 1,
         notifications: [
+          {
+            type: "application.failed",
+            title: "Application failed",
+            body: "Northstar Labs application failed: captcha challenge",
+            priority: "high",
+            channel: "os",
+            createdAt: "2026-05-28T12:45:00.000Z",
+            metadata: {
+              applicationId: "app-1",
+              jobId: "job-1",
+              companyName: "Northstar Labs",
+              status: "failed",
+              reason: "captcha challenge",
+            },
+          },
           {
             type: "application.failed",
             title: "Application failed",

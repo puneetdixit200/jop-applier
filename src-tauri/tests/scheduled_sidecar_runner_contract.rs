@@ -54,7 +54,7 @@ fn runs_due_scheduled_tasks_through_sidecar_and_updates_task_state() {
     let command = shell_sidecar(
         r#"read line
 case "$line" in
-  *'"method":"workflow.run"'*'"workflowId":"job-discovery"'*) printf '{"id":"workflow-job-discovery","ok":true,"result":{"queries":1,"discovered":1,"stored":0,"jobs":[{"source_id":"scheduled-1","platform":"custom","url":"https://jobs.example/scheduled","title":"Scheduled Discovery Engineer","company_name":"Schedule Labs","location":"Remote","is_remote":true,"salary_min":null,"salary_max":null,"salary_currency":"INR","job_type":null,"experience_level":null,"description":null,"requirements":[],"raw_html":null,"match_score":77,"match_confidence":0.8,"match_reasoning":"scheduled match","matched_skills":[],"missing_skills":[],"ai_tags":["scheduled"],"should_apply":true,"ai_priority":"medium"}]}}\n' ;;
+  *'"method":"workflow.run"'*'"workflowId":"job-discovery"'*) printf '{"id":"workflow-job-discovery","ok":true,"result":{"queries":1,"discovered":1,"stored":0,"jobs":[{"source_id":"scheduled-1","platform":"custom","url":"https://jobs.example/scheduled","title":"Scheduled Discovery Engineer","company_name":"Schedule Labs","location":"Remote","is_remote":true,"salary_min":null,"salary_max":null,"salary_currency":"INR","job_type":null,"experience_level":null,"description":null,"requirements":[],"raw_html":null,"match_score":77,"match_confidence":0.8,"match_reasoning":"scheduled match","matched_skills":[],"missing_skills":[],"ai_tags":["scheduled"],"should_apply":true,"ai_priority":"medium"}],"notifications":[{"type":"job.high_match_found","title":"High-match job found","body":"Schedule Labs has a 77%% match.","priority":"high","channel":"os","createdAt":"2026-05-29T08:00:00.000Z"},{"type":"job.high_match_found","title":"High-match job found","body":"Schedule Labs has a 77%% match.","priority":"high","channel":"in_app","createdAt":"2026-05-29T08:00:00.000Z"}]}}\n' ;;
   *) printf '{"id":null,"ok":false,"error":{"message":"unexpected request"}}\n' ;;
 esac"#,
     );
@@ -68,6 +68,9 @@ esac"#,
     assert_eq!(result.completed, 1);
     assert_eq!(result.failed, 0);
     assert_eq!(result.skipped, 1);
+    assert_eq!(result.notifications.len(), 2);
+    assert_eq!(result.notifications[0]["channel"], json!("os"));
+    assert_eq!(result.notifications[1]["channel"], json!("in_app"));
 
     let updated_tasks = list_scheduled_tasks(&connection).expect("list scheduled tasks");
     let updated_due_task = updated_tasks

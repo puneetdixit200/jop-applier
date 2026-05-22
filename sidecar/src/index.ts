@@ -56,6 +56,7 @@ import {
   bindNotificationManager,
   NotificationManager,
   type NotificationAdapter,
+  type NotificationChannel,
   type NotificationDelivery,
   type NotificationManagerOptions,
 } from "./notifications/notification-manager.js";
@@ -378,11 +379,15 @@ function createRuntimeNotificationOptions(
   now: () => Date,
 ): NotificationManagerOptions {
   const adapters = (options?.adapters ?? []).map((adapter) =>
-    adapter.channel === "in_app" ? recordingInAppAdapter(adapter, outbox) : adapter,
+    isRecordedRuntimeNotificationChannel(adapter.channel)
+      ? recordingNotificationAdapter(adapter.channel, adapter, outbox)
+      : adapter,
   );
 
-  if (!adapters.some((adapter) => adapter.channel === "in_app")) {
-    adapters.push(recordingInAppAdapter(undefined, outbox));
+  for (const channel of recordedRuntimeNotificationChannels) {
+    if (!adapters.some((adapter) => adapter.channel === channel)) {
+      adapters.push(recordingNotificationAdapter(channel, undefined, outbox));
+    }
   }
 
   return {
@@ -392,12 +397,24 @@ function createRuntimeNotificationOptions(
   };
 }
 
-function recordingInAppAdapter(
+const recordedRuntimeNotificationChannels = ["os", "in_app"] satisfies NotificationChannel[];
+const recordedRuntimeNotificationChannelSet = new Set<NotificationChannel>(
+  recordedRuntimeNotificationChannels,
+);
+
+function isRecordedRuntimeNotificationChannel(
+  channel: NotificationChannel,
+): channel is (typeof recordedRuntimeNotificationChannels)[number] {
+  return recordedRuntimeNotificationChannelSet.has(channel);
+}
+
+function recordingNotificationAdapter(
+  channel: NotificationChannel,
   adapter: NotificationAdapter | undefined,
   outbox: NotificationDelivery[],
 ): NotificationAdapter {
   return {
-    channel: "in_app",
+    channel,
     send: async (notification) => {
       outbox.push(notification);
       await adapter?.send(notification);

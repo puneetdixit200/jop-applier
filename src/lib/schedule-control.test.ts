@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { runScheduleControl, type ScheduleControlDependencies } from "./schedule-control";
 import type { ScheduledTask } from "./tauri-api";
 
@@ -19,11 +19,27 @@ describe("schedule control", () => {
 
   it("runs due scheduled tasks and reloads dashboard schedule summaries", async () => {
     const calls: string[] = [];
+    const deliverWorkflowOsNotifications = vi.fn(async () => undefined);
     const dependencies: ScheduleControlDependencies = {
       isDesktopRuntime: () => true,
       runDueScheduledTasks: async () => {
         calls.push("runDueScheduledTasks");
-        return { scanned: 2, due: 1, completed: 1, failed: 0, skipped: 1 };
+        return {
+          scanned: 2,
+          due: 1,
+          completed: 1,
+          failed: 0,
+          skipped: 1,
+          notifications: [
+            {
+              type: "application.failed",
+              title: "Application failed",
+              body: "Northstar Labs application failed: captcha challenge",
+              priority: "high",
+              channel: "os",
+            },
+          ],
+        };
       },
       listScheduledTasks: async () => {
         calls.push("listScheduledTasks");
@@ -35,6 +51,7 @@ describe("schedule control", () => {
           }),
         ];
       },
+      deliverWorkflowOsNotifications,
     };
 
     await expect(runScheduleControl(dependencies)).resolves.toEqual({
@@ -42,6 +59,17 @@ describe("schedule control", () => {
       schedules: [{ id: "discovery", name: "Job Discovery", nextRunLabel: "May 29 12:00 UTC" }],
     });
     expect(calls).toEqual(["runDueScheduledTasks", "listScheduledTasks"]);
+    expect(deliverWorkflowOsNotifications).toHaveBeenCalledWith({
+      notifications: [
+        {
+          type: "application.failed",
+          title: "Application failed",
+          body: "Northstar Labs application failed: captcha challenge",
+          priority: "high",
+          channel: "os",
+        },
+      ],
+    });
   });
 });
 

@@ -8,6 +8,7 @@ export type ScheduleControlDependencies = {
   isDesktopRuntime: () => boolean;
   runDueScheduledTasks: () => Promise<ScheduledTaskRunResult>;
   listScheduledTasks: () => Promise<ScheduledTask[]>;
+  deliverWorkflowOsNotifications?: (result: unknown) => Promise<unknown>;
 };
 
 export type ScheduleControlResult = {
@@ -23,6 +24,11 @@ export async function runScheduleControl(
   }
 
   const result = await dependencies.runDueScheduledTasks();
+  if (result.notifications && result.notifications.length > 0) {
+    await dependencies
+      .deliverWorkflowOsNotifications?.({ notifications: result.notifications })
+      .catch(() => undefined);
+  }
   const tasks = await dependencies.listScheduledTasks();
 
   return {

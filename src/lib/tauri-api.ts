@@ -233,6 +233,7 @@ export type ScheduledTaskRunResult = {
   completed: number;
   failed: number;
   skipped: number;
+  notifications?: unknown[];
 };
 
 export type AiCacheEntry = {

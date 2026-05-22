@@ -100,6 +100,7 @@ import {
   buildNotificationInbox,
   type NotificationInbox,
 } from "./lib/notification-inbox";
+import { deliverTauriWorkflowOsNotifications } from "./lib/tauri-notifications";
 
 type RouteId = "dashboard" | "jobs" | "applications" | "profile" | "settings";
 
@@ -319,6 +320,7 @@ const runtimeDependencies: RuntimeControlDependencies = {
   isDesktopRuntime,
   getSidecarStatus,
   runSidecarWorkflow,
+  deliverWorkflowOsNotifications: deliverTauriWorkflowOsNotifications,
 };
 
 const discoveryDependencies: DiscoveryControlDependencies = {
@@ -330,6 +332,7 @@ const scheduleDependencies: ScheduleControlDependencies = {
   isDesktopRuntime,
   runDueScheduledTasks,
   listScheduledTasks,
+  deliverWorkflowOsNotifications: deliverTauriWorkflowOsNotifications,
 };
 
 const schedulePollIntervalMs = 60_000;

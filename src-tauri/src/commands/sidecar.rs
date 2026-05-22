@@ -22,6 +22,7 @@ pub struct DueScheduledTaskRunResult {
     pub completed: usize,
     pub failed: usize,
     pub skipped: usize,
+    pub notifications: Vec<Value>,
 }
 
 #[tauri::command]
@@ -145,6 +146,7 @@ pub fn run_due_scheduled_tasks_with_command(
         completed: 0,
         failed: 0,
         skipped: tasks.len().saturating_sub(due_tasks.len()),
+        notifications: Vec::new(),
     };
 
     for task in due_tasks {
@@ -153,12 +155,15 @@ pub fn run_due_scheduled_tasks_with_command(
             continue;
         };
 
-        if run_sidecar_workflow_and_persist_jobs_with_command(command, connection, workflow_id)
-            .is_err()
-        {
+        let Ok(workflow_result) =
+            run_sidecar_workflow_and_persist_jobs_with_command(command, connection, workflow_id)
+        else {
             result.failed += 1;
             continue;
-        }
+        };
+        result
+            .notifications
+            .extend(workflow_notifications(&workflow_result));
 
         let update = ScheduledTaskRunUpdate {
             last_run: format_rfc3339_utc(now)?,
@@ -172,6 +177,14 @@ pub fn run_due_scheduled_tasks_with_command(
     }
 
     Ok(result)
+}
+
+fn workflow_notifications(result: &Value) -> Vec<Value> {
+    result
+        .get("notifications")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   loadRuntimeControlStatus,
   runRuntimeWorkflow,
@@ -69,6 +69,37 @@ describe("runtime control", () => {
         stored: 2,
       },
     });
+  });
+
+  it("delivers native notifications returned by successful workflow runs", async () => {
+    const workflowResult = {
+      workflowId: "application-processing",
+      notifications: [
+        {
+          type: "application.failed",
+          title: "Application failed",
+          body: "Northstar Labs application failed: captcha challenge",
+          priority: "high",
+          channel: "os",
+        },
+      ],
+    };
+    const deliverWorkflowOsNotifications = vi.fn(async () => undefined);
+
+    await expect(
+      runRuntimeWorkflow(
+        dependencies({
+          runSidecarWorkflow: async () => workflowResult,
+          deliverWorkflowOsNotifications,
+        }),
+        "application-processing",
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      statusMessage: "application-processing completed",
+      result: workflowResult,
+    });
+    expect(deliverWorkflowOsNotifications).toHaveBeenCalledWith(workflowResult);
   });
 
   it("returns a workflow failure status without throwing", async () => {

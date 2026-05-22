@@ -4,6 +4,7 @@ export type RuntimeControlDependencies = {
   isDesktopRuntime: () => boolean;
   getSidecarStatus: () => Promise<SidecarRuntimeStatus>;
   runSidecarWorkflow: (workflowId: string) => Promise<unknown>;
+  deliverWorkflowOsNotifications?: (result: unknown) => Promise<unknown>;
 };
 
 export type RuntimeControlStatus = {
@@ -62,10 +63,13 @@ export async function runRuntimeWorkflow(
   }
 
   try {
+    const result = await dependencies.runSidecarWorkflow(workflowId);
+    await dependencies.deliverWorkflowOsNotifications?.(result).catch(() => undefined);
+
     return {
       ok: true,
       statusMessage: `${workflowId} completed`,
-      result: await dependencies.runSidecarWorkflow(workflowId),
+      result,
     };
   } catch (error) {
     return {
