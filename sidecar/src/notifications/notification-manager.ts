@@ -126,9 +126,24 @@ export function bindNotificationManager(
       },
     });
   });
+  const unsubscribeApplicationFailed = bus.on("application.failed", (event) => {
+    void manager.notify({
+      type: "application.failed",
+      title: event.status === "permanently_failed" ? "Application permanently failed" : "Application failed",
+      body: `${event.companyName} application failed: ${event.reason}`,
+      metadata: {
+        applicationId: event.applicationId,
+        jobId: event.jobId,
+        companyName: event.companyName,
+        status: event.status,
+        reason: event.reason,
+      },
+    });
+  });
 
   return () => {
     unsubscribeProviderOffline();
     unsubscribeFollowUpSent();
+    unsubscribeApplicationFailed();
   };
 }

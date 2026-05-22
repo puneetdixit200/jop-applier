@@ -8,6 +8,11 @@ import type { BrowserSessionHealthTarget } from "./browser/session-health.js";
 import type { FollowUpApplication, FollowUpUpdate } from "./applications/follow-up-scheduler.js";
 import type { SearchQuery } from "./discovery/connectors/connector-interface.js";
 import type { UpsertJobPayload } from "./discovery/job-persistence.js";
+import type {
+  NotificationAdapter,
+  NotificationChannel,
+  NotificationDelivery,
+} from "./notifications/notification-manager.js";
 import type { CareerEventMap } from "./orchestrator/events.js";
 import type { PersistedScheduledTaskRunUpdate } from "./orchestrator/scheduled-task-persistence.js";
 
@@ -676,6 +681,86 @@ describe("sidecar runtime", () => {
         companyName: "Northstar Labs",
         confirmationId: "app-1:CONF-84",
         submittedAt: checkedAt,
+      },
+    ]);
+  });
+
+  it("routes application failure events through configured notification adapters", async () => {
+    const checkedAt = new Date("2026-05-28T12:45:00Z");
+    const deliveries: NotificationDelivery[] = [];
+    const runtime = createSidecarRuntime({
+      now: () => checkedAt,
+      notifications: {
+        adapters: [
+          recordingNotificationAdapter("os", deliveries),
+          recordingNotificationAdapter("in_app", deliveries),
+        ],
+      },
+      applicationProcessing: {
+        listApplications: async () => [],
+        prepareApplication: async () => undefined,
+        fillApplicationForm: async () => ({ submissionUrl: null }),
+        submitApplication: async () => {
+          throw new Error("captcha challenge");
+        },
+        updateApplication: async () => undefined,
+      },
+    });
+
+    await expect(
+      runtime.reviewApplication(
+        {
+          id: "app-1",
+          jobId: "job-1",
+          companyName: "Northstar Labs",
+          status: "review_pending",
+          mode: "semi_auto",
+          resumePath: "/tmp/app-1-resume.pdf",
+          coverLetterPath: "/tmp/app-1-cover-letter.pdf",
+          retryCount: 0,
+          maxRetries: 3,
+        },
+        "approve",
+      ),
+    ).resolves.toEqual({
+      status: "failed",
+      reason: "captcha challenge",
+    });
+    await Promise.resolve();
+
+    expect(deliveries.map((delivery) => delivery.channel)).toEqual(["os", "in_app"]);
+    expect(deliveries.map((delivery) => ({
+      type: delivery.type,
+      priority: delivery.priority,
+      title: delivery.title,
+      body: delivery.body,
+      metadata: delivery.metadata,
+    }))).toEqual([
+      {
+        type: "application.failed",
+        priority: "high",
+        title: "Application failed",
+        body: "Northstar Labs application failed: captcha challenge",
+        metadata: {
+          applicationId: "app-1",
+          jobId: "job-1",
+          companyName: "Northstar Labs",
+          status: "failed",
+          reason: "captcha challenge",
+        },
+      },
+      {
+        type: "application.failed",
+        priority: "high",
+        title: "Application failed",
+        body: "Northstar Labs application failed: captcha challenge",
+        metadata: {
+          applicationId: "app-1",
+          jobId: "job-1",
+          companyName: "Northstar Labs",
+          status: "failed",
+          reason: "captcha challenge",
+        },
       },
     ]);
   });
@@ -1433,6 +1518,18 @@ function fakeBrowserSession(): BrowserSession {
     close: async () => {},
     newPage: async () => {
       throw new Error("not used in this test");
+    },
+  };
+}
+
+function recordingNotificationAdapter(
+  channel: NotificationChannel,
+  deliveries: NotificationDelivery[],
+): NotificationAdapter {
+  return {
+    channel,
+    send: async (delivery) => {
+      deliveries.push(delivery);
     },
   };
 }

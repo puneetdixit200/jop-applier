@@ -52,6 +52,11 @@ import {
   runCleanupWorker,
   type CleanupWorkerDependencies,
 } from "./maintenance/cleanup-worker.js";
+import {
+  bindNotificationManager,
+  NotificationManager,
+  type NotificationManagerOptions,
+} from "./notifications/notification-manager.js";
 import { DEFAULT_WORKFLOWS_BY_TASK_TYPE } from "./orchestrator/default-schedules.js";
 import { EventBus } from "./orchestrator/event-bus.js";
 import type { CareerEventMap } from "./orchestrator/events.js";
@@ -192,6 +197,7 @@ export type SidecarRuntimeOptions = {
   exportSync?: SidecarExportSyncOptions;
   cleanup?: SidecarCleanupOptions;
   followUps?: SidecarFollowUpOptions;
+  notifications?: NotificationManagerOptions;
   scheduledTasks?: ScheduledTaskPersistence;
   scheduler?: {
     pollIntervalMs?: number;
@@ -223,6 +229,9 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   const cleanup = options.cleanup ?? createEmptyCleanupWorkerDependencies();
   const followUps = options.followUps ?? createEmptyFollowUpDependencies();
   const scheduledTaskPersistence = options.scheduledTasks ?? createEmptyScheduledTaskPersistence();
+  if (options.notifications) {
+    bindNotificationManager(eventBus, new NotificationManager(options.notifications));
+  }
 
   workflowEngine.register({
     id: "job-discovery",
