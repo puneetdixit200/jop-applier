@@ -34,6 +34,8 @@ Use the standard development commands from the README during local work. Tauri b
 
 Updater signing uses the Tauri private key stored outside the repo. The public key is committed in `src-tauri/tauri.conf.json`; do not commit the private key.
 
+GitHub Actions runs frontend, sidecar, and Rust tests on macOS, Windows, and Linux for pushes and pull requests. Release packaging runs on version tags or manual dispatch and expects `TAURI_SIGNING_PRIVATE_KEY` plus `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository secrets.
+
 ## Local Cleanup
 
 The following paths are rebuildable and intentionally ignored by git:
