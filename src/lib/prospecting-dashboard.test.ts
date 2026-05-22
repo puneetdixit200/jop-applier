@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildProspectingCompanyDetail,
   buildOutreachAnalytics,
   buildOutreachReviewQueue,
   buildProspectingDashboard,
@@ -66,6 +67,89 @@ describe("prospecting dashboard helpers", () => {
       replyRate: 25,
       bounceRate: 25,
     });
+  });
+
+  it("builds a company detail view with ranked contacts and funding context", () => {
+    const detail = buildProspectingCompanyDetail({
+      companyId: "setu",
+      companies: [
+        company({
+          id: "setu",
+          name: "Setu",
+          domain: "setu.co",
+          description: "API infrastructure for fintech teams.",
+          tech_stack: ["TypeScript", "Rust"],
+          funding_stage: "series_a",
+          funding_amount: 30_000_000,
+          funding_currency: "USD",
+          funding_date: "2026-05-01T00:00:00.000Z",
+          investors: ["Lightspeed", "Accel"],
+          lead_investor: "Lightspeed",
+          source: "inc42",
+          source_url: "https://inc42.example/setu-funding",
+          relevance_score: 91,
+          ai_summary: "Strong fit for API and platform roles.",
+          status: "enriched",
+        }),
+      ],
+      contacts: [
+        contact({
+          id: "founder",
+          company_id: "setu",
+          full_name: "Aman Founder",
+          email: "aman@setu.co",
+          email_confidence: 0.82,
+          role: "founder",
+          source: "linkedin",
+        }),
+        contact({
+          id: "recruiter",
+          company_id: "setu",
+          full_name: "Priya Recruiter",
+          email: "priya@setu.co",
+          email_confidence: 0.91,
+          role: "recruiter",
+          source: "hunter",
+        }),
+      ],
+    });
+
+    expect(detail).toEqual({
+      id: "setu",
+      companyName: "Setu",
+      domainLabel: "setu.co",
+      description: "API infrastructure for fintech teams.",
+      fundingLabel: "Series A - $30M",
+      sourceLabel: "inc42",
+      sourceUrl: "https://inc42.example/setu-funding",
+      scoreLabel: "91",
+      statusLabel: "Enriched",
+      techStackLabel: "TypeScript, Rust",
+      investorLabel: "Lightspeed, Accel",
+      leadInvestorLabel: "Lightspeed",
+      summary: "Strong fit for API and platform roles.",
+      contacts: [
+        {
+          id: "recruiter",
+          name: "Priya Recruiter",
+          email: "priya@setu.co",
+          roleLabel: "Recruiter",
+          confidenceLabel: "91%",
+          statusLabel: "Valid",
+          sourceLabel: "hunter",
+        },
+        {
+          id: "founder",
+          name: "Aman Founder",
+          email: "aman@setu.co",
+          roleLabel: "Founder",
+          confidenceLabel: "82%",
+          statusLabel: "Valid",
+          sourceLabel: "linkedin",
+        },
+      ],
+    });
+    expect(buildProspectingCompanyDetail({ companyId: "missing", companies: [], contacts: [] })).toBeNull();
   });
 });
 

@@ -25,6 +25,33 @@ export type ProspectingDashboard = {
   };
 };
 
+export type ProspectingCompanyDetailContact = {
+  id: string;
+  name: string;
+  email: string;
+  roleLabel: string;
+  confidenceLabel: string;
+  statusLabel: string;
+  sourceLabel: string;
+};
+
+export type ProspectingCompanyDetail = {
+  id: string;
+  companyName: string;
+  domainLabel: string;
+  description: string;
+  fundingLabel: string;
+  sourceLabel: string;
+  sourceUrl: string | null;
+  scoreLabel: string;
+  statusLabel: string;
+  techStackLabel: string;
+  investorLabel: string;
+  leadInvestorLabel: string;
+  summary: string;
+  contacts: ProspectingCompanyDetailContact[];
+};
+
 export type OutreachReviewQueueItem = {
   id: string;
   companyName: string;
@@ -76,6 +103,50 @@ export function buildProspectingDashboard(
       contacts: input.contacts.length,
       averageScore,
     },
+  };
+}
+
+export function buildProspectingCompanyDetail(input: {
+  companyId: string | null;
+  companies: FundedCompany[];
+  contacts: ProspectContact[];
+}): ProspectingCompanyDetail | null {
+  if (!input.companyId) {
+    return null;
+  }
+  const company = input.companies.find((item) => item.id === input.companyId);
+  if (!company) {
+    return null;
+  }
+
+  const contacts = input.contacts
+    .filter((contact) => contact.company_id === company.id)
+    .sort(compareProspectContacts)
+    .map((contact) => ({
+      id: contact.id,
+      name: contact.full_name,
+      email: contact.email,
+      roleLabel: titleCase(contact.role),
+      confidenceLabel: `${Math.round(contact.email_confidence * 100)}%`,
+      statusLabel: titleCase(contact.email_status),
+      sourceLabel: contact.source,
+    }));
+
+  return {
+    id: company.id,
+    companyName: company.name,
+    domainLabel: company.domain ?? "No domain",
+    description: company.description ?? "No description captured yet.",
+    fundingLabel: fundingLabel(company),
+    sourceLabel: company.source,
+    sourceUrl: company.source_url,
+    scoreLabel: String(Math.round(company.relevance_score ?? 0)),
+    statusLabel: titleCase(company.status),
+    techStackLabel: company.tech_stack.length > 0 ? company.tech_stack.join(", ") : "No tech stack captured",
+    investorLabel: company.investors.length > 0 ? company.investors.join(", ") : "No investors captured",
+    leadInvestorLabel: company.lead_investor ?? "No lead investor captured",
+    summary: company.ai_summary ?? "No AI summary captured yet.",
+    contacts,
   };
 }
 
@@ -144,6 +215,29 @@ function titleCase(value: string) {
   return value
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+const prospectContactRolePriority = new Map<string, number>([
+  ["hr_manager", 1],
+  ["recruiter", 1],
+  ["talent_acquisition", 1],
+  ["people_ops", 2],
+  ["head_of_hr", 2],
+  ["founder", 3],
+  ["ceo", 3],
+  ["cto", 4],
+  ["vp_engineering", 4],
+  ["engineering_manager", 5],
+]);
+
+function compareProspectContacts(left: ProspectContact, right: ProspectContact) {
+  return prospectContactRank(left.role) - prospectContactRank(right.role)
+    || right.email_confidence - left.email_confidence
+    || left.full_name.localeCompare(right.full_name);
+}
+
+function prospectContactRank(role: string) {
+  return prospectContactRolePriority.get(role) ?? 99;
 }
 
 function countBy<T>(items: T[], keyFor: (item: T) => string) {

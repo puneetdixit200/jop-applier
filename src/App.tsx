@@ -132,9 +132,11 @@ import {
 import {
   buildOutreachAnalytics,
   buildOutreachReviewQueue,
+  buildProspectingCompanyDetail,
   buildProspectingDashboard,
   type OutreachAnalyticsSummary,
   type OutreachReviewQueueItem,
+  type ProspectingCompanyDetail,
   type ProspectingDashboard,
 } from "./lib/prospecting-dashboard";
 import { deliverTauriWorkflowOsNotifications } from "./lib/tauri-notifications";
@@ -516,6 +518,7 @@ export function App() {
   const [persistedNotifications, setPersistedNotifications] = useState<AppNotification[]>([]);
   const [previewNotificationRecords, setPreviewNotificationRecords] = useState<AppNotification[]>(previewNotifications);
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
+  const [selectedProspectingCompanyId, setSelectedProspectingCompanyId] = useState<string | null>(null);
   const [applicationDraft, setApplicationDraft] = useState<ApplicationEditDraft>(() =>
     applicationEditDraft(previewApplications[0]),
   );
@@ -571,6 +574,15 @@ export function App() {
       ),
     [visibleFundedCompanies, visibleProspectContacts],
   );
+  const prospectingCompanyDetail = useMemo(
+    () =>
+      buildProspectingCompanyDetail({
+        companyId: selectedProspectingCompanyId,
+        companies: visibleFundedCompanies,
+        contacts: visibleProspectContacts,
+      }),
+    [selectedProspectingCompanyId, visibleFundedCompanies, visibleProspectContacts],
+  );
   const outreachReviewQueue = useMemo(
     () =>
       buildOutreachReviewQueue({
@@ -595,6 +607,13 @@ export function App() {
       setSelectedApplicationId(applicationTracker.rows[0]?.id ?? null);
     }
   }, [applicationTracker, selectedApplicationId]);
+
+  useEffect(() => {
+    const selectedExists = visibleFundedCompanies.some((company) => company.id === selectedProspectingCompanyId);
+    if (!selectedExists) {
+      setSelectedProspectingCompanyId(visibleFundedCompanies[0]?.id ?? null);
+    }
+  }, [selectedProspectingCompanyId, visibleFundedCompanies]);
 
   useEffect(() => {
     if (selectedApplicationRecord) {
@@ -1099,7 +1118,13 @@ export function App() {
         )}
         {route === "jobs" && <Jobs jobs={visibleJobs} />}
         {route === "prospecting" && (
-          <Prospecting dashboard={prospectingDashboard} companies={visibleFundedCompanies} />
+          <Prospecting
+            dashboard={prospectingDashboard}
+            companies={visibleFundedCompanies}
+            detail={prospectingCompanyDetail}
+            selectedCompanyId={selectedProspectingCompanyId}
+            onSelectCompany={setSelectedProspectingCompanyId}
+          />
         )}
         {route === "outreach" && (
           <Outreach
@@ -1536,9 +1561,15 @@ function Jobs({ jobs }: { jobs: JobSummary[] }) {
 function Prospecting({
   dashboard,
   companies,
+  detail,
+  selectedCompanyId,
+  onSelectCompany,
 }: {
   dashboard: ProspectingDashboard;
   companies: FundedCompany[];
+  detail: ProspectingCompanyDetail | null;
+  selectedCompanyId: string | null;
+  onSelectCompany: (companyId: string) => void;
 }) {
   return (
     <div className="dashboard-grid">
@@ -1568,16 +1599,91 @@ function Prospecting({
           {dashboard.rows.map((row) => {
             const company = companies.find((item) => item.id === row.id);
             return (
-              <div className="table-row" key={row.id}>
+              <button
+                className={
+                  row.id === selectedCompanyId
+                    ? "table-row application-row selected"
+                    : "table-row application-row"
+                }
+                key={row.id}
+                type="button"
+                onClick={() => onSelectCompany(row.id)}
+              >
                 <span>{row.companyName}</span>
                 <span>{row.fundingLabel}</span>
                 <span>{row.contacts} contacts · {row.region}</span>
                 <strong>{row.score}</strong>
                 {company?.ai_summary && <small>{company.ai_summary}</small>}
-              </div>
+              </button>
             );
           })}
         </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Company detail</p>
+            <h3>{detail?.companyName ?? "Select a company"}</h3>
+          </div>
+          <ShieldCheck size={19} aria-hidden="true" />
+        </div>
+        {detail ? (
+          <div className="activity-stack">
+            <section className="activity-section" aria-label="Prospecting company summary">
+              <div className="activity-heading compact">
+                <h4>{detail.domainLabel}</h4>
+                <strong>{detail.scoreLabel}</strong>
+              </div>
+              <p>{detail.description}</p>
+              <ul className="compact-activity-list">
+                <li>
+                  <strong>{detail.fundingLabel}</strong>
+                  <span>{detail.sourceLabel}</span>
+                </li>
+                <li>
+                  <strong>{detail.leadInvestorLabel}</strong>
+                  <span>{detail.investorLabel}</span>
+                </li>
+                <li>
+                  <strong>{detail.statusLabel}</strong>
+                  <span>{detail.techStackLabel}</span>
+                </li>
+              </ul>
+              <small>{detail.summary}</small>
+            </section>
+
+            <section className="activity-section" aria-label="Prospecting contacts">
+              <div className="activity-heading compact">
+                <h4>Contacts</h4>
+                <strong>{detail.contacts.length}</strong>
+              </div>
+              <div className="contact-grid">
+                {detail.contacts.length > 0 ? (
+                  detail.contacts.map((contact) => (
+                    <article className="contact-card" key={contact.id}>
+                      <div>
+                        <strong>{contact.name}</strong>
+                        <span>{contact.roleLabel} · {contact.confidenceLabel}</span>
+                      </div>
+                      <p>{contact.email}</p>
+                      <small>{contact.statusLabel} · {contact.sourceLabel}</small>
+                    </article>
+                  ))
+                ) : (
+                  <article className="contact-card empty-contact">
+                    <div>
+                      <strong>No contacts found</strong>
+                      <span>Enrichment can add HR, founder, and engineering leads.</span>
+                    </div>
+                  </article>
+                )}
+              </div>
+            </section>
+          </div>
+        ) : (
+          <p>No company selected.</p>
+        )}
       </section>
     </div>
   );
