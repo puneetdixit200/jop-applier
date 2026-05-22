@@ -2,6 +2,12 @@ import type { Application } from "./tauri-api";
 
 export type ApplicationTrackerColumnId = "queued" | "applying" | "applied" | "response" | "closed";
 
+export type ApplicationTrackerReviewAction = {
+  id: "approve_review" | "cancel_review";
+  label: string;
+  nextStatus: "submitting" | "cancelled";
+};
+
 export type ApplicationTrackerRow = {
   id: string;
   company: string;
@@ -14,6 +20,7 @@ export type ApplicationTrackerRow = {
   followUpDue: boolean;
   tags: string[];
   bucket: ApplicationTrackerColumnId;
+  reviewActions: ApplicationTrackerReviewAction[];
 };
 
 export type ApplicationTrackerColumn = {
@@ -49,9 +56,17 @@ const statusLabels: Record<string, string> = {
   matched: "Matched",
   queued: "Queued",
   preparing: "Preparing",
+  resume_generated: "Resume Generated",
+  cover_letter_generated: "Cover Letter Generated",
+  form_filling: "Form Filling",
+  review_pending: "Review Pending",
+  submitting: "Submitting",
+  submitted: "Submitted",
   applying: "Applying",
   applied: "Applied",
   failed: "Failed",
+  cancelled: "Cancelled",
+  permanently_failed: "Permanently Failed",
   responseReceived: "Response Received",
   noResponse: "No Response",
   followUpSent: "Follow Up Sent",
@@ -121,6 +136,7 @@ function applicationTrackerRow(application: Application, now: Date): Application
     followUpDue,
     tags: application.tags,
     bucket,
+    reviewActions: reviewActionsForApplication(application),
   };
 }
 
@@ -129,16 +145,27 @@ function bucketForStatus(status: string): ApplicationTrackerColumnId {
   if (["matched", "queued"].includes(value)) {
     return "queued";
   }
-  if (["preparing", "applying", "failed"].includes(value)) {
+  if (
+    [
+      "preparing",
+      "resume_generated",
+      "cover_letter_generated",
+      "form_filling",
+      "review_pending",
+      "submitting",
+      "applying",
+      "failed",
+    ].includes(value)
+  ) {
     return "applying";
   }
-  if (["applied", "noresponse", "followupsent"].includes(value)) {
+  if (["submitted", "applied", "noresponse", "followupsent"].includes(value)) {
     return "applied";
   }
   if (["responsereceived", "interviewscheduled", "offerreceived", "negotiating"].includes(value)) {
     return "response";
   }
-  if (["rejected", "accepted", "declined", "ghosted"].includes(value)) {
+  if (["cancelled", "permanently_failed", "rejected", "accepted", "declined", "ghosted"].includes(value)) {
     return "closed";
   }
   return "queued";
@@ -154,6 +181,15 @@ function nextActionForApplication(
   }
   if (bucket === "closed") {
     return statusLabelForApplication(application.status);
+  }
+  if (application.status === "review_pending") {
+    return "Review before submit";
+  }
+  if (application.status === "submitting") {
+    return "Submitting";
+  }
+  if (application.status === "failed") {
+    return "Resolve failure";
   }
   if (bucket === "response" || application.response_type || application.response_date) {
     return "Review response";
@@ -171,6 +207,17 @@ function nextActionForApplication(
     return "Generate documents";
   }
   return "Monitor response";
+}
+
+function reviewActionsForApplication(application: Application): ApplicationTrackerReviewAction[] {
+  if (application.status !== "review_pending") {
+    return [];
+  }
+
+  return [
+    { id: "approve_review", label: "Approve Submit", nextStatus: "submitting" },
+    { id: "cancel_review", label: "Cancel", nextStatus: "cancelled" },
+  ];
 }
 
 function documentLabelForApplication(application: Application) {

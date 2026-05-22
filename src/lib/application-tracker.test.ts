@@ -68,9 +68,56 @@ describe("application tracker", () => {
   });
 
   it("normalizes architecture status labels", () => {
+    expect(statusLabelForApplication("review_pending")).toBe("Review Pending");
+    expect(statusLabelForApplication("submitting")).toBe("Submitting");
+    expect(statusLabelForApplication("submitted")).toBe("Submitted");
+    expect(statusLabelForApplication("cancelled")).toBe("Cancelled");
+    expect(statusLabelForApplication("permanently_failed")).toBe("Permanently Failed");
     expect(statusLabelForApplication("responseReceived")).toBe("Response Received");
     expect(statusLabelForApplication("followUpSent")).toBe("Follow Up Sent");
     expect(statusLabelForApplication("interviewScheduled")).toBe("Interview Scheduled");
+  });
+
+  it("surfaces semi-auto review actions for review-pending applications", () => {
+    const tracker = buildApplicationTracker([
+      application({
+        id: "review",
+        status: "review_pending",
+        submission_url: "https://ats.example/review",
+        resume_path: "/docs/resume.pdf",
+        cover_letter_path: "/docs/cover.pdf",
+      }),
+      application({
+        id: "submitted",
+        status: "submitted",
+        submitted_at: "2026-05-21T10:00:00Z",
+      }),
+      application({
+        id: "cancelled",
+        status: "cancelled",
+      }),
+      application({
+        id: "permanent",
+        status: "permanently_failed",
+      }),
+    ]);
+
+    expect(tracker.columns.map((column) => [column.id, column.count])).toEqual([
+      ["queued", 0],
+      ["applying", 1],
+      ["applied", 1],
+      ["response", 0],
+      ["closed", 2],
+    ]);
+    expect(tracker.rows[0]).toMatchObject({
+      id: "review",
+      statusLabel: "Review Pending",
+      nextAction: "Review before submit",
+      reviewActions: [
+        { id: "approve_review", label: "Approve Submit", nextStatus: "submitting" },
+        { id: "cancel_review", label: "Cancel", nextStatus: "cancelled" },
+      ],
+    });
   });
 });
 
