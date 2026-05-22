@@ -2,7 +2,7 @@ use crate::{
     db::{
         models::{
             Application, ApplicationWorkflowStateUpdate, ScheduledTask, ScheduledTaskRunUpdate,
-            SettingValue, UpsertJob,
+            SettingValue, UpsertJob, UpsertNotification,
         },
         queries,
     },
@@ -34,10 +34,6 @@ pub fn run_sidecar_workflow_command(
     state: State<'_, AppState>,
     workflow_id: String,
 ) -> Result<Value, String> {
-    if workflow_id != "job-discovery" {
-        return sidecar::run_sidecar_workflow(&workflow_id).map_err(|error| error.to_string());
-    }
-
     let connection = state
         .connection
         .lock()
@@ -64,6 +60,7 @@ pub fn run_sidecar_workflow_and_persist_jobs_with_command(
     if workflow_id == "job-discovery" {
         persist_discovered_jobs(connection, &mut result)?;
     }
+    persist_sidecar_notifications(connection, &mut result)?;
 
     Ok(result)
 }
@@ -279,6 +276,55 @@ fn persist_discovered_jobs(connection: &Connection, result: &mut Value) -> Resul
     }
 
     Ok(())
+}
+
+fn persist_sidecar_notifications(
+    connection: &Connection,
+    result: &mut Value,
+) -> Result<(), String> {
+    let Some(notifications_value) = result.get("notifications").cloned() else {
+        return Ok(());
+    };
+    let notifications: Vec<SidecarNotificationDelivery> =
+        serde_json::from_value(notifications_value).map_err(|error| error.to_string())?;
+    let mut stored = 0;
+
+    for notification in notifications
+        .into_iter()
+        .filter(|notification| notification.channel == "in_app")
+    {
+        queries::save_notification(
+            connection,
+            UpsertNotification {
+                notification_type: notification.notification_type,
+                title: notification.title,
+                body: notification.body,
+                priority: notification.priority,
+                channel: notification.channel,
+                metadata: notification.metadata,
+            },
+        )
+        .map_err(|error| error.to_string())?;
+        stored += 1;
+    }
+
+    if let Some(payload) = result.as_object_mut() {
+        payload.insert("storedNotifications".to_string(), json!(stored));
+    }
+
+    Ok(())
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct SidecarNotificationDelivery {
+    #[serde(rename = "type")]
+    notification_type: String,
+    title: String,
+    body: String,
+    priority: String,
+    channel: String,
+    #[serde(default)]
+    metadata: Value,
 }
 
 fn workflow_id_for_task_type(task_type: &str) -> Option<&'static str> {

@@ -94,6 +94,69 @@ describe("sidecar runtime IPC", () => {
     expect(persistedUrls).toEqual(["https://jobs.example/react"]);
   });
 
+  it("returns in-app notifications emitted during workflow runs", async () => {
+    const checkedAt = new Date("2026-05-28T12:45:00Z");
+    const runtime = createSidecarRuntime({
+      now: () => checkedAt,
+      applicationProcessing: {
+        listApplications: async () => [
+          {
+            id: "app-1",
+            jobId: "job-1",
+            companyName: "Northstar Labs",
+            status: "queued",
+            mode: "full_auto",
+            resumePath: "/tmp/app-1-resume.pdf",
+            coverLetterPath: "/tmp/app-1-cover-letter.pdf",
+            retryCount: 0,
+            maxRetries: 3,
+          },
+        ],
+        prepareApplication: async () => undefined,
+        generateResume: async () => ({ resumePath: "/tmp/app-1-resume.pdf" }),
+        generateCoverLetter: async () => ({ coverLetterPath: "/tmp/app-1-cover-letter.pdf" }),
+        fillApplicationForm: async () => ({ submissionUrl: "https://ats.example/app-1" }),
+        submitApplication: async () => {
+          throw new Error("captcha challenge");
+        },
+        updateApplication: async () => undefined,
+      },
+    });
+
+    await expect(
+      handleSidecarIpcRequest(runtime, {
+        id: "workflow-application-processing",
+        method: "workflow.run",
+        params: {
+          workflowId: "application-processing",
+        },
+      }),
+    ).resolves.toEqual({
+      id: "workflow-application-processing",
+      ok: true,
+      result: expect.objectContaining({
+        failed: 1,
+        notifications: [
+          {
+            type: "application.failed",
+            title: "Application failed",
+            body: "Northstar Labs application failed: captcha challenge",
+            priority: "high",
+            channel: "in_app",
+            createdAt: "2026-05-28T12:45:00.000Z",
+            metadata: {
+              applicationId: "app-1",
+              jobId: "job-1",
+              companyName: "Northstar Labs",
+              status: "failed",
+              reason: "captcha challenge",
+            },
+          },
+        ],
+      }),
+    });
+  });
+
   it("passes configured discovery search queries into job-discovery", async () => {
     const searchedQueries: unknown[] = [];
     const runtime = createSidecarRuntime({

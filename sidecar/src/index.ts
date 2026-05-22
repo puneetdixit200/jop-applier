@@ -55,6 +55,8 @@ import {
 import {
   bindNotificationManager,
   NotificationManager,
+  type NotificationAdapter,
+  type NotificationDelivery,
   type NotificationManagerOptions,
 } from "./notifications/notification-manager.js";
 import { DEFAULT_WORKFLOWS_BY_TASK_TYPE } from "./orchestrator/default-schedules.js";
@@ -229,9 +231,13 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   const cleanup = options.cleanup ?? createEmptyCleanupWorkerDependencies();
   const followUps = options.followUps ?? createEmptyFollowUpDependencies();
   const scheduledTaskPersistence = options.scheduledTasks ?? createEmptyScheduledTaskPersistence();
-  if (options.notifications) {
-    bindNotificationManager(eventBus, new NotificationManager(options.notifications));
-  }
+  const notificationOutbox: NotificationDelivery[] = [];
+  bindNotificationManager(
+    eventBus,
+    new NotificationManager(
+      createRuntimeNotificationOptions(options.notifications, notificationOutbox, now),
+    ),
+  );
 
   workflowEngine.register({
     id: "job-discovery",
@@ -359,10 +365,55 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
         now: now(),
         eventBus,
       }),
+    drainNotifications: () => drainNotificationOutbox(notificationOutbox),
     runDueScheduledTasks: runDueRuntimeScheduledTasks,
     schedulerService,
     workflowEngine,
   };
+}
+
+function createRuntimeNotificationOptions(
+  options: NotificationManagerOptions | undefined,
+  outbox: NotificationDelivery[],
+  now: () => Date,
+): NotificationManagerOptions {
+  const adapters = (options?.adapters ?? []).map((adapter) =>
+    adapter.channel === "in_app" ? recordingInAppAdapter(adapter, outbox) : adapter,
+  );
+
+  if (!adapters.some((adapter) => adapter.channel === "in_app")) {
+    adapters.push(recordingInAppAdapter(undefined, outbox));
+  }
+
+  return {
+    adapters,
+    disabledChannels: options?.disabledChannels,
+    now: options?.now ?? now,
+  };
+}
+
+function recordingInAppAdapter(
+  adapter: NotificationAdapter | undefined,
+  outbox: NotificationDelivery[],
+): NotificationAdapter {
+  return {
+    channel: "in_app",
+    send: async (notification) => {
+      outbox.push(notification);
+      await adapter?.send(notification);
+    },
+  };
+}
+
+async function drainNotificationOutbox(outbox: NotificationDelivery[]) {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  return outbox.splice(0).map((notification) => ({
+    ...notification,
+    createdAt: notification.createdAt.toISOString(),
+  }));
 }
 
 function discoverySearchQueriesFromWorkflowInput(input: unknown): SearchQuery[] | undefined {

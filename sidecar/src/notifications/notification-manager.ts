@@ -38,6 +38,7 @@ export type NotificationAdapter = {
 export type NotificationManagerOptions = {
   adapters: NotificationAdapter[];
   disabledChannels?: NotificationChannel[];
+  now?: () => Date;
 };
 
 type NotificationRule = {
@@ -61,17 +62,19 @@ const NOTIFICATION_RULES: Record<NotificationEventType, NotificationRule> = {
 export class NotificationManager {
   private readonly adapters = new Map<NotificationChannel, NotificationAdapter>();
   private readonly disabledChannels: Set<NotificationChannel>;
+  private readonly now: () => Date;
 
   constructor(options: NotificationManagerOptions) {
     for (const adapter of options.adapters) {
       this.adapters.set(adapter.channel, adapter);
     }
     this.disabledChannels = new Set(options.disabledChannels ?? []);
+    this.now = options.now ?? (() => new Date());
   }
 
   async notify(request: NotificationRequest): Promise<NotificationDelivery[]> {
     const rule = NOTIFICATION_RULES[request.type];
-    const createdAt = new Date();
+    const createdAt = this.now();
     const deliveries = rule.channels
       .filter((channel) => !this.disabledChannels.has(channel))
       .map((channel) => ({

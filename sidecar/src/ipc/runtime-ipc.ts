@@ -11,6 +11,7 @@ import type { WorkflowEngine } from "../orchestrator/workflow-engine.js";
 
 export type SidecarRuntimeHost = {
   aiEngine: Pick<AIEngine, "activeProvider">;
+  drainNotifications?: () => Promise<unknown[]>;
   reviewApplication: (
     application: ApplicationProcessingApplication,
     decision: ApplicationReviewDecision,
@@ -63,10 +64,12 @@ export async function handleSidecarIpcRequest(
       case "workflow.run": {
         const params = requireRecord(request.params, "workflow.run params");
         const workflowId = requireString(params.workflowId, "workflowId");
+        const result = await runtime.workflowEngine.run(workflowId, params);
+        const notifications = (await runtime.drainNotifications?.()) ?? [];
         return {
           id,
           ok: true,
-          result: await runtime.workflowEngine.run(workflowId, params),
+          result: withWorkflowNotifications(result, notifications),
         };
       }
       case "application.reviewDecision": {
@@ -86,6 +89,24 @@ export async function handleSidecarIpcRequest(
   } catch (error) {
     return errorResponse(id, error);
   }
+}
+
+function withWorkflowNotifications(result: unknown, notifications: unknown[]): unknown {
+  if (notifications.length === 0) {
+    return result;
+  }
+
+  if (isRecord(result)) {
+    return {
+      ...result,
+      notifications,
+    };
+  }
+
+  return {
+    result,
+    notifications,
+  };
 }
 
 export async function runSidecarIpc(
