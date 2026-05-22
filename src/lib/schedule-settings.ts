@@ -65,6 +65,13 @@ const defaultScheduleTemplates: DefaultScheduleTemplate[] = [
     cadence: { kind: "daily", hour: 0, minute: 0 },
   },
   {
+    name: "Weekly Analytics Report",
+    type: "weekly_analytics_report",
+    cronExpression: "0 8 * * 0",
+    description: "Send weekly analytics report",
+    cadence: { kind: "weekly", dayOfWeek: 0, hour: 8, minute: 0 },
+  },
+  {
     name: "Daily Digest",
     type: "digest",
     cronExpression: "0 18 * * *",

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   AIProvider,
   ClassifiedJobPosting,
@@ -15,13 +16,38 @@ import type {
   TailoredResume,
 } from "./provider-interface.js";
 
+export type CompletionCacheEntry = {
+  promptHash: string;
+  model: string;
+  response: string;
+  tokensUsed?: number | null;
+  expiresAt?: Date | null;
+};
+
+export type CompletionCache = {
+  get(promptHash: string): Promise<CompletionCacheEntry | null>;
+  set(entry: CompletionCacheEntry): Promise<void>;
+};
+
+export type AIEngineOptions = {
+  cache?: CompletionCache;
+  cacheTTLHours?: number;
+  now?: () => Date;
+};
+
 export class AIEngine {
   private activeIndex = 0;
+  private readonly cache: CompletionCache | undefined;
+  private readonly cacheTTLHours: number;
+  private readonly now: () => Date;
 
-  constructor(private readonly providers: AIProvider[]) {
+  constructor(private readonly providers: AIProvider[], options: AIEngineOptions = {}) {
     if (providers.length === 0) {
       throw new Error("AIEngine requires at least one provider");
     }
+    this.cache = options.cache;
+    this.cacheTTLHours = options.cacheTTLHours ?? 24;
+    this.now = options.now ?? (() => new Date());
   }
 
   activeProvider(): ModelInfo {
@@ -43,12 +69,19 @@ export class AIEngine {
       const index = (this.activeIndex + offset) % this.providers.length;
       const provider = this.providers[index];
       const info = provider.getModelInfo();
+      const promptHash = completionHash(prompt, options, info);
 
       try {
         if (!(await provider.isAvailable())) {
           throw new Error(`${info.provider} unavailable`);
         }
+        const cached = await this.cachedCompletion(promptHash);
+        if (cached !== null) {
+          this.activeIndex = index;
+          return cached;
+        }
         const response = await provider.complete(prompt, options);
+        await this.cacheCompletion(promptHash, info, response);
         this.activeIndex = index;
         return response;
       } catch (error) {
@@ -75,11 +108,11 @@ export class AIEngine {
       `Job description: ${job.description}`,
       `Candidate headline: ${profile.headline}`,
       `Candidate skills: ${profile.skills.join(", ")}`,
-      'Return {"score":number,"reasoning":string,"tags":string[]}.',
+      'Return {"score":number,"confidence":number,"reasoning":string,"matchedSkills":string[],"missingSkills":string[],"tags":string[],"shouldApply":boolean,"priority":"high"|"medium"|"low"}.',
     ].join("\n");
 
     const raw = await this.complete(prompt, { temperature: 0.1 });
-    const parsed = JSON.parse(raw) as Partial<MatchResult>;
+    const parsed = parseJsonObject(raw, "AI match result") as Partial<MatchResult>;
 
     if (typeof parsed.score !== "number" || parsed.score < 0 || parsed.score > 100) {
       throw new Error("AI match result must include a score from 0 to 100");
@@ -93,8 +126,13 @@ export class AIEngine {
 
     return {
       score: parsed.score,
+      confidence: normalizedConfidence(parsed.confidence),
       reasoning: parsed.reasoning,
+      matchedSkills: stringArrayOrDefault(parsed.matchedSkills, inferredMatchedSkills(job, profile)),
+      missingSkills: stringArrayOrDefault(parsed.missingSkills, []),
       tags: parsed.tags,
+      shouldApply: typeof parsed.shouldApply === "boolean" ? parsed.shouldApply : parsed.score >= 70,
+      priority: matchPriority(parsed.priority, parsed.score),
     };
   }
 
@@ -164,6 +202,51 @@ export class AIEngine {
       remote: requireBoolean(parsed, "remote", "AI classified job result"),
     };
   }
+
+  private async cachedCompletion(promptHash: string): Promise<string | null> {
+    if (!this.cache) {
+      return null;
+    }
+
+    const entry = await this.cache.get(promptHash);
+    if (!entry) {
+      return null;
+    }
+
+    if (entry.expiresAt && entry.expiresAt <= this.now()) {
+      return null;
+    }
+
+    return entry.response;
+  }
+
+  private async cacheCompletion(promptHash: string, info: ModelInfo, response: string): Promise<void> {
+    if (!this.cache) {
+      return;
+    }
+
+    const expiresAt = this.cacheTTLHours > 0
+      ? new Date(this.now().getTime() + this.cacheTTLHours * 60 * 60 * 1000)
+      : null;
+    await this.cache.set({
+      promptHash,
+      model: `${info.provider}:${info.model}`,
+      response,
+      tokensUsed: null,
+      expiresAt,
+    });
+  }
+}
+
+function completionHash(prompt: string, options: CompletionOptions | undefined, info: ModelInfo): string {
+  return createHash("sha256")
+    .update(JSON.stringify({
+      prompt,
+      options: options ?? {},
+      provider: info.provider,
+      model: info.model,
+    }))
+    .digest("hex");
 }
 
 function parseJsonObject(raw: string, context: string): Record<string, unknown> {
@@ -214,6 +297,35 @@ function requireBoolean(record: Record<string, unknown>, key: string, context: s
     throw new Error(`${context} must include ${key} as a boolean`);
   }
   return value;
+}
+
+function normalizedConfidence(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 0.5;
+  }
+  return Math.min(1, Math.max(0, value));
+}
+
+function stringArrayOrDefault(value: unknown, fallback: string[]): string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : fallback;
+}
+
+function inferredMatchedSkills(job: JobForMatching, profile: ProfileForMatching): string[] {
+  const text = `${job.title} ${job.description}`.toLocaleLowerCase();
+  return profile.skills.filter((skill) => text.includes(skill.toLocaleLowerCase()));
+}
+
+function matchPriority(value: unknown, score: number): "high" | "medium" | "low" {
+  if (value === "high" || value === "medium" || value === "low") {
+    return value;
+  }
+  if (score >= 80) {
+    return "high";
+  }
+  if (score >= 60) {
+    return "medium";
+  }
+  return "low";
 }
 
 function nonEmptyCompletion(raw: string, context: string): string {

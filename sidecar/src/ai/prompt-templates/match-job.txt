@@ -1,0 +1,2 @@
+Score this job for the candidate as strict JSON.
+Return score, confidence, reasoning, matchedSkills, missingSkills, tags, shouldApply, and priority.

@@ -115,4 +115,23 @@ describe("document renderers", () => {
       return true;
     });
   });
+
+  it("renders named resume templates for professional layouts", async () => {
+    const outputDir = await mkdtemp(join(tmpdir(), "careercaveman-template-"));
+    tempDirs.push(outputDir);
+
+    const result = await renderResumeArtifacts(
+      {
+        context,
+        resume: {
+          summary: "React and Rust desktop engineer.",
+          skills: ["React", "TypeScript", "Rust"],
+          tailoringNotes: [],
+        },
+      },
+      { outputDir, resumeTemplate: "modern" },
+    );
+
+    await expect(readFile(result.pdfPath, "utf8")).resolves.toContain("Tailored Resume - Modern");
+  });
 });

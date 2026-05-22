@@ -9,7 +9,10 @@ import type {
 
 export type DocumentRendererOptions = {
   outputDir: string;
+  resumeTemplate?: ResumeTemplateId;
 };
+
+export type ResumeTemplateId = "classic" | "modern" | "creative" | "academic" | "compact";
 
 export async function renderResumeArtifacts(
   input: ResumeRenderInput,
@@ -23,7 +26,8 @@ export async function renderResumeArtifacts(
   const pdfPath = join(directory, pdfFileName);
   const jsonPath = join(directory, jsonFileName);
 
-  await writeFile(pdfPath, buildPdf("Tailored Resume", resumePdfLines(input)), "utf8");
+  const template = options.resumeTemplate ?? "classic";
+  await writeFile(pdfPath, buildPdf(`Tailored Resume - ${titleCase(template)}`, resumePdfLines(input, template)), "utf8");
   await writeFile(jsonPath, JSON.stringify(resumeFormFillJson(input), null, 2), "utf8");
 
   return {
@@ -79,8 +83,8 @@ function resumeFormFillJson(input: ResumeRenderInput) {
   };
 }
 
-function resumePdfLines(input: ResumeRenderInput): string[] {
-  return [
+function resumePdfLines(input: ResumeRenderInput, template: ResumeTemplateId): string[] {
+  const baseLines = [
     stringOrNull(input.context.profile.fullName) ?? "Candidate",
     input.context.profile.headline,
     input.context.profile.email,
@@ -101,6 +105,20 @@ function resumePdfLines(input: ResumeRenderInput): string[] {
     ...sectionLines("Certifications", input.resume.certifications),
     ...sectionLines("Tailoring Notes", input.resume.tailoringNotes),
   ].filter((line): line is string => typeof line === "string");
+
+  if (template === "compact") {
+    return baseLines.filter((line) => line.trim().length > 0);
+  }
+  if (template === "academic") {
+    return [...sectionLines("Education", input.resume.education), ...baseLines];
+  }
+  if (template === "creative") {
+    return ["Portfolio-focused resume", ...baseLines];
+  }
+  if (template === "modern") {
+    return ["Profile", ...baseLines];
+  }
+  return baseLines;
 }
 
 function coverLetterPdfLines(input: CoverLetterRenderInput): string[] {

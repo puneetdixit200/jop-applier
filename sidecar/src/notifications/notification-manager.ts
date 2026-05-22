@@ -99,6 +99,24 @@ export function bindNotificationManager(
   bus: EventBus<CareerEventMap>,
   manager: NotificationManager,
 ): () => void {
+  const unsubscribeJobDiscovered = bus.on("job.discovered", (event) => {
+    if (!isHighMatchJob(event)) {
+      return;
+    }
+
+    void manager.notify({
+      type: "job.high_match_found",
+      title: "High-match job found",
+      body: `${event.title} at ${event.companyName} matched your profile.`,
+      metadata: {
+        jobId: event.jobId,
+        platform: event.platform,
+        companyName: event.companyName,
+        matchScore: event.matchScore,
+        priority: event.priority,
+      },
+    });
+  });
   const unsubscribeProviderOffline = bus.on("ai.provider.offline", (event) => {
     void manager.notify({
       type: "ai.provider.offline",
@@ -159,9 +177,10 @@ export function bindNotificationManager(
   const unsubscribeResponseReceived = bus.on("response.received", (event) => {
     const companyName = event.companyName ?? "A company";
     const subject = event.subject ?? event.responseType;
+    const responseNotificationType = responseNotificationTypeFor(event.responseType);
     void manager.notify({
-      type: "response.received",
-      title: "Response received",
+      type: responseNotificationType,
+      title: responseNotificationTitle(responseNotificationType),
       body: `${companyName} replied: ${subject}`,
       metadata: {
         applicationId: event.applicationId,
@@ -173,12 +192,53 @@ export function bindNotificationManager(
       },
     });
   });
+  const unsubscribeAnalyticsRefreshed = bus.on("analytics.refreshed", (event) => {
+    void manager.notify({
+      type: "analytics.weekly_report",
+      title: "Weekly analytics report",
+      body: `Applications ${event.totalApplications}; response rate ${event.responseRate}%; interview rate ${event.interviewRate}%; offer rate ${event.offerRate}%.`,
+      metadata: {
+        generatedAt: event.generatedAt.toISOString(),
+        totalApplications: event.totalApplications,
+        responseRate: event.responseRate,
+        interviewRate: event.interviewRate,
+        offerRate: event.offerRate,
+      },
+    });
+  });
 
   return () => {
+    unsubscribeJobDiscovered();
     unsubscribeProviderOffline();
     unsubscribeFollowUpSent();
     unsubscribeApplicationFailed();
     unsubscribeApplicationSubmitted();
     unsubscribeResponseReceived();
+    unsubscribeAnalyticsRefreshed();
   };
+}
+
+function isHighMatchJob(event: CareerEventMap["job.discovered"]): boolean {
+  return event.shouldApply === true || event.priority === "high" || (event.matchScore ?? 0) >= 80;
+}
+
+function responseNotificationTypeFor(responseType: string): NotificationEventType {
+  const normalized = responseType.toLocaleLowerCase();
+  if (normalized.includes("offer")) {
+    return "offer.received";
+  }
+  if (normalized.includes("interview")) {
+    return "interview.scheduled";
+  }
+  return "response.received";
+}
+
+function responseNotificationTitle(type: NotificationEventType): string {
+  if (type === "offer.received") {
+    return "Offer received";
+  }
+  if (type === "interview.scheduled") {
+    return "Interview scheduled";
+  }
+  return "Response received";
 }

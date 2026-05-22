@@ -1,0 +1,2 @@
+Tailor this resume for the job as strict JSON.
+Preserve accurate facts, reorder and emphasize relevant experience, and do not invent credentials.

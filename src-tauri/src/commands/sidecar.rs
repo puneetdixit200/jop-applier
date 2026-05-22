@@ -508,8 +508,20 @@ fn workflow_params_from_settings(
 
 fn discovery_workflow_params_from_settings(connection: &Connection) -> Result<Value, String> {
     let mut discovery = Map::new();
+    if let Some(profile) = queries::get_user_profile(connection).map_err(|error| error.to_string())? {
+        discovery.insert(
+            "profile".to_string(),
+            json!({
+                "headline": profile.headline,
+                "skills": profile.skills,
+            }),
+        );
+    }
     if let Some(search_queries) = discovery_setting_array(connection, "discovery.searchQueries")? {
         discovery.insert("searchQueries".to_string(), Value::Array(search_queries));
+    }
+    if let Some(match_rules) = setting_object(connection, "discovery.matchRules")? {
+        discovery.insert("matchRules".to_string(), Value::Object(match_rules));
     }
     if let Some(portal_sources) = discovery_setting_array(connection, "discovery.portalSources")? {
         discovery.insert("portalSources".to_string(), Value::Array(portal_sources));
@@ -1418,6 +1430,7 @@ fn workflow_id_for_task_type(task_type: &str) -> Option<&'static str> {
         "follow_up" => Some("follow-up-check"),
         "email_check" => Some("email-check"),
         "analytics" => Some("analytics-refresh"),
+        "weekly_analytics_report" => Some("analytics-refresh"),
         "export" => Some("export-sync"),
         "session_health" => Some("session-health"),
         "cleanup" => Some("cleanup"),

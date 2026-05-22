@@ -140,6 +140,42 @@ describe("NotificationManager", () => {
     expect(inApp.sent).toHaveLength(1);
   });
 
+  it("subscribes to high-match discovery events and emits job notifications", async () => {
+    const bus = new EventBus<CareerEventMap>();
+    const os = new RecordingAdapter("os");
+    const inApp = new RecordingAdapter("in_app");
+    const manager = new NotificationManager({ adapters: [os, inApp] });
+
+    bindNotificationManager(bus, manager);
+
+    bus.emit("job.discovered", {
+      jobId: "job-1",
+      platform: "linkedin",
+      title: "Frontend Engineer Intern",
+      companyName: "Northstar Labs",
+      matchScore: 91,
+      priority: "high",
+      shouldApply: true,
+    });
+    await flushNotifications();
+
+    expect(os.sent).toHaveLength(1);
+    expect(inApp.sent).toHaveLength(1);
+    expect(os.sent[0]).toMatchObject({
+      type: "job.high_match_found",
+      priority: "high",
+      title: "High-match job found",
+      body: "Frontend Engineer Intern at Northstar Labs matched your profile.",
+      metadata: {
+        jobId: "job-1",
+        platform: "linkedin",
+        companyName: "Northstar Labs",
+        matchScore: 91,
+        priority: "high",
+      },
+    });
+  });
+
   it("subscribes to application submitted events and emits in-app notifications", async () => {
     const bus = new EventBus<CareerEventMap>();
     const os = new RecordingAdapter("os");
@@ -209,6 +245,78 @@ describe("NotificationManager", () => {
         responseType: "positive",
         subject: "Interview availability",
       },
+    });
+  });
+
+  it("maps interview and offer responses to critical notification types", async () => {
+    const bus = new EventBus<CareerEventMap>();
+    const os = new RecordingAdapter("os");
+    const inApp = new RecordingAdapter("in_app");
+    const telegram = new RecordingAdapter("telegram");
+    const email = new RecordingAdapter("email");
+    const manager = new NotificationManager({ adapters: [os, inApp, telegram, email] });
+
+    bindNotificationManager(bus, manager);
+
+    bus.emit("response.received", {
+      applicationId: "app-1",
+      jobId: "job-1",
+      companyName: "Northstar Labs",
+      communicationId: "comm-1",
+      responseType: "interview",
+      subject: "Interview availability",
+      receivedAt: new Date("2026-05-29T09:30:00Z"),
+    });
+    bus.emit("response.received", {
+      applicationId: "app-2",
+      jobId: "job-2",
+      companyName: "Signal Ridge",
+      communicationId: "comm-2",
+      responseType: "offer",
+      subject: "Offer details",
+      receivedAt: new Date("2026-05-29T10:30:00Z"),
+    });
+    await flushNotifications();
+
+    expect(os.sent.map((notification) => notification.type)).toEqual([
+      "interview.scheduled",
+      "offer.received",
+    ]);
+    expect(email.sent.map((notification) => notification.type)).toEqual([
+      "interview.scheduled",
+      "offer.received",
+    ]);
+    expect(telegram.sent.map((notification) => notification.type)).toEqual([
+      "interview.scheduled",
+      "offer.received",
+    ]);
+    expect(inApp.sent.map((notification) => notification.title)).toContain("Offer received");
+  });
+
+  it("subscribes to analytics refresh events and emits weekly report notifications", async () => {
+    const bus = new EventBus<CareerEventMap>();
+    const inApp = new RecordingAdapter("in_app");
+    const email = new RecordingAdapter("email");
+    const manager = new NotificationManager({ adapters: [inApp, email] });
+
+    bindNotificationManager(bus, manager);
+
+    bus.emit("analytics.refreshed", {
+      generatedAt: new Date("2026-05-31T08:00:00Z"),
+      totalApplications: 42,
+      responseRate: 21.4,
+      interviewRate: 9.5,
+      offerRate: 2.4,
+    });
+    await flushNotifications();
+
+    expect(email.sent).toHaveLength(1);
+    expect(inApp.sent).toHaveLength(1);
+    expect(email.sent[0]).toMatchObject({
+      type: "analytics.weekly_report",
+      priority: "low",
+      title: "Weekly analytics report",
+      body: "Applications 42; response rate 21.4%; interview rate 9.5%; offer rate 2.4%.",
     });
   });
 });

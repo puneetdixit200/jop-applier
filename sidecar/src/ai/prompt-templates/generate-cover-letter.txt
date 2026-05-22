@@ -1,0 +1,2 @@
+Generate a personalized cover letter for this application.
+Keep it professional, specific to the company and role, and grounded only in the candidate profile.

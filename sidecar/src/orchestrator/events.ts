@@ -26,6 +26,9 @@ export type CareerEventMap = {
     platform: string;
     title: string;
     companyName: string;
+    matchScore?: number | null;
+    priority?: "high" | "medium" | "low" | null;
+    shouldApply?: boolean | null;
   };
   "follow_up.sent": {
     applicationId: string;

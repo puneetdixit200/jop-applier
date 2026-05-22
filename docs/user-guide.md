@@ -20,7 +20,9 @@ Browser session snapshots are encrypted separately when `BROWSER_SESSION_KEY` or
 
 ## Automation
 
-The dashboard can run due scheduled tasks or start discovery manually. The default schedules cover discovery, application processing, follow-ups, email checks, analytics refreshes, daily digests, export sync, session health, and cleanup. Failed tasks are recorded and surfaced through notifications instead of stopping unrelated workflows.
+The dashboard can run due scheduled tasks or start discovery manually. The default schedules cover discovery, application processing, follow-ups, email checks, analytics refreshes, weekly analytics reports, daily digests, export sync, session health, and cleanup. Failed tasks are recorded and surfaced through notifications instead of stopping unrelated workflows.
+
+When a profile is configured, discovery can classify raw postings, score jobs against your skills, apply saved match rules, and surface high-match jobs through OS and in-app notifications.
 
 Optional email notifications use SMTP settings from environment variables such as `CAREERCAVEMAN_NOTIFICATION_EMAIL_TO`, `CAREERCAVEMAN_SMTP_HOST`, `CAREERCAVEMAN_SMTP_USER`, `CAREERCAVEMAN_SMTP_PASS`, and `CAREERCAVEMAN_EMAIL_FROM`.
 
@@ -29,6 +31,8 @@ Optional email notifications use SMTP settings from environment variables such a
 Built-in discovery sources include LinkedIn, Indeed, Internshala, Naukri, Wellfound, Glassdoor, JSON feeds, company career pages, Greenhouse, Lever, Workday, BambooHR, and iCIMS. Portal discovery is opt-in from Settings.
 
 Application form filling supports generic forms plus known ATS strategies. Keep review-before-submit enabled for new portals or unfamiliar forms.
+
+User-installable plugin manifests live under `plugins/`. The example connector shows the expected manifest shape, and the sidecar loader verifies plugin paths stay inside the plugin directory before importing the entry module.
 
 ## Build And Release
 

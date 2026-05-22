@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AIEngine } from "./ai-engine.js";
+import { AIEngine, type CompletionCacheEntry } from "./ai-engine.js";
 import type { AIProvider, ChatMessage, CompletionOptions, ModelInfo } from "./provider-interface.js";
 
 class FakeProvider implements AIProvider {
@@ -53,9 +53,72 @@ describe("AIEngine", () => {
     expect(engine.activeProvider().provider).toBe("openrouter");
   });
 
+  it("uses the configured completion cache before calling the active provider", async () => {
+    const provider = new FakeProvider("ollama", "fresh response", true);
+    const cachedEntries: CompletionCacheEntry[] = [];
+    const engine = new AIEngine([provider], {
+      now: () => new Date("2026-05-28T10:00:00.000Z"),
+      cache: {
+        get: async () => ({
+          promptHash: "cached-hash",
+          model: "ollama:test-model",
+          response: "cached response",
+          expiresAt: new Date("2026-05-28T11:00:00.000Z"),
+        }),
+        set: async (entry) => {
+          cachedEntries.push(entry);
+        },
+      },
+    });
+
+    await expect(engine.complete("score this job", { temperature: 0.1 })).resolves.toBe("cached response");
+    expect(provider.prompts).toEqual([]);
+    expect(cachedEntries).toEqual([]);
+  });
+
+  it("stores fresh provider completions with a prompt/model hash", async () => {
+    const provider = new FakeProvider("ollama", "fresh response", true);
+    const cachedEntries: CompletionCacheEntry[] = [];
+    const engine = new AIEngine([provider], {
+      now: () => new Date("2026-05-28T10:00:00.000Z"),
+      cacheTTLHours: 2,
+      cache: {
+        get: async () => null,
+        set: async (entry) => {
+          cachedEntries.push(entry);
+        },
+      },
+    });
+
+    await expect(engine.complete("score this job", { temperature: 0.1 })).resolves.toBe("fresh response");
+    expect(provider.prompts).toEqual(["score this job"]);
+    expect(cachedEntries).toEqual([
+      {
+        promptHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        model: "ollama:test-model",
+        response: "fresh response",
+        tokensUsed: null,
+        expiresAt: new Date("2026-05-28T12:00:00.000Z"),
+      },
+    ]);
+  });
+
   it("scores a job from provider JSON output", async () => {
     const engine = new AIEngine([
-      new FakeProvider("ollama", '{"score":86,"reasoning":"Strong React and Rust match","tags":["react","rust"]}', true),
+      new FakeProvider(
+        "ollama",
+        JSON.stringify({
+          score: 86,
+          confidence: 0.91,
+          reasoning: "Strong React and Rust match",
+          matchedSkills: ["React", "Rust"],
+          missingSkills: ["GraphQL"],
+          tags: ["react", "rust"],
+          shouldApply: true,
+          priority: "high",
+        }),
+        true,
+      ),
     ]);
 
     await expect(
@@ -65,8 +128,35 @@ describe("AIEngine", () => {
       ),
     ).resolves.toEqual({
       score: 86,
+      confidence: 0.91,
       reasoning: "Strong React and Rust match",
+      matchedSkills: ["React", "Rust"],
+      missingSkills: ["GraphQL"],
       tags: ["react", "rust"],
+      shouldApply: true,
+      priority: "high",
+    });
+  });
+
+  it("derives match defaults for older provider responses", async () => {
+    const engine = new AIEngine([
+      new FakeProvider("ollama", '{"score":72,"reasoning":"React match","tags":["react"]}', true),
+    ]);
+
+    await expect(
+      engine.matchJob(
+        { title: "Frontend Engineer", description: "React and product UI work" },
+        { headline: "React TypeScript engineer", skills: ["React", "TypeScript"] },
+      ),
+    ).resolves.toEqual({
+      score: 72,
+      confidence: 0.5,
+      reasoning: "React match",
+      matchedSkills: ["React"],
+      missingSkills: [],
+      tags: ["react"],
+      shouldApply: true,
+      priority: "medium",
     });
   });
 

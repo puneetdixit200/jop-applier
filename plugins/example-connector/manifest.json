@@ -1,0 +1,14 @@
+{
+  "name": "example-connector",
+  "version": "1.0.0",
+  "type": "job-connector",
+  "author": "community",
+  "description": "Example connector plugin manifest for user-installable job sources.",
+  "entry": "./index.ts",
+  "config": {
+    "baseUrl": { "type": "string", "required": true },
+    "apiKey": { "type": "string", "secret": true }
+  },
+  "permissions": ["network"],
+  "compatibility": ">=0.1.0"
+}

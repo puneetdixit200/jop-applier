@@ -123,4 +123,28 @@ describe("job persistence mapping", () => {
       })[0].ai_priority,
     ).toBe("medium");
   });
+
+  it("uses AI classification to fill normalized job fields before persistence", () => {
+    expect(
+      mapDiscoveredJobToUpsertJob(discoveredJob, undefined, {
+        title: "Frontend Engineer Intern",
+        companyName: "Northstar Labs",
+        location: "Remote - India",
+        description: "Build React workflow tools for a local-first product.",
+        requirements: ["React", "TypeScript", "Tauri"],
+        jobType: "internship",
+        experienceLevel: "entry",
+        remote: true,
+      }),
+    ).toMatchObject({
+      title: "Frontend Engineer Intern",
+      company_name: "Northstar Labs",
+      location: "Remote - India",
+      is_remote: true,
+      job_type: "internship",
+      experience_level: "entry",
+      description: "Build React workflow tools for a local-first product.",
+      requirements: ["React", "TypeScript", "Tauri"],
+    });
+  });
 });

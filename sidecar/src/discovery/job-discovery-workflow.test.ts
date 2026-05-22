@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EventBus } from "../orchestrator/event-bus.js";
 import type { CareerEventMap } from "../orchestrator/events.js";
 import type { SearchQuery } from "./connectors/connector-interface.js";
+import type { DiscoveredJob } from "./discovery-manager.js";
 import { runJobDiscoveryWorkflow, type StoredDiscoveredJob } from "./job-discovery-workflow.js";
 import type { UpsertJobPayload } from "./job-persistence.js";
 
@@ -137,6 +138,114 @@ describe("job discovery workflow", () => {
         title: "Node Engineer",
         companyName: "Southline Systems",
       },
+    ]);
+  });
+
+  it("classifies, matches, filters, and persists discovered jobs when AI context is configured", async () => {
+    const discovered: DiscoveredJob[] = [
+      {
+        listing: {
+          sourceId: "source-1",
+          platform: "linkedin",
+          url: "https://jobs.example/react",
+          title: "React role",
+          company: "Northstar Labs",
+          location: "Remote",
+          rawHtml: "<article>React internship</article>",
+        },
+        details: {
+          url: "https://jobs.example/react",
+          description: "Build React tools with TypeScript.",
+          requirements: ["React"],
+          rawHtml: "<main>React TypeScript internship</main>",
+        },
+      },
+      {
+        listing: {
+          sourceId: "source-2",
+          platform: "linkedin",
+          url: "https://jobs.example/senior",
+          title: "Senior frontend role",
+          company: "Northstar Labs",
+          location: "Remote",
+        },
+        details: {
+          url: "https://jobs.example/senior",
+          description: "Requires React, TypeScript, and 10+ years of experience.",
+          requirements: ["React", "TypeScript"],
+        },
+      },
+    ];
+    const persisted: UpsertJobPayload[][] = [];
+
+    const result = await runJobDiscoveryWorkflow(
+      {
+        searchQueries: [{ keywords: ["react"] }],
+        searchForPersistence: async () => [],
+        search: async () => discovered,
+        classifyJobPosting: async (rawPosting) => ({
+          title: rawPosting.includes("internship") ? "Frontend Engineer Intern" : "Senior Frontend Engineer",
+          companyName: "Northstar Labs",
+          location: "Remote",
+          description: rawPosting.includes("internship")
+            ? "Build React tools with TypeScript."
+            : "Requires React, TypeScript, and 10+ years of experience.",
+          requirements: ["React", "TypeScript"],
+          jobType: rawPosting.includes("internship") ? "internship" : "fulltime",
+          experienceLevel: rawPosting.includes("internship") ? "entry" : "senior",
+          remote: true,
+        }),
+        matchJob: async (matchJob) => ({
+          score: matchJob.title.includes("Intern") ? 92 : 64,
+          confidence: 0.88,
+          reasoning: "React and TypeScript fit",
+          matchedSkills: ["React", "TypeScript"],
+          missingSkills: [],
+          tags: ["good-fit"],
+          shouldApply: matchJob.title.includes("Intern"),
+          priority: matchJob.title.includes("Intern") ? "high" : "medium",
+        }),
+        upsertJobs: async (jobs) => {
+          persisted.push(jobs);
+          return jobs.map((candidate): StoredDiscoveredJob => ({
+            id: candidate.source_id ?? candidate.url,
+            platform: candidate.platform,
+            title: candidate.title,
+            company_name: candidate.company_name,
+          }));
+        },
+      },
+      {
+        profile: {
+          headline: "React TypeScript engineer",
+          skills: ["React", "TypeScript"],
+        },
+        matchRules: {
+          mustHaveKeywords: ["React", "TypeScript"],
+          mustNotHaveKeywords: ["10+ years"],
+          locations: [],
+          remoteOnly: true,
+          maxExperienceYears: 2,
+          companyBlacklist: [],
+          companyWhitelist: [],
+        },
+      },
+    );
+
+    expect(result.stored).toBe(1);
+    expect(persisted).toEqual([
+      [
+        expect.objectContaining({
+          title: "Frontend Engineer Intern",
+          job_type: "internship",
+          experience_level: "entry",
+          match_score: 92,
+          match_confidence: 0.88,
+          matched_skills: ["React", "TypeScript"],
+          should_apply: true,
+          ai_priority: "high",
+        }),
+      ],
     ]);
   });
 });

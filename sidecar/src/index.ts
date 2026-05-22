@@ -1,5 +1,5 @@
-import { AIEngine } from "./ai/ai-engine.js";
-import type { AIProvider } from "./ai/provider-interface.js";
+import { AIEngine, type CompletionCache } from "./ai/ai-engine.js";
+import type { AIProvider, ProfileForMatching } from "./ai/provider-interface.js";
 import { AnthropicProvider } from "./ai/providers/anthropic-provider.js";
 import { GroqProvider } from "./ai/providers/groq-provider.js";
 import { OllamaProvider } from "./ai/providers/ollama-provider.js";
@@ -62,6 +62,7 @@ import {
 } from "./discovery/job-discovery-workflow.js";
 import type { JobConnector, SearchQuery } from "./discovery/connectors/connector-interface.js";
 import { DiscoveryManager } from "./discovery/discovery-manager.js";
+import type { MatchRules } from "./discovery/matching/rule-matcher.js";
 import { BambooHrConnector } from "./discovery/connectors/bamboohr-connector.js";
 import {
   CareerPageConnector,
@@ -161,7 +162,10 @@ class OfflineProvider implements AIProvider {
   }
 }
 
-export function createAIEngineFromEnv(env: NodeJS.ProcessEnv = process.env): AIEngine {
+export function createAIEngineFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  options: { cache?: CompletionCache; now?: () => Date } = {},
+): AIEngine {
   const providers: AIProvider[] = [
     new OllamaProvider({
       baseUrl: env.OLLAMA_BASE_URL ?? "http://localhost:11434",
@@ -208,7 +212,7 @@ export function createAIEngineFromEnv(env: NodeJS.ProcessEnv = process.env): AIE
 
   providers.push(new OfflineProvider());
 
-  return new AIEngine(providers);
+  return new AIEngine(providers, { cache: options.cache, now: options.now });
 }
 
 export type SidecarFollowUpOptions = FollowUpWorkerDependencies & {
@@ -289,6 +293,7 @@ export type SidecarRuntimeOptions = {
     clearInterval?: SchedulerServiceDependencies["clearInterval"];
     onError?: SchedulerServiceDependencies["onError"];
   };
+  aiCache?: CompletionCache;
 };
 
 export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
@@ -305,7 +310,8 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   for (const plugin of options.plugins ?? []) {
     pluginManager.register(plugin);
   }
-  const aiEngine = createAIEngineFromEnv(env);
+  const now = options.now ?? (() => new Date());
+  const aiEngine = createAIEngineFromEnv(env, { cache: options.aiCache, now });
   const browserStealthConfig = browserStealthConfigFromEnv(env);
   const browserManager = new BrowserManager(
     createPlaywrightBrowserAdapter(),
@@ -314,7 +320,6 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
       sessionStore: browserSessionStoreFromEnv(env, browserStealthConfig.sessionRoot),
     },
   );
-  const now = options.now ?? (() => new Date());
   const jobDiscovery = options.jobDiscovery ?? createEmptyJobDiscoveryDependencies();
   const applicationProcessing = createApplicationWorkerDependencies(
     options.applicationProcessing,
@@ -342,12 +347,14 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
     run: async (input) => {
       const connectors = discoveryConnectorsFromWorkflowInput(input);
       const discoveryDependencies = connectors.length > 0
-        ? createConnectorDiscoveryDependencies(connectors, jobDiscovery)
+        ? createConnectorDiscoveryDependencies(connectors, jobDiscovery, aiEngine)
         : jobDiscovery;
 
       return runJobDiscoveryWorkflow(discoveryDependencies, {
         eventBus,
         searchQueries: discoverySearchQueriesFromWorkflowInput(input),
+        profile: discoveryProfileFromWorkflowInput(input),
+        matchRules: discoveryMatchRulesFromWorkflowInput(input),
       });
     },
   });
@@ -691,6 +698,44 @@ function discoverySearchQueriesFromWorkflowInput(input: unknown): SearchQuery[] 
   return searchQueries.filter(isSearchQuery);
 }
 
+function discoveryProfileFromWorkflowInput(input: unknown): ProfileForMatching | undefined {
+  if (!isRecord(input) || !isRecord(input.discovery) || !isRecord(input.discovery.profile)) {
+    return undefined;
+  }
+
+  const profile = input.discovery.profile;
+  if (
+    typeof profile.headline !== "string" ||
+    !Array.isArray(profile.skills) ||
+    profile.skills.some((skill) => typeof skill !== "string")
+  ) {
+    return undefined;
+  }
+
+  return {
+    headline: profile.headline,
+    skills: profile.skills,
+  };
+}
+
+function discoveryMatchRulesFromWorkflowInput(input: unknown): MatchRules | undefined {
+  if (!isRecord(input) || !isRecord(input.discovery) || !isRecord(input.discovery.matchRules)) {
+    return undefined;
+  }
+
+  const rules = input.discovery.matchRules;
+  return {
+    mustHaveKeywords: stringArray(rules.mustHaveKeywords),
+    mustNotHaveKeywords: stringArray(rules.mustNotHaveKeywords),
+    locations: stringArray(rules.locations),
+    remoteOnly: rules.remoteOnly === true,
+    minSalary: positiveNumberOrUndefined(rules.minSalary),
+    maxExperienceYears: positiveNumberOrUndefined(rules.maxExperienceYears),
+    companyBlacklist: stringArray(rules.companyBlacklist),
+    companyWhitelist: stringArray(rules.companyWhitelist),
+  };
+}
+
 function discoveryConnectorsFromWorkflowInput(input: unknown): JobConnector[] {
   if (!isRecord(input) || !isRecord(input.discovery)) {
     return [];
@@ -791,11 +836,15 @@ function discoveryCareerPageSourcesFromWorkflowInput(
 function createConnectorDiscoveryDependencies(
   connectors: JobConnector[],
   base: JobDiscoveryWorkflowDependencies,
+  aiEngine: AIEngine,
 ): JobDiscoveryWorkflowDependencies {
   const manager = new DiscoveryManager(connectors);
 
   return {
     searchQueries: base.searchQueries,
+    search: (query) => manager.search(query),
+    classifyJobPosting: (rawPosting) => aiEngine.classifyJobPosting(rawPosting),
+    matchJob: (job, profile) => aiEngine.matchJob(job, profile),
     searchForPersistence: (query) => manager.searchForPersistence(query),
     upsertJobs: base.upsertJobs,
   };
@@ -893,6 +942,16 @@ function isStringRecord(value: unknown): value is Record<string, string> {
     isRecord(value) &&
     Object.values(value).every((item) => typeof item === "string")
   );
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+}
+
+function positiveNumberOrUndefined(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function isSearchQuery(value: unknown): value is SearchQuery {

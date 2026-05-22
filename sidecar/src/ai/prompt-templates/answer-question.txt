@@ -1,0 +1,2 @@
+Answer this application question using only the candidate profile, stored answers, and job context.
+Return strict JSON with an answer string, boolean, or null.

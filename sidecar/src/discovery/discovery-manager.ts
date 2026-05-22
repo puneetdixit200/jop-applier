@@ -8,6 +8,7 @@ import type {
 import { deduplicateListings } from "./deduplicator.js";
 import {
   mapDiscoveredJobsToUpsertJobs,
+  type DiscoveryClassificationResult,
   type DiscoveryMatchResult,
   type UpsertJobPayload,
 } from "./job-persistence.js";
@@ -59,8 +60,9 @@ export class DiscoveryManager {
     query: SearchQuery,
     matchesByUrl: Record<string, DiscoveryMatchResult> = {},
     rules?: MatchRules,
+    classificationsByUrl: Record<string, DiscoveryClassificationResult> = {},
   ): Promise<UpsertJobPayload[]> {
-    const jobs = mapDiscoveredJobsToUpsertJobs(await this.search(query), matchesByUrl);
+    const jobs = mapDiscoveredJobsToUpsertJobs(await this.search(query), matchesByUrl, classificationsByUrl);
     return rules ? filterJobsByRules(jobs, rules).map((result) => result.job) : jobs;
   }
 

@@ -76,10 +76,17 @@ export type ClassifiedJobPosting = {
   remote: boolean;
 };
 
+export type MatchPriority = "high" | "medium" | "low";
+
 export type MatchResult = {
   score: number;
+  confidence: number;
   reasoning: string;
+  matchedSkills: string[];
+  missingSkills: string[];
   tags: string[];
+  shouldApply: boolean;
+  priority: MatchPriority;
 };
 
 export interface AIProvider {

@@ -1,0 +1,2 @@
+Extract structured job data from this posting as strict JSON.
+Return title, companyName, location, description, requirements, jobType, experienceLevel, and remote.

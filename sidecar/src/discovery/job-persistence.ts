@@ -1,6 +1,9 @@
 import type { DiscoveredJob } from "./discovery-manager.js";
+import type { ClassifiedJobPosting } from "../ai/provider-interface.js";
 
 export type MatchPriority = "high" | "medium" | "low";
+
+export type DiscoveryClassificationResult = ClassifiedJobPosting;
 
 export type DiscoveryMatchResult = {
   score: number;
@@ -42,31 +45,47 @@ export type UpsertJobPayload = {
 export function mapDiscoveredJobsToUpsertJobs(
   jobs: DiscoveredJob[],
   matchesByUrl: Record<string, DiscoveryMatchResult> = {},
+  classificationsByUrl: Record<string, ClassifiedJobPosting> = {},
 ): UpsertJobPayload[] {
-  return jobs.map((job) => mapDiscoveredJobToUpsertJob(job, matchesByUrl[job.listing.url]));
+  return jobs.map((job) =>
+    mapDiscoveredJobToUpsertJob(
+      job,
+      matchesByUrl[job.listing.url],
+      classificationsByUrl[job.listing.url],
+    ),
+  );
 }
 
 export function mapDiscoveredJobToUpsertJob(
   job: DiscoveredJob,
   match?: DiscoveryMatchResult,
+  classification?: ClassifiedJobPosting,
 ): UpsertJobPayload {
   const salary = parseSalary(job.listing.salary);
+  const description =
+    nullableText(classification?.description) ??
+    nullableText(job.details.description) ??
+    nullableText(job.listing.description);
+  const requirements =
+    classification?.requirements && classification.requirements.length > 0
+      ? classification.requirements
+      : job.details.requirements ?? [];
 
   return {
     source_id: nullableText(job.listing.sourceId),
     platform: job.listing.platform,
     url: job.details.url || job.listing.url,
-    title: job.listing.title,
-    company_name: job.listing.company,
-    location: nullableText(job.listing.location),
-    is_remote: /\bremote\b/i.test(job.listing.location),
+    title: nullableText(classification?.title) ?? job.listing.title,
+    company_name: nullableText(classification?.companyName) ?? job.listing.company,
+    location: nullableText(classification?.location ?? undefined) ?? nullableText(job.listing.location),
+    is_remote: classification?.remote ?? /\bremote\b/i.test(job.listing.location),
     salary_min: salary.min,
     salary_max: salary.max,
     salary_currency: salary.currency,
-    job_type: null,
-    experience_level: null,
-    description: nullableText(job.details.description) ?? nullableText(job.listing.description),
-    requirements: job.details.requirements ?? [],
+    job_type: nullableText(classification?.jobType ?? undefined),
+    experience_level: nullableText(classification?.experienceLevel ?? undefined),
+    description,
+    requirements,
     raw_html: nullableText(job.details.rawHtml) ?? nullableText(job.listing.rawHtml),
     match_score: match?.score ?? null,
     match_confidence: match?.confidence ?? null,

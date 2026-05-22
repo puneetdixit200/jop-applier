@@ -17,6 +17,7 @@ import {
   UserRound,
   XCircle,
 } from "lucide-react";
+import { Button } from "./components/ui/button";
 import {
   configureDatabaseEncryption,
   getDatabaseEncryptionStatus,
@@ -127,8 +128,7 @@ import {
   type OnboardingStatus,
   type OnboardingStep,
 } from "./lib/onboarding";
-
-type RouteId = "dashboard" | "jobs" | "applications" | "profile" | "settings";
+import { useAppStore, type RouteId } from "./stores/app-store";
 
 type Profile = {
   fullName: string;
@@ -154,6 +154,7 @@ const routes: Array<{ id: RouteId; label: string; icon: typeof BarChart3 }> = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
   { id: "jobs", label: "Jobs", icon: BriefcaseBusiness },
   { id: "applications", label: "Applications", icon: FileText },
+  { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "profile", label: "Profile", icon: UserRound },
   { id: "settings", label: "Settings", icon: Settings },
 ];
@@ -378,7 +379,8 @@ const previewScheduleTasks = buildDefaultScheduledTasks().map((task) => ({
 }));
 
 export function App() {
-  const [route, setRoute] = useState<RouteId>("dashboard");
+  const route = useAppStore((state) => state.route);
+  const setRoute = useAppStore((state) => state.setRoute);
   const [profile, setProfile] = useState<Profile>({
     fullName: "Deepak Kudi",
     headline: "React and TypeScript engineer",
@@ -897,33 +899,32 @@ export function App() {
             <h2>{routeTitle}</h2>
           </div>
           <div className="topbar-actions">
-            <button className="icon-button" type="button" aria-label="Search">
+            <Button className="icon-button" variant="icon" aria-label="Search">
               <Search size={18} aria-hidden="true" />
-            </button>
+            </Button>
             <NotificationInboxButton
               inbox={notificationInbox}
               isOpen={isNotificationInboxOpen}
               onToggle={() => setIsNotificationInboxOpen((current) => !current)}
               onMarkRead={markInboxNotificationRead}
             />
-            <button
+            <Button
               className="secondary-action"
-              type="button"
+              variant="secondary"
               onClick={startDueScheduledTasks}
               disabled={isRunningSchedules}
             >
               <CalendarClock size={17} aria-hidden="true" />
               {isRunningSchedules ? "Running" : "Run Due Tasks"}
-            </button>
-            <button
+            </Button>
+            <Button
               className="primary-action"
-              type="button"
               onClick={startDiscovery}
               disabled={isRunningDiscovery}
             >
               <Play size={17} aria-hidden="true" />
               {isRunningDiscovery ? "Running" : "Start Discovery"}
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -966,6 +967,13 @@ export function App() {
             onApplicationDragStart={setDraggedApplicationId}
             onApplicationDragEnd={() => setDraggedApplicationId(null)}
             onApplicationDrop={handleApplicationColumnDrop}
+          />
+        )}
+        {route === "analytics" && (
+          <Analytics
+            jobs={visibleJobs}
+            applicationTracker={applicationTracker}
+            schedules={scheduleSummaries}
           />
         )}
         {route === "profile" && (
@@ -1173,6 +1181,120 @@ function Dashboard({
       </section>
     </div>
   );
+}
+
+function Analytics({
+  jobs,
+  applicationTracker,
+  schedules,
+}: {
+  jobs: JobSummary[];
+  applicationTracker: ApplicationTracker;
+  schedules: ScheduledTaskSummary[];
+}) {
+  const totalApplications = applicationTracker.rows.length;
+  const responseCount = applicationTracker.rows.filter((row) => row.statusLabel.toLowerCase().includes("response")).length;
+  const interviewCount = applicationTracker.rows.filter((row) => row.statusLabel.toLowerCase().includes("interview")).length;
+  const responseRate = rateLabel(responseCount, totalApplications);
+  const interviewRate = rateLabel(interviewCount, totalApplications);
+  const platformCounts = jobs.reduce<Record<string, number>>((counts, job) => {
+    counts[job.source] = (counts[job.source] ?? 0) + 1;
+    return counts;
+  }, {});
+  const topPlatforms = Object.entries(platformCounts)
+    .sort(([, left], [, right]) => right - left)
+    .slice(0, 5);
+
+  return (
+    <div className="dashboard-grid">
+      <section className="metric-grid" aria-label="Analytics metrics">
+        {[
+          { label: "Total Applications", value: String(totalApplications), tone: "green" },
+          { label: "Response Rate", value: responseRate, tone: "blue" },
+          { label: "Interview Rate", value: interviewRate, tone: "amber" },
+          { label: "Matched Jobs", value: String(jobs.length), tone: "violet" },
+        ].map((metric) => (
+          <article className={`metric-card ${metric.tone}`} key={metric.label}>
+            <span>{metric.label}</span>
+            <strong>{metric.value}</strong>
+          </article>
+        ))}
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Funnel</p>
+            <h3>Applications by lane</h3>
+          </div>
+          <BarChart3 size={19} aria-hidden="true" />
+        </div>
+        <div className="analytics-bars">
+          {applicationTracker.columns.map((column) => (
+            <div className="analytics-bar-row" key={column.id}>
+              <span>{column.label}</span>
+              <div aria-hidden="true">
+                <b style={{ width: `${Math.min(100, column.rows.length * 18)}%` }} />
+              </div>
+              <strong>{column.rows.length}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Sources</p>
+            <h3>Top platforms</h3>
+          </div>
+          <BriefcaseBusiness size={19} aria-hidden="true" />
+        </div>
+        <ul className="timeline">
+          {topPlatforms.length > 0 ? (
+            topPlatforms.map(([platform, count]) => (
+              <li key={platform}>
+                <span>{count}</span>
+                {platform}
+              </li>
+            ))
+          ) : (
+            <li>
+              <span>-</span>
+              No platform data
+            </li>
+          )}
+        </ul>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Reports</p>
+            <h3>Scheduled analytics</h3>
+          </div>
+          <CalendarClock size={19} aria-hidden="true" />
+        </div>
+        <ul className="timeline">
+          {schedules
+            .filter((schedule) => schedule.name.toLowerCase().includes("analytics"))
+            .map((schedule) => (
+              <li key={schedule.id}>
+                <span>{schedule.nextRunLabel}</span>
+                {schedule.name}
+              </li>
+            ))}
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+function rateLabel(count: number, total: number): string {
+  if (total <= 0) {
+    return "0%";
+  }
+  return `${Math.round((count / total) * 100)}%`;
 }
 
 function SetupWizard({
