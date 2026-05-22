@@ -138,6 +138,63 @@ describe("application form filler strategies", () => {
     ]);
     expect(checkedFields).toEqual([{ selector: "#relocate", checked: true }]);
   });
+
+  it("answers required custom questions that were not mapped from stored answers", async () => {
+    const filledText: Array<{ selector: string; value: string }> = [];
+    const selectedOptions: Array<{ selector: string; value: string }> = [];
+    const answeredQuestions: string[] = [];
+    const page = formPage(
+      "https://boards.greenhouse.io/northstar/jobs/42",
+      [
+        field("#name", "Full name", "input", true),
+        field("#email", "Email address", "input", true),
+        field("#interest", "Why do you want to work here?", "textarea", true),
+        field("#authorized", "Are you legally authorized to work in India?", "select", true),
+      ],
+      {
+        fillText: async (selector, value) => {
+          filledText.push({ selector, value });
+        },
+        selectOption: async (selector, value) => {
+          selectedOptions.push({ selector, value });
+        },
+      },
+    );
+
+    const result = await fillApplicationFormWithStrategy(page, applicationForm(), {
+      answerQuestion: async (field, input) => {
+        answeredQuestions.push(`${field.label}:${input.companyName}`);
+        if (field.label === "Why do you want to work here?") {
+          return "I am interested in Northstar Labs because the role matches my React experience.";
+        }
+        if (field.label === "Are you legally authorized to work in India?") {
+          return "Yes";
+        }
+
+        return null;
+      },
+    });
+
+    expect(result).toEqual({
+      platform: "greenhouse",
+      submissionUrl: "https://boards.greenhouse.io/northstar/jobs/42",
+      mappedFields: 4,
+      requiredMissing: [],
+    });
+    expect(answeredQuestions).toEqual([
+      "Why do you want to work here?:Northstar Labs",
+      "Are you legally authorized to work in India?:Northstar Labs",
+    ]);
+    expect(filledText).toEqual([
+      { selector: "#name", value: "Deepak Kudi" },
+      { selector: "#email", value: "deepak@example.com" },
+      {
+        selector: "#interest",
+        value: "I am interested in Northstar Labs because the role matches my React experience.",
+      },
+    ]);
+    expect(selectedOptions).toEqual([{ selector: "#authorized", value: "Yes" }]);
+  });
 });
 
 function applicationForm(overrides: Partial<ApplicationFormInput> = {}): ApplicationFormInput {

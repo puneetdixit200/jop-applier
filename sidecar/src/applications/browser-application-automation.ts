@@ -11,6 +11,7 @@ import type {
 import {
   fillApplicationFormWithStrategy,
   type ApplicationFormInput,
+  type ApplicationQuestionAnswerer,
   type FormFillerStrategy,
 } from "./form-filler.js";
 import { createPlaywrightFormPage } from "./playwright-form-page.js";
@@ -39,12 +40,14 @@ export type BrowserApplicationAutomationDependencies = {
     application: ApplicationProcessingApplication,
   ) => Promise<BrowserFormFillApplicationContext>;
   strategies?: FormFillerStrategy[];
+  answerQuestion?: ApplicationQuestionAnswerer;
 };
 
 export function createBrowserApplicationAutomation({
   browserManager,
   loadApplicationContext,
   strategies,
+  answerQuestion,
 }: BrowserApplicationAutomationDependencies): Pick<
   ApplicationWorkerDependencies,
   "fillApplicationForm" | "submitApplication" | "verifySubmission"
@@ -63,7 +66,7 @@ export function createBrowserApplicationAutomation({
       return fillApplicationFormWithStrategy(
         createPlaywrightFormPage(page),
         applicationFormInput(application, context),
-        strategies,
+        { strategies, answerQuestion },
       );
     },
     submitApplication: async (application) => {

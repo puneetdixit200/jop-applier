@@ -5,6 +5,7 @@ import type {
 import {
   fillApplicationFormWithStrategy,
   type ApplicationFormInput,
+  type ApplicationQuestionAnswerer,
   type FormFillerStrategy,
 } from "./form-filler.js";
 import { createPlaywrightFormPage, type PlaywrightFormPageLike } from "./playwright-form-page.js";
@@ -36,12 +37,14 @@ export type BrowserApplicationFormFillerDependencies = {
     application: ApplicationProcessingApplication,
   ) => Promise<BrowserFormFillApplicationContext>;
   strategies?: FormFillerStrategy[];
+  answerQuestion?: ApplicationQuestionAnswerer;
 };
 
 export function createBrowserApplicationFormFiller({
   browserManager,
   loadApplicationContext,
   strategies,
+  answerQuestion,
 }: BrowserApplicationFormFillerDependencies): ApplicationWorkerDependencies["fillApplicationForm"] {
   return async (application) => {
     const context = await loadApplicationContext(application);
@@ -53,7 +56,7 @@ export function createBrowserApplicationFormFiller({
     return fillApplicationFormWithStrategy(
       createPlaywrightFormPage(page),
       applicationFormInput(application, context),
-      strategies,
+      { strategies, answerQuestion },
     );
   };
 }

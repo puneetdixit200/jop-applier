@@ -11,6 +11,7 @@ describe("browser application automation", () => {
       field("#name", "Full name", "input", true),
       field("#email", "Email address", "input", true),
       field("#resume", "Resume", "file", true),
+      field("#interest", "Why do you want to work here?", "textarea", true),
     ]);
     const openedPlatforms: string[] = [];
     const application = queuedApplication({
@@ -38,6 +39,13 @@ describe("browser application automation", () => {
           location: "Bengaluru, India",
         },
       }),
+      answerQuestion: async (field) => {
+        if (field.label === "Why do you want to work here?") {
+          return "I want to work at Northstar Labs because the role matches my React experience.";
+        }
+
+        return null;
+      },
     });
 
     const fillResult = await automation.fillApplicationForm(application);
@@ -47,7 +55,7 @@ describe("browser application automation", () => {
     expect(fillResult).toEqual({
       platform: "lever",
       submissionUrl: "https://jobs.lever.co/northstar/42",
-      mappedFields: 3,
+      mappedFields: 4,
       requiredMissing: [],
     });
     expect(submission).toEqual({
@@ -68,6 +76,7 @@ describe("browser application automation", () => {
       "fill:#name:Deepak Kudi",
       "fill:#email:deepak@example.com",
       "setInputFiles:#resume:/tmp/app-1-resume.pdf",
+      "fill:#interest:I want to work at Northstar Labs because the role matches my React experience.",
       "click:button[type=\"submit\"], input[type=\"submit\"]",
       "waitForLoadState:domcontentloaded",
       "textContent:body",

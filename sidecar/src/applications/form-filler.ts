@@ -51,6 +51,16 @@ export type FormFillerStrategy = {
   fill: (page: ApplicationFormPage, mappings: FormFieldMapping[]) => Promise<void>;
 };
 
+export type ApplicationQuestionAnswerer = (
+  field: DetectedFormField,
+  input: ApplicationFormInput,
+) => Promise<string | boolean | null | undefined>;
+
+export type ApplicationFormFillOptions = {
+  strategies?: FormFillerStrategy[];
+  answerQuestion?: ApplicationQuestionAnswerer;
+};
+
 export type ApplicationFormFillResult = {
   platform: string;
   submissionUrl: string;
@@ -70,11 +80,19 @@ export function createDefaultFormFillerStrategies(): FormFillerStrategy[] {
 export async function fillApplicationFormWithStrategy(
   page: ApplicationFormPage,
   input: ApplicationFormInput,
-  strategies: FormFillerStrategy[] = createDefaultFormFillerStrategies(),
+  optionsOrStrategies: FormFillerStrategy[] | ApplicationFormFillOptions = {},
 ): Promise<ApplicationFormFillResult> {
-  const strategy = await selectStrategy(page, input, strategies);
+  const options = normalizeFormFillOptions(optionsOrStrategies);
+  const strategy = await selectStrategy(page, input, options.strategies);
   const fields = await page.fields();
-  const mappings = await strategy.mapFields(page, input);
+  const fieldMappings = await strategy.mapFields(page, input);
+  const questionMappings = await answerRequiredQuestions(
+    fields,
+    fieldMappings,
+    input,
+    options.answerQuestion,
+  );
+  const mappings = [...fieldMappings, ...questionMappings];
 
   await strategy.fill(page, mappings);
 
@@ -83,6 +101,22 @@ export async function fillApplicationFormWithStrategy(
     submissionUrl: await page.url(),
     mappedFields: mappings.length,
     requiredMissing: requiredMissingLabels(fields, mappings),
+  };
+}
+
+function normalizeFormFillOptions(
+  optionsOrStrategies: FormFillerStrategy[] | ApplicationFormFillOptions,
+): Required<Pick<ApplicationFormFillOptions, "strategies">> &
+  Pick<ApplicationFormFillOptions, "answerQuestion"> {
+  if (Array.isArray(optionsOrStrategies)) {
+    return {
+      strategies: optionsOrStrategies,
+    };
+  }
+
+  return {
+    strategies: optionsOrStrategies.strategies ?? createDefaultFormFillerStrategies(),
+    answerQuestion: optionsOrStrategies.answerQuestion,
   };
 }
 
@@ -208,6 +242,42 @@ function customAnswerForField(
   const answer = Object.entries(answers).find(([key]) => normalizeLabel(key) === label)?.[1]?.trim();
   if (!answer) {
     return undefined;
+  }
+
+  return mappingValueForField(field, answer);
+}
+
+async function answerRequiredQuestions(
+  fields: DetectedFormField[],
+  mappings: FormFieldMapping[],
+  input: ApplicationFormInput,
+  answerQuestion: ApplicationQuestionAnswerer | undefined,
+): Promise<FormFieldMapping[]> {
+  if (!answerQuestion) {
+    return [];
+  }
+
+  const mappedSelectors = new Set(mappings.map((mapping) => mapping.selector));
+  const questionMappings: FormFieldMapping[] = [];
+  for (const field of fields) {
+    if (!field.required || mappedSelectors.has(field.selector)) {
+      continue;
+    }
+
+    const answer = await answerQuestion(field, input);
+    if (answer === null || answer === undefined || answer === "") {
+      continue;
+    }
+
+    questionMappings.push(mappingFor(field, mappingValueForField(field, answer)));
+  }
+
+  return questionMappings;
+}
+
+function mappingValueForField(field: DetectedFormField, answer: string | boolean): string | boolean {
+  if (typeof answer === "boolean") {
+    return answer;
   }
 
   if (field.fieldType === "checkbox" || field.fieldType === "radio") {
