@@ -599,6 +599,87 @@ describe("sidecar runtime", () => {
     });
   });
 
+  it("routes approved application reviews through configured submission dependencies", async () => {
+    const checkedAt = new Date("2026-05-28T12:15:00Z");
+    const applicationUpdates: Array<{ applicationId: string; update: Record<string, unknown> }> = [];
+    const submittedApplications: string[] = [];
+    const submittedEvents: Array<CareerEventMap["application.submitted"]> = [];
+    const runtime = createSidecarRuntime({
+      now: () => checkedAt,
+      applicationProcessing: {
+        listApplications: async () => [],
+        prepareApplication: async () => undefined,
+        fillApplicationForm: async () => ({ submissionUrl: null }),
+        submitApplication: async (application) => {
+          submittedApplications.push(`${application.id}:${application.status}`);
+          return {
+            confirmationId: null,
+            receiptText: "Thanks for applying. Confirmation CONF-84",
+          };
+        },
+        verifySubmission: async (application, submission) => ({
+          ok: true,
+          confirmationId: `${application.id}:${submission.receiptText?.match(/CONF-\d+/)?.[0]}`,
+          message: "confirmation receipt detected",
+        }),
+        updateApplication: async (applicationId, update) => {
+          applicationUpdates.push({ applicationId, update });
+        },
+      },
+    });
+
+    runtime.eventBus.on("application.submitted", (event) => submittedEvents.push(event));
+
+    await expect(
+      runtime.reviewApplication(
+        {
+          id: "app-1",
+          jobId: "job-1",
+          companyName: "Northstar Labs",
+          status: "review_pending",
+          mode: "semi_auto",
+          resumePath: "/tmp/app-1-resume.pdf",
+          coverLetterPath: "/tmp/app-1-cover-letter.pdf",
+          retryCount: 0,
+          maxRetries: 3,
+        },
+        "approve",
+      ),
+    ).resolves.toEqual({
+      status: "submitted",
+      confirmationId: "app-1:CONF-84",
+    });
+
+    expect(submittedApplications).toEqual(["app-1:submitting"]);
+    expect(applicationUpdates).toEqual([
+      {
+        applicationId: "app-1",
+        update: {
+          status: "submitting",
+          errorMessage: null,
+        },
+      },
+      {
+        applicationId: "app-1",
+        update: {
+          status: "submitted",
+          confirmationId: "app-1:CONF-84",
+          submittedAt: "2026-05-28T12:15:00.000Z",
+          errorMessage: null,
+        },
+      },
+    ]);
+    expect(submittedEvents).toEqual([
+      {
+        applicationId: "app-1",
+        jobId: "job-1",
+        companyName: "Northstar Labs",
+        confirmationId: "app-1:CONF-84",
+        submittedAt: checkedAt,
+      },
+    ]);
+  });
+
   it("wires document generation into due application processing tasks", async () => {
     const checkedAt = new Date("2026-05-28T10:30:00Z");
     const outputDir = await mkdtemp(join(tmpdir(), "careercaveman-runtime-docs-"));

@@ -237,6 +237,88 @@ describe("sidecar runtime IPC", () => {
     expect(persistedUrls).toEqual(["https://jobs.example/feed-react"]);
   });
 
+  it("runs application review decisions over the IPC request handler", async () => {
+    const checkedAt = new Date("2026-05-28T12:00:00Z");
+    const submittedApplications: string[] = [];
+    const verifiedSubmissions: string[] = [];
+    const applicationUpdates: Array<{ applicationId: string; update: Record<string, unknown> }> = [];
+    const runtime = createSidecarRuntime({
+      now: () => checkedAt,
+      applicationProcessing: {
+        listApplications: async () => [],
+        prepareApplication: async () => undefined,
+        fillApplicationForm: async () => ({ submissionUrl: null }),
+        submitApplication: async (application) => {
+          submittedApplications.push(`${application.id}:${application.status}`);
+          return {
+            confirmationId: null,
+            receiptText: "Thanks for applying. Confirmation CONF-42",
+          };
+        },
+        verifySubmission: async (application, submission) => {
+          verifiedSubmissions.push(`${application.id}:${submission.receiptText}`);
+
+          return {
+            ok: true,
+            confirmationId: "CONF-42",
+            message: "confirmation receipt detected",
+          };
+        },
+        updateApplication: async (applicationId, update) => {
+          applicationUpdates.push({ applicationId, update });
+        },
+      },
+    });
+
+    await expect(
+      handleSidecarIpcRequest(runtime, {
+        id: "review-app-1",
+        method: "application.reviewDecision",
+        params: {
+          decision: "approve",
+          application: {
+            id: "app-1",
+            job_id: "job-1",
+            company_name: "Northstar Labs",
+            status: "review_pending",
+            mode: "semi_auto",
+            resume_path: "/tmp/app-1-resume.pdf",
+            cover_letter_path: "/tmp/app-1-cover-letter.pdf",
+            retry_count: 0,
+            max_retries: 3,
+          },
+        },
+      }),
+    ).resolves.toEqual({
+      id: "review-app-1",
+      ok: true,
+      result: {
+        status: "submitted",
+        confirmationId: "CONF-42",
+      },
+    });
+    expect(submittedApplications).toEqual(["app-1:submitting"]);
+    expect(verifiedSubmissions).toEqual(["app-1:Thanks for applying. Confirmation CONF-42"]);
+    expect(applicationUpdates).toEqual([
+      {
+        applicationId: "app-1",
+        update: {
+          status: "submitting",
+          errorMessage: null,
+        },
+      },
+      {
+        applicationId: "app-1",
+        update: {
+          status: "submitted",
+          confirmationId: "CONF-42",
+          submittedAt: "2026-05-28T12:00:00.000Z",
+          errorMessage: null,
+        },
+      },
+    ]);
+  });
+
   it("serializes JSON-line responses for stdio IPC", async () => {
     const runtime = createSidecarRuntime();
     const input = new PassThrough();

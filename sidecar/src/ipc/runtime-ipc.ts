@@ -1,10 +1,20 @@
 import { createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 import type { AIEngine } from "../ai/ai-engine.js";
+import type {
+  ApplicationReviewDecision,
+  ApplicationReviewDecisionResult,
+} from "../applications/application-review-decision.js";
+import type { ApplicationProcessingApplication } from "../applications/application-worker.js";
+import type { ApplicationStatus } from "../applications/application-workflow.js";
 import type { WorkflowEngine } from "../orchestrator/workflow-engine.js";
 
 export type SidecarRuntimeHost = {
   aiEngine: Pick<AIEngine, "activeProvider">;
+  reviewApplication: (
+    application: ApplicationProcessingApplication,
+    decision: ApplicationReviewDecision,
+  ) => Promise<ApplicationReviewDecisionResult>;
   workflowEngine: Pick<WorkflowEngine, "registeredWorkflows" | "run">;
 };
 
@@ -57,6 +67,17 @@ export async function handleSidecarIpcRequest(
           id,
           ok: true,
           result: await runtime.workflowEngine.run(workflowId, params),
+        };
+      }
+      case "application.reviewDecision": {
+        const params = requireRecord(request.params, "application.reviewDecision params");
+        return {
+          id,
+          ok: true,
+          result: await runtime.reviewApplication(
+            requireApplicationProcessingApplication(params.application),
+            requireApplicationReviewDecision(params.decision),
+          ),
         };
       }
       default:
@@ -143,6 +164,94 @@ function requireString(value: unknown, label: string): string {
   return value;
 }
 
+function requireNullableString(value: unknown, label: string): string | null {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+
+  throw new Error(`${label} must be a non-empty string or null`);
+}
+
+function requireNonNegativeInteger(value: unknown, label: string): number {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
+    return value;
+  }
+
+  throw new Error(`${label} must be a non-negative integer`);
+}
+
+function requireApplicationReviewDecision(value: unknown): ApplicationReviewDecision {
+  const decision = requireString(value, "decision");
+  if (decision !== "approve" && decision !== "cancel") {
+    throw new Error("decision must be approve or cancel");
+  }
+
+  return decision;
+}
+
+function requireApplicationProcessingApplication(
+  value: unknown,
+): ApplicationProcessingApplication {
+  const application = requireRecord(value, "application");
+
+  return {
+    id: requireString(application.id, "application.id"),
+    jobId: requireString(field(application, "jobId", "job_id"), "application.jobId"),
+    companyName: requireString(
+      field(application, "companyName", "company_name"),
+      "application.companyName",
+    ),
+    status: requireApplicationStatus(application.status),
+    mode: requireString(application.mode, "application.mode"),
+    resumePath: requireNullableString(
+      field(application, "resumePath", "resume_path"),
+      "application.resumePath",
+    ),
+    coverLetterPath: requireNullableString(
+      field(application, "coverLetterPath", "cover_letter_path"),
+      "application.coverLetterPath",
+    ),
+    retryCount: requireNonNegativeInteger(
+      field(application, "retryCount", "retry_count"),
+      "application.retryCount",
+    ),
+    maxRetries: requireNonNegativeInteger(
+      field(application, "maxRetries", "max_retries"),
+      "application.maxRetries",
+    ),
+  };
+}
+
+function requireApplicationStatus(value: unknown): ApplicationStatus {
+  const status = requireString(value, "application.status");
+  if (!applicationStatuses.has(status)) {
+    throw new Error(`application.status is not supported: ${status}`);
+  }
+
+  return status as ApplicationStatus;
+}
+
+function field(record: Record<string, unknown>, camelCase: string, snakeCase: string): unknown {
+  return Object.prototype.hasOwnProperty.call(record, camelCase) ? record[camelCase] : record[snakeCase];
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+const applicationStatuses = new Set<string>([
+  "queued",
+  "preparing",
+  "resume_generated",
+  "cover_letter_generated",
+  "form_filling",
+  "review_pending",
+  "submitting",
+  "submitted",
+  "failed",
+  "cancelled",
+  "permanently_failed",
+]);

@@ -8,7 +8,12 @@ import {
   type AnalyticsRefreshWorkerDependencies,
 } from "./analytics/analytics-refresh-worker.js";
 import {
+  runApplicationReviewDecision,
+  type ApplicationReviewDecision,
+} from "./applications/application-review-decision.js";
+import {
   runApplicationWorker,
+  type ApplicationProcessingApplication,
   type ApplicationWorkerDependencies,
 } from "./applications/application-worker.js";
 import {
@@ -340,6 +345,11 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
     aiEngine,
     browserManager,
     eventBus,
+    reviewApplication: (application: ApplicationProcessingApplication, decision: ApplicationReviewDecision) =>
+      runApplicationReviewDecision(application, decision, applicationProcessing, {
+        now: now(),
+        eventBus,
+      }),
     runDueScheduledTasks: runDueRuntimeScheduledTasks,
     schedulerService,
     workflowEngine,
