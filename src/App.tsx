@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
+  Bell,
   Bot,
   BriefcaseBusiness,
   CalendarClock,
   CheckCircle2,
+  CheckCheck,
   FileText,
   Play,
   Search,
@@ -24,7 +26,9 @@ import {
   listContacts,
   listDocuments,
   listJobs,
+  listNotifications,
   listScheduledTasks,
+  markNotificationRead,
   runDueScheduledTasks,
   runApplicationReviewDecision,
   runSidecarWorkflow,
@@ -38,6 +42,7 @@ import {
   type Contact,
   type Communication,
   type Document,
+  type Notification as AppNotification,
   type UpsertUserProfile,
   type UserProfile,
 } from "./lib/tauri-api";
@@ -91,6 +96,10 @@ import {
   type ScheduleControlDependencies,
 } from "./lib/schedule-control";
 import { createScheduleAutoRunner } from "./lib/schedule-auto-runner";
+import {
+  buildNotificationInbox,
+  type NotificationInbox,
+} from "./lib/notification-inbox";
 
 type RouteId = "dashboard" | "jobs" | "applications" | "profile" | "settings";
 
@@ -203,6 +212,30 @@ const previewContacts: Contact[] = [
     linkedin_url: "https://linkedin.example/in/nisha",
     role: "referral",
     notes: "Alumni referral",
+  }),
+];
+
+const previewNotifications: AppNotification[] = [
+  notificationRecord({
+    id: "preview-response-notification",
+    type: "response.received",
+    title: "Response received",
+    body: "Northstar Labs replied: Interview availability",
+    priority: "high",
+    metadata: {
+      applicationId: "preview-applied",
+      responseType: "positive",
+    },
+    created_at: "2026-05-29T09:30:00Z",
+  }),
+  notificationRecord({
+    id: "preview-submitted-notification",
+    type: "application.submitted",
+    title: "Application submitted",
+    body: "Application submitted to AstraGrid.",
+    priority: "medium",
+    read_at: "2026-05-29T08:10:00Z",
+    created_at: "2026-05-29T08:00:00Z",
   }),
 ];
 
@@ -337,6 +370,8 @@ export function App() {
   const [persistedApplications, setPersistedApplications] = useState<Application[]>([]);
   const [previewApplicationRecords, setPreviewApplicationRecords] = useState<Application[]>(previewApplications);
   const [persistedContacts, setPersistedContacts] = useState<Contact[]>([]);
+  const [persistedNotifications, setPersistedNotifications] = useState<AppNotification[]>([]);
+  const [previewNotificationRecords, setPreviewNotificationRecords] = useState<AppNotification[]>(previewNotifications);
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
   const [applicationDraft, setApplicationDraft] = useState<ApplicationEditDraft>(() =>
     applicationEditDraft(previewApplications[0]),
@@ -351,6 +386,7 @@ export function App() {
   const [isRunningSchedules, setIsRunningSchedules] = useState(false);
   const [runningReviewActionId, setRunningReviewActionId] = useState<string | null>(null);
   const [draggedApplicationId, setDraggedApplicationId] = useState<string | null>(null);
+  const [isNotificationInboxOpen, setIsNotificationInboxOpen] = useState(false);
   const [scheduleSummaries, setScheduleSummaries] = useState<ScheduledTaskSummary[]>(() =>
     scheduledTaskSummaries(previewScheduleTasks, 8),
   );
@@ -367,6 +403,14 @@ export function App() {
   const contactCrm = useMemo(
     () => buildContactCrm(persistedContacts.length > 0 ? persistedContacts : previewContacts),
     [persistedContacts],
+  );
+  const visibleNotifications =
+    !isDesktopRuntime() && persistedNotifications.length === 0
+      ? previewNotificationRecords
+      : persistedNotifications;
+  const notificationInbox = useMemo(
+    () => buildNotificationInbox(visibleNotifications),
+    [visibleNotifications],
   );
 
   useEffect(() => {
@@ -418,6 +462,7 @@ export function App() {
         storedJobs,
         storedApplications,
         storedContacts,
+        storedNotifications,
       ] = await Promise.all([
         getUserProfile(),
         getSetting("ai.provider"),
@@ -430,6 +475,7 @@ export function App() {
         listJobs(),
         listApplications(),
         listContacts(),
+        listNotifications(),
       ]);
 
       if (storedProfile) {
@@ -444,6 +490,7 @@ export function App() {
       if (storedContacts.length > 0) {
         setPersistedContacts(storedContacts);
       }
+      setPersistedNotifications(storedNotifications);
       setScheduleSummaries(scheduledTaskSummaries(storedScheduledTasks, 8));
       setSettings((current) => ({
         ...current,
@@ -660,6 +707,26 @@ export function App() {
     }
   }
 
+  async function markInboxNotificationRead(notificationId: string) {
+    const readAt = new Date().toISOString();
+    if (!isDesktopRuntime()) {
+      setPreviewNotificationRecords((current) =>
+        current.map((notification) =>
+          notification.id === notificationId ? { ...notification, read_at: readAt } : notification,
+        ),
+      );
+      return;
+    }
+
+    const updated = await markNotificationRead(notificationId, readAt);
+    if (!updated) {
+      return;
+    }
+    setPersistedNotifications((current) =>
+      current.map((notification) => (notification.id === updated.id ? updated : notification)),
+    );
+  }
+
   function updateApplicationRecord(application: Application) {
     if (!isDesktopRuntime() || persistedApplications.length === 0) {
       setPreviewApplicationRecords((current) =>
@@ -721,6 +788,12 @@ export function App() {
             <button className="icon-button" type="button" aria-label="Search">
               <Search size={18} aria-hidden="true" />
             </button>
+            <NotificationInboxButton
+              inbox={notificationInbox}
+              isOpen={isNotificationInboxOpen}
+              onToggle={() => setIsNotificationInboxOpen((current) => !current)}
+              onMarkRead={markInboxNotificationRead}
+            />
             <button
               className="secondary-action"
               type="button"
@@ -781,6 +854,72 @@ export function App() {
         )}
       </section>
     </main>
+  );
+}
+
+function NotificationInboxButton({
+  inbox,
+  isOpen,
+  onToggle,
+  onMarkRead,
+}: {
+  inbox: NotificationInbox;
+  isOpen: boolean;
+  onToggle: () => void;
+  onMarkRead: (notificationId: string) => void;
+}) {
+  return (
+    <div className="notification-menu">
+      <button
+        className="icon-button notification-trigger"
+        type="button"
+        aria-label={`${inbox.summary.unread} unread notifications`}
+        aria-expanded={isOpen}
+        onClick={onToggle}
+      >
+        <Bell size={18} aria-hidden="true" />
+        {inbox.summary.unread > 0 && <span>{inbox.summary.unread}</span>}
+      </button>
+      {isOpen && (
+        <section className="notification-popover" aria-label="In-app notifications">
+          <div className="notification-popover-heading">
+            <div>
+              <p className="eyebrow">Notifications</p>
+              <h3>In-app inbox</h3>
+            </div>
+            <strong>{inbox.summary.unread}</strong>
+          </div>
+          <ul className="notification-list">
+            {inbox.items.length > 0 ? (
+              inbox.items.slice(0, 5).map((notification) => (
+                <li className={notification.isUnread ? "unread" : ""} key={notification.id}>
+                  <div>
+                    <span>{notification.priorityLabel} · {notification.timestampLabel}</span>
+                    <strong>{notification.title}</strong>
+                    <p>{notification.body}</p>
+                  </div>
+                  {notification.isUnread && (
+                    <button
+                      className="icon-button notification-read-button"
+                      type="button"
+                      aria-label={`Mark ${notification.title} read`}
+                      onClick={() => onMarkRead(notification.id)}
+                    >
+                      <CheckCheck size={16} aria-hidden="true" />
+                    </button>
+                  )}
+                </li>
+              ))
+            ) : (
+              <li className="notification-empty">
+                <strong>No notifications</strong>
+                <span>Workflow alerts will appear here.</span>
+              </li>
+            )}
+          </ul>
+        </section>
+      )}
+    </div>
   );
 }
 
@@ -1570,6 +1709,21 @@ function contactRecord(overrides: Partial<Contact>): Contact {
     role: null,
     notes: null,
     created_at: "2026-05-21T10:00:00Z",
+    ...overrides,
+  };
+}
+
+function notificationRecord(overrides: Partial<AppNotification>): AppNotification {
+  return {
+    id: "preview-notification",
+    type: "application.submitted",
+    title: "Application submitted",
+    body: "Application submitted.",
+    priority: "medium",
+    channel: "in_app",
+    metadata: {},
+    read_at: null,
+    created_at: "2026-05-29T09:00:00Z",
     ...overrides,
   };
 }
