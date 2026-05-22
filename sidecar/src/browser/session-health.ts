@@ -23,6 +23,7 @@ export type BrowserSessionHealthSummary = {
 
 export type BrowserSessionHealthDependencies = {
   openSession: (platform: string) => Promise<BrowserSession>;
+  closeSession?: (platform: string) => Promise<void>;
   validateSession?: (
     target: BrowserSessionHealthTarget,
     session: BrowserSession,
@@ -81,7 +82,11 @@ export async function runBrowserSessionHealthCheck(
       });
     } finally {
       if (session) {
-        await session.close();
+        if (dependencies.closeSession) {
+          await dependencies.closeSession(target.platform);
+        } else {
+          await session.close();
+        }
       }
     }
   }

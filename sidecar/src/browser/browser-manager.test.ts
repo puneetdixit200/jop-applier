@@ -8,6 +8,7 @@ import {
   type BrowserLaunchOptions,
   type BrowserSession,
 } from "./browser-manager.js";
+import type { BrowserSessionStore, BrowserStorageState } from "./session-store.js";
 
 describe("browser manager", () => {
   it("launches persistent platform sessions with stealth defaults and reuses active sessions", async () => {
@@ -148,5 +149,86 @@ describe("browser manager", () => {
       { server: "http://proxy-b.example:8080", username: "user", password: "pass" },
       { server: "http://proxy-a.example:8080" },
     ]);
+  });
+
+  it("restores and snapshots encrypted storage state when a session store is configured", async () => {
+    const initialState: BrowserStorageState = {
+      cookies: [
+        {
+          name: "li_at",
+          value: "stored-cookie",
+          domain: ".linkedin.com",
+          path: "/",
+          expires: -1,
+          httpOnly: true,
+          secure: true,
+          sameSite: "Lax",
+        },
+      ],
+      origins: [],
+    };
+    const updatedState: BrowserStorageState = {
+      cookies: [
+        {
+          name: "li_at",
+          value: "updated-cookie",
+          domain: ".linkedin.com",
+          path: "/",
+          expires: -1,
+          httpOnly: true,
+          secure: true,
+          sameSite: "Lax",
+        },
+      ],
+      origins: [],
+    };
+    const loadedPlatforms: string[] = [];
+    const savedSnapshots: Array<{ platform: string; state: BrowserStorageState }> = [];
+    const launchedEphemeral: BrowserLaunchOptions[] = [];
+    const closedSessions: string[] = [];
+    const store: BrowserSessionStore = {
+      pathFor: (platform) => `/tmp/${platform}.session.enc`,
+      load: async (platform) => {
+        loadedPlatforms.push(platform);
+        return initialState;
+      },
+      save: async (platform, state) => {
+        savedSnapshots.push({ platform, state });
+        return `/tmp/${platform}.session.enc`;
+      },
+      delete: async () => undefined,
+    };
+    const adapter: BrowserAutomationAdapter = {
+      launchPersistentContext: async () => {
+        throw new Error("encrypted session mode should not use persistent profile storage");
+      },
+      launchEphemeralContext: async (options): Promise<BrowserSession> => {
+        launchedEphemeral.push(options);
+
+        return {
+          close: async () => {
+            closedSessions.push("LinkedIn Jobs");
+          },
+          newPage: async () => {
+            throw new Error("not used in this test");
+          },
+          storageState: async () => updatedState,
+        };
+      },
+    };
+    const manager = new BrowserManager(
+      adapter,
+      createDefaultStealthConfig({ sessionRoot: "/tmp/careercaveman-sessions" }),
+      { sessionStore: store },
+    );
+
+    await manager.openSession("LinkedIn Jobs");
+    await manager.closeSession("LinkedIn Jobs");
+
+    expect(loadedPlatforms).toEqual(["LinkedIn Jobs"]);
+    expect(launchedEphemeral).toHaveLength(1);
+    expect(launchedEphemeral[0]?.storageState).toEqual(initialState);
+    expect(savedSnapshots).toEqual([{ platform: "LinkedIn Jobs", state: updatedState }]);
+    expect(closedSessions).toEqual(["LinkedIn Jobs"]);
   });
 });

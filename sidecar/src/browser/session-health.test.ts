@@ -84,4 +84,32 @@ describe("browser session health", () => {
       },
     ]);
   });
+
+  it("uses the manager-level close hook when one is provided", async () => {
+    const closedBySession: string[] = [];
+    const closedByManager: string[] = [];
+
+    await runBrowserSessionHealthCheck(
+      {
+        openSession: async (platform) => ({
+          close: async () => {
+            closedBySession.push(platform);
+          },
+          newPage: async () => {
+            throw new Error("not used in this test");
+          },
+        }),
+        closeSession: async (platform) => {
+          closedByManager.push(platform);
+        },
+      },
+      {
+        checkedAt: new Date("2026-05-28T09:00:00Z"),
+        targets: [{ platform: "LinkedIn", isEnabled: true }],
+      },
+    );
+
+    expect(closedByManager).toEqual(["LinkedIn"]);
+    expect(closedBySession).toEqual([]);
+  });
 });

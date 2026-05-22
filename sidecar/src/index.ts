@@ -34,6 +34,7 @@ import {
   createPlaywrightBrowserAdapter,
   type BrowserSession,
 } from "./browser/browser-manager.js";
+import { EncryptedBrowserSessionStore } from "./browser/session-store.js";
 import {
   runBrowserSessionHealthCheck,
   type BrowserSessionHealthTarget,
@@ -297,9 +298,13 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
     pluginManager.register(plugin);
   }
   const aiEngine = createAIEngineFromEnv(env);
+  const browserStealthConfig = browserStealthConfigFromEnv(env);
   const browserManager = new BrowserManager(
     createPlaywrightBrowserAdapter(),
-    browserStealthConfigFromEnv(env),
+    browserStealthConfig,
+    {
+      sessionStore: browserSessionStoreFromEnv(env, browserStealthConfig.sessionRoot),
+    },
   );
   const now = options.now ?? (() => new Date());
   const jobDiscovery = options.jobDiscovery ?? createEmptyJobDiscoveryDependencies();
@@ -447,6 +452,9 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
           openSession:
             options.browserSessionHealth?.openSession ??
             ((platform) => browserManager.openSession(platform)),
+          closeSession: options.browserSessionHealth?.openSession
+            ? undefined
+            : (platform) => browserManager.closeSession(platform),
           validateSession: options.browserSessionHealth?.validateSession,
         },
         {
@@ -908,11 +916,25 @@ function browserStealthConfigFromEnv(env: NodeJS.ProcessEnv) {
     .map((server) => server.trim())
     .filter(Boolean)
     .map((server) => ({ server }));
+  const sessionRoot = env.BROWSER_SESSION_ROOT ?? env.CAREERCAVEMAN_BROWSER_SESSION_ROOT;
+  const persistCookies =
+    env.BROWSER_PERSIST_COOKIES ?? env.CAREERCAVEMAN_BROWSER_PERSIST_COOKIES;
 
   return createDefaultStealthConfig({
     rotateProxy: booleanEnv(env.BROWSER_ROTATE_PROXY ?? env.CAREERCAVEMAN_BROWSER_ROTATE_PROXY),
     proxyList,
+    ...(sessionRoot ? { sessionRoot } : {}),
+    ...(persistCookies !== undefined ? { persistCookies: booleanEnv(persistCookies) } : {}),
   });
+}
+
+function browserSessionStoreFromEnv(env: NodeJS.ProcessEnv, sessionRoot: string) {
+  const key = env.BROWSER_SESSION_KEY ?? env.CAREERCAVEMAN_BROWSER_SESSION_KEY;
+  if (!key) {
+    return undefined;
+  }
+
+  return new EncryptedBrowserSessionStore({ rootDir: sessionRoot, key });
 }
 
 function booleanEnv(value: string | undefined): boolean {

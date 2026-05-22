@@ -1,9 +1,18 @@
 import path from "node:path";
 import { chromium, type BrowserContext } from "playwright-core";
 import { ProxyManager, type BrowserProxy } from "./proxy-manager.js";
+import type { BrowserSessionStore, BrowserStorageState } from "./session-store.js";
 
 type PlaywrightLaunchPersistentContextOptions = NonNullable<
   Parameters<typeof chromium.launchPersistentContext>[1]
+>;
+type PlaywrightLaunchOptions = NonNullable<Parameters<typeof chromium.launch>[0]>;
+type PlaywrightNewContextOptions = NonNullable<
+  Awaited<ReturnType<typeof chromium.launch>>["newContext"] extends (
+    options?: infer Options,
+  ) => Promise<BrowserContext>
+    ? Options
+    : never
 >;
 
 export type BrowserViewport = {
@@ -38,15 +47,18 @@ export type BrowserLaunchOptions = {
   timezoneId: string;
   userAgent: string;
   viewport: BrowserViewport;
+  storageState?: BrowserStorageState;
 };
 
-export type BrowserSession = Pick<BrowserContext, "close" | "newPage">;
+export type BrowserSession = Pick<BrowserContext, "close" | "newPage"> &
+  Partial<Pick<BrowserContext, "storageState">>;
 
 export type BrowserAutomationAdapter = {
   launchPersistentContext: (
     userDataDir: string,
     options: BrowserLaunchOptions,
   ) => Promise<BrowserSession>;
+  launchEphemeralContext?: (options: BrowserLaunchOptions) => Promise<BrowserSession>;
 };
 
 export type PlaywrightPersistentContextLauncher = {
@@ -61,6 +73,10 @@ type ActiveSession = {
   session: BrowserSession;
 };
 
+export type BrowserManagerOptions = {
+  sessionStore?: BrowserSessionStore;
+};
+
 export class BrowserManager {
   private readonly activeSessions = new Map<string, ActiveSession>();
   private readonly proxyManager: ProxyManager;
@@ -68,6 +84,7 @@ export class BrowserManager {
   constructor(
     private readonly adapter: BrowserAutomationAdapter,
     private readonly config: StealthConfig = createDefaultStealthConfig(),
+    private readonly options: BrowserManagerOptions = {},
   ) {
     this.proxyManager = new ProxyManager(config.proxyList);
   }
@@ -79,10 +96,19 @@ export class BrowserManager {
       return active.session;
     }
 
-    const session = await this.adapter.launchPersistentContext(
-      sessionDirectoryForPlatform(this.config.sessionRoot, platform),
-      toBrowserLaunchOptions(this.config, this.proxyForSession()),
-    );
+    const launchOptions = toBrowserLaunchOptions(this.config, this.proxyForSession());
+    const restoredState = await this.loadEncryptedStorageState(platform);
+    if (restoredState) {
+      launchOptions.storageState = restoredState;
+    }
+
+    const session =
+      this.options.sessionStore && this.adapter.launchEphemeralContext
+        ? await this.adapter.launchEphemeralContext(launchOptions)
+        : await this.adapter.launchPersistentContext(
+            sessionDirectoryForPlatform(this.config.sessionRoot, platform),
+            launchOptions,
+          );
     this.activeSessions.set(key, { platform, session });
 
     return session;
@@ -99,8 +125,12 @@ export class BrowserManager {
       return;
     }
 
-    await active.session.close();
-    this.activeSessions.delete(key);
+    try {
+      await this.saveEncryptedStorageState(active);
+    } finally {
+      await active.session.close();
+      this.activeSessions.delete(key);
+    }
   }
 
   async closeAll(): Promise<void> {
@@ -113,6 +143,26 @@ export class BrowserManager {
     }
 
     return this.config.rotateProxy ? this.proxyManager.nextProxy() : this.proxyManager.firstProxy();
+  }
+
+  private async loadEncryptedStorageState(platform: string): Promise<BrowserStorageState | null> {
+    if (!this.config.persistCookies || !this.options.sessionStore) {
+      return null;
+    }
+
+    return this.options.sessionStore.load(platform);
+  }
+
+  private async saveEncryptedStorageState(active: ActiveSession): Promise<void> {
+    if (
+      !this.config.persistCookies ||
+      !this.options.sessionStore ||
+      typeof active.session.storageState !== "function"
+    ) {
+      return;
+    }
+
+    await this.options.sessionStore.save(active.platform, await active.session.storageState());
   }
 }
 
@@ -150,6 +200,20 @@ export function createPlaywrightBrowserAdapter(
   return {
     launchPersistentContext: (userDataDir, options) =>
       persistentContextLauncher.launchPersistentContext(userDataDir, options),
+    launchEphemeralContext: async (options) => {
+      const browser = await chromium.launch(toPlaywrightLaunchOptions(options));
+      const context = await browser.newContext(toPlaywrightContextOptions(options));
+      const close = context.close.bind(context);
+
+      return {
+        close: async () => {
+          await close();
+          await browser.close();
+        },
+        newPage: context.newPage.bind(context),
+        storageState: context.storageState.bind(context),
+      };
+    },
   };
 }
 
@@ -181,6 +245,25 @@ function toPlaywrightOptions(options: BrowserLaunchOptions): PlaywrightLaunchPer
     headless: options.headless,
     locale: options.locale,
     ...(options.proxy ? { proxy: options.proxy } : {}),
+    timezoneId: options.timezoneId,
+    userAgent: options.userAgent,
+    viewport: options.viewport,
+  };
+}
+
+function toPlaywrightLaunchOptions(options: BrowserLaunchOptions): PlaywrightLaunchOptions {
+  return {
+    args: options.args,
+    headless: options.headless,
+    ...(options.proxy ? { proxy: options.proxy } : {}),
+  };
+}
+
+function toPlaywrightContextOptions(options: BrowserLaunchOptions): PlaywrightNewContextOptions {
+  return {
+    extraHTTPHeaders: options.extraHTTPHeaders,
+    locale: options.locale,
+    ...(options.storageState ? { storageState: options.storageState } : {}),
     timezoneId: options.timezoneId,
     userAgent: options.userAgent,
     viewport: options.viewport,
