@@ -108,4 +108,79 @@ describe("email check config", () => {
       },
     ]);
   });
+
+  it("matches inbound recruiter emails to stored contacts and applications", async () => {
+    const createEmailReader: EmailReaderFactory = () => ({
+      fetchUnread: async () => [
+        {
+          id: "<reply-2@northstar.example>",
+          uid: 102,
+          from: "Mira Recruiter <mira@northstar.example>",
+          subject: "Interview availability",
+          body: "Can you share availability this week?",
+          receivedAt: "2026-05-29T09:30:00.000Z",
+        },
+      ],
+    });
+
+    const dependencies = createEmailCheckDependenciesFromWorkflowInput(
+      {
+        emailCheck: {
+          account: {
+            provider: "gmail",
+            fromName: "Asha Rao",
+            fromEmail: "asha@gmail.example",
+            smtpHost: "smtp.gmail.com",
+            smtpPort: 465,
+            smtpSecure: true,
+            smtpUser: "asha@gmail.example",
+            smtpPass: "app-password",
+            imapHost: "imap.gmail.com",
+            imapPort: 993,
+            imapSecure: true,
+            imapUser: "asha@gmail.example",
+            imapPass: "app-password",
+            signature: null,
+          },
+          matchContext: {
+            applications: [
+              {
+                id: "app-1",
+                jobId: "job-1",
+                companyName: "Northstar Labs",
+                status: "submitted",
+              },
+            ],
+            contacts: [
+              {
+                id: "contact-1",
+                name: "Mira Recruiter",
+                email: "mira@northstar.example",
+                companyName: "Northstar Labs",
+              },
+            ],
+          },
+        },
+      },
+      {
+        fallback,
+        createEmailReader,
+      },
+    );
+
+    await expect(dependencies?.fetchResponses()).resolves.toEqual([
+      {
+        id: "<reply-2@northstar.example>",
+        applicationId: "app-1",
+        jobId: "job-1",
+        companyName: "Northstar Labs",
+        contactId: "contact-1",
+        from: "Mira Recruiter <mira@northstar.example>",
+        subject: "Interview availability",
+        body: "Can you share availability this week?",
+        receivedAt: "2026-05-29T09:30:00.000Z",
+        responseType: "interview",
+      },
+    ]);
+  });
 });

@@ -22,6 +22,26 @@ export type ConfiguredEmailCheckOptions = {
   createEmailReader?: EmailReaderFactory;
 };
 
+type EmailMatchApplication = {
+  id: string;
+  jobId: string;
+  companyName: string;
+  status: string;
+};
+
+type EmailMatchContact = {
+  id: string;
+  name: string;
+  email: string;
+  companyId: string | null;
+  companyName: string | null;
+};
+
+type EmailMatchContext = {
+  applications: EmailMatchApplication[];
+  contacts: EmailMatchContact[];
+};
+
 export function createEmailCheckDependenciesFromWorkflowInput(
   input: unknown,
   options: ConfiguredEmailCheckOptions,
@@ -38,30 +58,55 @@ export function createEmailCheckDependenciesFromWorkflowInput(
 
   const createEmailReader = options.createEmailReader ?? ((config) => createImapEmailReader(config));
   const fetchOptions = fetchUnreadOptions(emailCheck.fetch);
+  const matchContext = emailMatchContext(emailCheck.matchContext);
 
   return {
     ...options.fallback,
     fetchResponses: async () => {
       const reader = createEmailReader(account);
       const messages = await reader.fetchUnread(fetchOptions);
-      return messages.map(emailResponseMessageFromInbound);
+      return messages.map((message) => emailResponseMessageFromInbound(message, matchContext));
     },
   };
 }
 
-function emailResponseMessageFromInbound(message: InboundEmail): EmailResponseMessage {
+function emailResponseMessageFromInbound(
+  message: InboundEmail,
+  matchContext: EmailMatchContext,
+): EmailResponseMessage {
+  const match = matchInboundEmail(message, matchContext);
+
   return {
     id: message.id,
-    applicationId: null,
-    jobId: null,
-    companyName: null,
-    contactId: null,
+    applicationId: match?.application.id ?? null,
+    jobId: match?.application.jobId ?? null,
+    companyName: match?.application.companyName ?? null,
+    contactId: match?.contact.id ?? null,
     from: message.from ?? "",
     subject: message.subject,
     body: message.body,
     receivedAt: message.receivedAt ?? new Date(0).toISOString(),
     responseType: classifyResponse(message),
   };
+}
+
+function matchInboundEmail(message: InboundEmail, context: EmailMatchContext) {
+  const sender = normalizedEmail(extractEmailAddress(message.from ?? ""));
+  if (!sender) {
+    return null;
+  }
+
+  const contact = context.contacts.find((candidate) => normalizedEmail(candidate.email) === sender);
+  if (!contact?.companyName) {
+    return null;
+  }
+  const contactCompanyName = contact.companyName;
+
+  const application = context.applications.find(
+    (candidate) => normalizedText(candidate.companyName) === normalizedText(contactCompanyName),
+  );
+
+  return application ? { application, contact } : null;
 }
 
 function classifyResponse(message: Pick<InboundEmail, "subject" | "body">): EmailResponseType {
@@ -79,6 +124,54 @@ function classifyResponse(message: Pick<InboundEmail, "subject" | "body">): Emai
     return "positive";
   }
   return "other";
+}
+
+function emailMatchContext(value: unknown): EmailMatchContext {
+  if (!isRecord(value)) {
+    return { applications: [], contacts: [] };
+  }
+
+  return {
+    applications: Array.isArray(value.applications)
+      ? value.applications.flatMap((item) => emailMatchApplication(item) ?? [])
+      : [],
+    contacts: Array.isArray(value.contacts)
+      ? value.contacts.flatMap((item) => emailMatchContact(item) ?? [])
+      : [],
+  };
+}
+
+function emailMatchApplication(value: unknown): EmailMatchApplication | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = nonEmptyString(value.id);
+  const jobId = nonEmptyString(value.jobId);
+  const companyName = nonEmptyString(value.companyName);
+  const status = nonEmptyString(value.status);
+
+  return id && jobId && companyName && status
+    ? { id, jobId, companyName, status }
+    : null;
+}
+
+function emailMatchContact(value: unknown): EmailMatchContact | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = nonEmptyString(value.id);
+  const name = nonEmptyString(value.name);
+  const email = nonEmptyString(value.email);
+
+  return id && name && email
+    ? {
+        id,
+        name,
+        email,
+        companyId: nullableString(value.companyId),
+        companyName: nullableString(value.companyName),
+      }
+    : null;
 }
 
 function emailAccountConfig(value: unknown): EmailAccountConfig | null {
@@ -167,6 +260,22 @@ function nullableString(value: unknown): string | null {
     return null;
   }
   return typeof value === "string" ? value : null;
+}
+
+function extractEmailAddress(value: string): string | null {
+  const bracketed = value.match(/<([^<>@\s]+@[^<>@\s]+)>/);
+  if (bracketed) {
+    return bracketed[1];
+  }
+  return value.match(/[^\s<>@]+@[^\s<>@]+/)?.[0] ?? null;
+}
+
+function normalizedEmail(value: string | null): string | null {
+  return value?.trim().toLowerCase() || null;
+}
+
+function normalizedText(value: string): string {
+  return value.trim().toLowerCase();
 }
 
 function positiveInteger(value: unknown): number | null {

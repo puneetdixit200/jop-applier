@@ -13,6 +13,7 @@ use crate::{
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use std::collections::HashMap;
 use tauri::State;
 use time::{format_description::well_known::Rfc3339, Duration, OffsetDateTime, Time, UtcOffset};
 
@@ -498,11 +499,67 @@ fn email_check_workflow_params_from_settings(connection: &Connection) -> Result<
             email_check.insert("fetch".to_string(), Value::Object(fetch));
         }
     }
+    if let Some(match_context) = email_match_context_from_database(connection)? {
+        email_check.insert("matchContext".to_string(), match_context);
+    }
 
     if email_check.is_empty() {
         Ok(json!({}))
     } else {
         Ok(json!({ "emailCheck": email_check }))
+    }
+}
+
+fn email_match_context_from_database(connection: &Connection) -> Result<Option<Value>, String> {
+    let applications = queries::list_applications(connection).map_err(|error| error.to_string())?;
+    let contacts = queries::list_contacts(connection).map_err(|error| error.to_string())?;
+    if applications.is_empty() && contacts.is_empty() {
+        return Ok(None);
+    }
+
+    let companies = queries::list_companies(connection).map_err(|error| error.to_string())?;
+    let company_names_by_id = companies
+        .into_iter()
+        .map(|company| (company.id, company.name))
+        .collect::<HashMap<_, _>>();
+    let application_values = applications
+        .into_iter()
+        .map(|application| {
+            json!({
+                "id": application.id,
+                "jobId": application.job_id,
+                "companyName": application.company_name,
+                "status": application.status,
+            })
+        })
+        .collect::<Vec<_>>();
+    let contact_values = contacts
+        .into_iter()
+        .filter_map(|contact| {
+            let email = contact.email?;
+            let company_name = contact
+                .company_id
+                .as_deref()
+                .and_then(|company_id| company_names_by_id.get(company_id))
+                .cloned();
+
+            Some(json!({
+                "id": contact.id,
+                "name": contact.name,
+                "email": email,
+                "companyId": contact.company_id,
+                "companyName": company_name,
+            }))
+        })
+        .collect::<Vec<_>>();
+
+    if application_values.is_empty() && contact_values.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(json!({
+            "applications": application_values,
+            "contacts": contact_values,
+        })))
     }
 }
 
