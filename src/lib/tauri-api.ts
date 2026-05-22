@@ -247,6 +247,12 @@ export type AiCacheEntry = {
 
 export type UpsertAiCacheEntry = Omit<AiCacheEntry, "created_at">;
 
+export type SecureSecretRef = {
+  service: string;
+  key: string;
+  uri: string;
+};
+
 export type SidecarProvider = {
   provider: string;
   model: string;
@@ -277,6 +283,18 @@ export async function getSetting(key: string) {
 
 export async function saveSetting(setting: UpsertSetting) {
   return invoke<Setting>("save_setting_command", { setting });
+}
+
+export async function saveSecret(key: string, secret: string) {
+  return invoke<SecureSecretRef>("save_secret_command", { key, secret });
+}
+
+export async function getSecret(key: string) {
+  return invoke<string | null>("get_secret_command", { key });
+}
+
+export async function deleteSecret(key: string) {
+  return invoke<boolean>("delete_secret_command", { key });
 }
 
 export async function listCompanies() {

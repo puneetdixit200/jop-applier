@@ -4,6 +4,7 @@ use tauri::Manager;
 
 pub mod commands;
 pub mod db;
+pub mod secure_store;
 pub mod sidecar;
 
 pub struct AppState {
@@ -60,6 +61,9 @@ pub fn run() {
             commands::db::update_scheduled_task_run_command,
             commands::db::get_ai_cache_entry_command,
             commands::db::save_ai_cache_entry_command,
+            commands::secure_store::save_secret_command,
+            commands::secure_store::get_secret_command,
+            commands::secure_store::delete_secret_command,
             commands::sidecar::sidecar_status_command,
             commands::sidecar::run_sidecar_workflow_command,
             commands::sidecar::run_application_review_decision_command,
