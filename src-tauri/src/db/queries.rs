@@ -5,11 +5,11 @@ use thiserror::Error;
 
 use super::models::{
     AiCacheEntry, Application, ApplicationDocumentContext, ApplicationEvent,
-    ApplicationWorkflowStateUpdate, Communication, Company, Contact, Document, Job, Notification,
-    ScheduledTask, ScheduledTaskRunUpdate, Setting, SettingValue, UpsertAiCacheEntry,
-    UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument,
-    UpsertJob, UpsertNotification, UpsertScheduledTask, UpsertSetting, UpsertUserProfile,
-    UserProfile,
+    ApplicationFollowUpUpdate, ApplicationWorkflowStateUpdate, Communication, Company, Contact,
+    Document, Job, Notification, ScheduledTask, ScheduledTaskRunUpdate, Setting, SettingValue,
+    UpsertAiCacheEntry, UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact,
+    UpsertDocument, UpsertJob, UpsertNotification, UpsertScheduledTask, UpsertSetting,
+    UpsertUserProfile, UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -610,6 +610,47 @@ pub fn update_application_workflow_state(
                 next_status,
             )?;
         }
+    }
+
+    Ok(Some(saved))
+}
+
+pub fn update_application_follow_up_state(
+    connection: &Connection,
+    application_id: &str,
+    update: ApplicationFollowUpUpdate,
+) -> QueryResult<Option<Application>> {
+    let Some(existing) = get_application_by_id(connection, application_id)? else {
+        return Ok(None);
+    };
+    let next_status = update.status.clone();
+
+    connection.execute(
+        "UPDATE applications
+         SET status = ?1,
+             last_follow_up = ?2,
+             follow_up_count = ?3,
+             next_follow_up = ?4,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?5",
+        params![
+            update.status,
+            update.last_follow_up,
+            update.follow_up_count,
+            update.next_follow_up,
+            application_id,
+        ],
+    )?;
+
+    let saved = get_application_by_id(connection, application_id)?
+        .ok_or(QueryError::MissingApplicationAfterSave)?;
+    if existing.status != next_status {
+        record_status_change_event(
+            connection,
+            &saved.id,
+            Some(existing.status.as_str()),
+            &next_status,
+        )?;
     }
 
     Ok(Some(saved))

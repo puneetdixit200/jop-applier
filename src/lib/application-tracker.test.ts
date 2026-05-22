@@ -78,6 +78,33 @@ describe("application tracker", () => {
     expect(statusLabelForApplication("interviewScheduled")).toBe("Interview Scheduled");
   });
 
+  it("keeps persisted snake-case follow-up states in the applied and closed tracker lanes", () => {
+    const tracker = buildApplicationTracker([
+      application({
+        id: "follow-up-sent",
+        status: "follow_up_sent",
+        next_follow_up: "2026-06-04T09:00:00Z",
+      }),
+      application({
+        id: "no-response",
+        status: "no_response",
+        next_follow_up: "2026-05-30T09:00:00Z",
+      }),
+      application({
+        id: "ghosted",
+        status: "ghosted",
+      }),
+    ]);
+
+    expect(tracker.columns.map((column) => [column.id, column.rows.map((row) => row.id)])).toEqual([
+      ["queued", []],
+      ["applying", []],
+      ["applied", ["follow-up-sent", "no-response"]],
+      ["response", []],
+      ["closed", ["ghosted"]],
+    ]);
+  });
+
   it("surfaces semi-auto review actions for review-pending applications", () => {
     const tracker = buildApplicationTracker([
       application({

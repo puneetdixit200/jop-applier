@@ -1,8 +1,9 @@
 use crate::{
     db::{
         models::{
-            Application, ApplicationWorkflowStateUpdate, ScheduledTask, ScheduledTaskRunUpdate,
-            SettingValue, UpsertJob, UpsertNotification,
+            Application, ApplicationFollowUpUpdate, ApplicationWorkflowStateUpdate, ScheduledTask,
+            ScheduledTaskRunUpdate, SettingValue, UpsertCommunication, UpsertJob,
+            UpsertNotification,
         },
         queries,
     },
@@ -24,6 +25,9 @@ pub struct DueScheduledTaskRunResult {
     pub skipped: usize,
     pub notifications: Vec<Value>,
 }
+
+const FOLLOW_UP_DELAYS_DAYS: [i64; 3] = [3, 7, 14];
+const MAX_FOLLOW_UPS: i64 = 3;
 
 #[tauri::command]
 pub fn sidecar_status_command() -> Result<SidecarRuntimeStatus, String> {
@@ -150,20 +154,31 @@ pub fn run_due_scheduled_tasks_with_command(
     };
 
     for task in due_tasks {
-        let Some(workflow_id) = workflow_id_for_task_type(&task.task_type) else {
-            result.failed += 1;
-            continue;
-        };
+        let task_notifications = if task.task_type == "follow_up" {
+            match run_due_follow_up_task(connection, now) {
+                Ok(notifications) => notifications,
+                Err(_) => {
+                    result.failed += 1;
+                    continue;
+                }
+            }
+        } else {
+            let Some(workflow_id) = workflow_id_for_task_type(&task.task_type) else {
+                result.failed += 1;
+                continue;
+            };
 
-        let Ok(workflow_result) =
-            run_sidecar_workflow_and_persist_jobs_with_command(command, connection, workflow_id)
-        else {
-            result.failed += 1;
-            continue;
+            let Ok(workflow_result) = run_sidecar_workflow_and_persist_jobs_with_command(
+                command,
+                connection,
+                workflow_id,
+            ) else {
+                result.failed += 1;
+                continue;
+            };
+            workflow_notifications(&workflow_result)
         };
-        result
-            .notifications
-            .extend(workflow_notifications(&workflow_result));
+        result.notifications.extend(task_notifications);
 
         let update = ScheduledTaskRunUpdate {
             last_run: format_rfc3339_utc(now)?,
@@ -177,6 +192,195 @@ pub fn run_due_scheduled_tasks_with_command(
     }
 
     Ok(result)
+}
+
+fn run_due_follow_up_task(
+    connection: &Connection,
+    now: OffsetDateTime,
+) -> Result<Vec<Value>, String> {
+    let applications = queries::list_applications(connection).map_err(|error| error.to_string())?;
+    let mut notifications = Vec::new();
+
+    for application in applications
+        .into_iter()
+        .filter(|application| is_follow_up_due(application, now))
+    {
+        let sent_at = format_rfc3339_utc(now)?;
+        let communication = queries::save_communication(
+            connection,
+            UpsertCommunication {
+                application_id: Some(application.id.clone()),
+                contact_id: None,
+                direction: "sent".to_string(),
+                communication_type: "follow_up".to_string(),
+                subject: Some(follow_up_subject(&application)),
+                body: Some(follow_up_body(&application)),
+                email_id: None,
+                sent_at: Some(sent_at.clone()),
+                read_at: None,
+            },
+        )
+        .map_err(|error| error.to_string())?;
+        let update = follow_up_update(&application, now)?;
+        queries::update_application_follow_up_state(connection, &application.id, update.clone())
+            .map_err(|error| error.to_string())?;
+        notifications.extend(follow_up_notifications(
+            connection,
+            &application,
+            &update,
+            &communication.id,
+            &sent_at,
+        )?);
+    }
+
+    Ok(notifications)
+}
+
+fn is_follow_up_due(application: &Application, now: OffsetDateTime) -> bool {
+    if !is_follow_up_eligible_status(&application.status) {
+        return false;
+    }
+    if application.response_date.is_some() || application.response_type.is_some() {
+        return false;
+    }
+    if application.follow_up_count >= MAX_FOLLOW_UPS {
+        return false;
+    }
+    if let Some(next_follow_up) = application.next_follow_up.as_deref() {
+        return parse_rfc3339_utc(next_follow_up).is_ok_and(|next_follow_up| next_follow_up <= now);
+    }
+
+    application
+        .submitted_at
+        .as_deref()
+        .and_then(|submitted_at| parse_rfc3339_utc(submitted_at).ok())
+        .is_some_and(|submitted_at| submitted_at + Duration::days(FOLLOW_UP_DELAYS_DAYS[0]) <= now)
+}
+
+fn is_follow_up_eligible_status(status: &str) -> bool {
+    matches!(
+        normalized_status_key(status).as_str(),
+        "submitted" | "applied" | "noresponse" | "followupsent"
+    )
+}
+
+fn normalized_status_key(status: &str) -> String {
+    status
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+        .filter(|character| !matches!(character, '_' | '-' | ' '))
+        .collect()
+}
+
+fn follow_up_update(
+    application: &Application,
+    now: OffsetDateTime,
+) -> Result<ApplicationFollowUpUpdate, String> {
+    let follow_up_count = application.follow_up_count + 1;
+    let last_follow_up = format_rfc3339_utc(now)?;
+
+    if follow_up_count >= MAX_FOLLOW_UPS {
+        return Ok(ApplicationFollowUpUpdate {
+            status: "ghosted".to_string(),
+            follow_up_count,
+            last_follow_up,
+            next_follow_up: None,
+        });
+    }
+
+    Ok(ApplicationFollowUpUpdate {
+        status: "follow_up_sent".to_string(),
+        follow_up_count,
+        last_follow_up,
+        next_follow_up: Some(format_rfc3339_utc(
+            now + Duration::days(next_follow_up_delay_days(follow_up_count)),
+        )?),
+    })
+}
+
+fn next_follow_up_delay_days(follow_up_count: i64) -> i64 {
+    let index = usize::try_from(follow_up_count)
+        .unwrap_or(0)
+        .min(FOLLOW_UP_DELAYS_DAYS.len() - 1);
+    FOLLOW_UP_DELAYS_DAYS[index]
+}
+
+fn follow_up_subject(application: &Application) -> String {
+    format!(
+        "Following up on {} at {}",
+        application.job_title, application.company_name
+    )
+}
+
+fn follow_up_body(application: &Application) -> String {
+    format!(
+        "Hi {},\n\nI wanted to follow up on my application for the {} role.\n\nThank you.",
+        application.company_name, application.job_title
+    )
+}
+
+fn follow_up_notifications(
+    connection: &Connection,
+    application: &Application,
+    update: &ApplicationFollowUpUpdate,
+    communication_id: &str,
+    created_at: &str,
+) -> Result<Vec<Value>, String> {
+    let title = if update.status == "ghosted" {
+        "Application marked ghosted"
+    } else {
+        "Follow-up sent"
+    };
+    let body = if update.status == "ghosted" {
+        format!(
+            "Final follow-up sent to {}; application marked ghosted.",
+            application.company_name
+        )
+    } else {
+        format!(
+            "Follow-up {} sent to {}.",
+            update.follow_up_count, application.company_name
+        )
+    };
+    let metadata = json!({
+        "applicationId": application.id.as_str(),
+        "jobId": application.job_id.as_str(),
+        "companyName": application.company_name.as_str(),
+        "followUpCount": update.follow_up_count,
+        "nextFollowUp": update.next_follow_up.as_deref(),
+        "communicationId": communication_id,
+    });
+    let mut notifications = Vec::new();
+
+    for channel in ["os", "in_app"] {
+        let notification = json!({
+            "type": "follow_up.reminder",
+            "title": title,
+            "body": body,
+            "priority": "medium",
+            "channel": channel,
+            "createdAt": created_at,
+            "metadata": metadata.clone(),
+        });
+        if channel == "in_app" {
+            queries::save_notification(
+                connection,
+                UpsertNotification {
+                    notification_type: "follow_up.reminder".to_string(),
+                    title: title.to_string(),
+                    body: body.clone(),
+                    priority: "medium".to_string(),
+                    channel: channel.to_string(),
+                    metadata: metadata.clone(),
+                },
+            )
+            .map_err(|error| error.to_string())?;
+        }
+        notifications.push(notification);
+    }
+
+    Ok(notifications)
 }
 
 fn workflow_notifications(result: &Value) -> Vec<Value> {

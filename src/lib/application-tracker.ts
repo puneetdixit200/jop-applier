@@ -141,17 +141,17 @@ function applicationTrackerRow(application: Application, now: Date): Application
 }
 
 function bucketForStatus(status: string): ApplicationTrackerColumnId {
-  const value = status.trim().toLowerCase();
+  const value = normalizedStatusKey(status);
   if (["matched", "queued"].includes(value)) {
     return "queued";
   }
   if (
     [
       "preparing",
-      "resume_generated",
-      "cover_letter_generated",
-      "form_filling",
-      "review_pending",
+      "resumegenerated",
+      "coverlettergenerated",
+      "formfilling",
+      "reviewpending",
       "submitting",
       "applying",
       "failed",
@@ -165,10 +165,14 @@ function bucketForStatus(status: string): ApplicationTrackerColumnId {
   if (["responsereceived", "interviewscheduled", "offerreceived", "negotiating"].includes(value)) {
     return "response";
   }
-  if (["cancelled", "permanently_failed", "rejected", "accepted", "declined", "ghosted"].includes(value)) {
+  if (["cancelled", "permanentlyfailed", "rejected", "accepted", "declined", "ghosted"].includes(value)) {
     return "closed";
   }
   return "queued";
+}
+
+function normalizedStatusKey(status: string) {
+  return status.trim().toLowerCase().replace(/[-_\s]+/g, "");
 }
 
 function nextActionForApplication(

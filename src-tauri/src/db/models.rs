@@ -217,6 +217,14 @@ pub struct ApplicationWorkflowStateUpdate {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ApplicationFollowUpUpdate {
+    pub status: String,
+    pub follow_up_count: i64,
+    pub last_follow_up: String,
+    pub next_follow_up: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ApplicationDocumentContext {
     pub application_id: String,
     pub job_id: String,
