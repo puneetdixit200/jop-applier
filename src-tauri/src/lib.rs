@@ -61,6 +61,7 @@ pub fn run() {
             commands::db::save_outreach_campaign_command,
             commands::db::list_outreach_emails_command,
             commands::db::save_outreach_email_command,
+            commands::db::update_outreach_email_review_command,
             commands::db::record_email_opt_out_command,
             commands::db::list_communications_command,
             commands::db::save_communication_command,

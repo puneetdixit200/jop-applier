@@ -7,10 +7,10 @@ use super::models::{
     AiCacheEntry, Application, ApplicationDocumentContext, ApplicationEvent,
     ApplicationFollowUpUpdate, ApplicationResponseUpdate, ApplicationWorkflowStateUpdate,
     Communication, Company, Contact, Document, EmailOptOut, FundedCompany, Job, Notification,
-    OutreachCampaign, OutreachEmail, ProspectContact, ScheduledTask, ScheduledTaskRunUpdate,
-    Setting, SettingValue, UpsertAiCacheEntry, UpsertApplication, UpsertCommunication,
-    UpsertCompany, UpsertContact, UpsertDocument, UpsertEmailOptOut, UpsertFundedCompany,
-    UpsertJob, UpsertNotification, UpsertOutreachCampaign, UpsertOutreachEmail,
+    OutreachCampaign, OutreachEmail, OutreachEmailReviewUpdate, ProspectContact, ScheduledTask,
+    ScheduledTaskRunUpdate, Setting, SettingValue, UpsertAiCacheEntry, UpsertApplication,
+    UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument, UpsertEmailOptOut,
+    UpsertFundedCompany, UpsertJob, UpsertNotification, UpsertOutreachCampaign, UpsertOutreachEmail,
     UpsertProspectContact, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
 };
 
@@ -1033,6 +1033,24 @@ pub fn save_outreach_email(
         .ok_or(QueryError::MissingOutreachEmailAfterSave)
 }
 
+pub fn update_outreach_email_review(
+    connection: &Connection,
+    email: OutreachEmailReviewUpdate,
+) -> QueryResult<Option<OutreachEmail>> {
+    let id = email.id;
+    connection.execute(
+        "UPDATE outreach_emails
+         SET subject = ?2,
+             body_html = ?3,
+             status = ?4
+         WHERE id = ?1
+           AND status = 'pending'",
+        params![&id, &email.subject, &email.body_html, &email.status],
+    )?;
+
+    get_outreach_email(connection, &id)
+}
+
 pub fn record_email_opt_out(
     connection: &Connection,
     opt_out: UpsertEmailOptOut,
@@ -1475,6 +1493,23 @@ fn get_outreach_email_by_rowid(
          LIMIT 1",
     )?;
     let mut rows = statement.query([rowid])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    outreach_email_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
+}
+
+fn get_outreach_email(connection: &Connection, id: &str) -> QueryResult<Option<OutreachEmail>> {
+    let mut statement = connection.prepare(
+        "SELECT id, campaign_id, contact_id, sequence_step, subject, body_html, status,
+                scheduled_at, sent_at, message_id, created_at
+         FROM outreach_emails
+         WHERE id = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([id])?;
     let Some(row) = rows.next()? else {
         return Ok(None);
     };

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  ArrowLeft,
   ArrowRight,
   BarChart3,
   Bell,
@@ -46,6 +47,7 @@ import {
   saveScheduledTask,
   saveSetting,
   saveUserProfile,
+  updateOutreachEmailReview,
   updateApplicationWorkflowState,
   type Application,
   type ApplicationEvent,
@@ -130,10 +132,14 @@ import {
   type NotificationInbox,
 } from "./lib/notification-inbox";
 import {
+  applyOutreachReviewDecision,
   buildOutreachAnalytics,
+  buildOutreachReviewPanel,
   buildOutreachReviewQueue,
   buildProspectingCompanyDetail,
   buildProspectingDashboard,
+  type OutreachReviewDecision,
+  type OutreachReviewPanel,
   type OutreachAnalyticsSummary,
   type OutreachReviewQueueItem,
   type ProspectingCompanyDetail,
@@ -166,6 +172,13 @@ type AutomationSettings = {
   discovery: DiscoverySettings;
   email: EmailSettings;
 };
+
+type OutreachReviewDraft = {
+  subject: string;
+  bodyText: string;
+};
+
+type OutreachReviewRunningAction = OutreachReviewDecision | "save" | null;
 
 const routes: Array<{ id: RouteId; label: string; icon: typeof BarChart3 }> = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
@@ -514,11 +527,13 @@ export function App() {
   const [persistedFundedCompanies, setPersistedFundedCompanies] = useState<FundedCompany[]>([]);
   const [persistedProspectContacts, setPersistedProspectContacts] = useState<ProspectContact[]>([]);
   const [persistedOutreachEmails, setPersistedOutreachEmails] = useState<OutreachEmail[]>([]);
+  const [previewOutreachEmailRecords, setPreviewOutreachEmailRecords] = useState<OutreachEmail[]>(previewOutreachEmails);
   const [contactDraft, setContactDraft] = useState<ContactEditorDraft>(() => emptyContactDraft());
   const [persistedNotifications, setPersistedNotifications] = useState<AppNotification[]>([]);
   const [previewNotificationRecords, setPreviewNotificationRecords] = useState<AppNotification[]>(previewNotifications);
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
   const [selectedProspectingCompanyId, setSelectedProspectingCompanyId] = useState<string | null>(null);
+  const [selectedOutreachEmailId, setSelectedOutreachEmailId] = useState<string | null>(null);
   const [applicationDraft, setApplicationDraft] = useState<ApplicationEditDraft>(() =>
     applicationEditDraft(previewApplications[0]),
   );
@@ -531,6 +546,8 @@ export function App() {
   const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
   const [isRunningSchedules, setIsRunningSchedules] = useState(false);
   const [runningReviewActionId, setRunningReviewActionId] = useState<string | null>(null);
+  const [runningOutreachReviewAction, setRunningOutreachReviewAction] =
+    useState<OutreachReviewRunningAction>(null);
   const [isSavingContact, setIsSavingContact] = useState(false);
   const [draggedApplicationId, setDraggedApplicationId] = useState<string | null>(null);
   const [isNotificationInboxOpen, setIsNotificationInboxOpen] = useState(false);
@@ -565,7 +582,7 @@ export function App() {
   const visibleProspectContacts =
     persistedProspectContacts.length > 0 ? persistedProspectContacts : previewProspectContacts;
   const visibleOutreachEmails =
-    persistedOutreachEmails.length > 0 ? persistedOutreachEmails : previewOutreachEmails;
+    persistedOutreachEmails.length > 0 ? persistedOutreachEmails : previewOutreachEmailRecords;
   const prospectingDashboard = useMemo(
     () =>
       buildProspectingDashboard(
@@ -592,6 +609,16 @@ export function App() {
       }),
     [visibleFundedCompanies, visibleProspectContacts, visibleOutreachEmails],
   );
+  const outreachReviewPanel = useMemo(
+    () =>
+      buildOutreachReviewPanel({
+        companies: visibleFundedCompanies,
+        contacts: visibleProspectContacts,
+        emails: visibleOutreachEmails,
+        selectedEmailId: selectedOutreachEmailId,
+      }),
+    [selectedOutreachEmailId, visibleFundedCompanies, visibleProspectContacts, visibleOutreachEmails],
+  );
   const outreachAnalytics = useMemo(
     () => buildOutreachAnalytics(visibleOutreachEmails),
     [visibleOutreachEmails],
@@ -614,6 +641,13 @@ export function App() {
       setSelectedProspectingCompanyId(visibleFundedCompanies[0]?.id ?? null);
     }
   }, [selectedProspectingCompanyId, visibleFundedCompanies]);
+
+  useEffect(() => {
+    const selectedExists = outreachReviewQueue.some((email) => email.id === selectedOutreachEmailId);
+    if (!selectedExists) {
+      setSelectedOutreachEmailId(outreachReviewQueue[0]?.id ?? null);
+    }
+  }, [outreachReviewQueue, selectedOutreachEmailId]);
 
   useEffect(() => {
     if (selectedApplicationRecord) {
@@ -967,6 +1001,84 @@ export function App() {
     }
   }
 
+  async function saveOutreachReviewDraft(draft: OutreachReviewDraft) {
+    if (!outreachReviewPanel) {
+      return;
+    }
+    const email = visibleOutreachEmails.find((item) => item.id === outreachReviewPanel.id);
+    if (!email) {
+      return;
+    }
+
+    const subject = draft.subject.trim();
+    const bodyText = draft.bodyText.trim();
+    if (!subject || !bodyText) {
+      setWorkflowStatus("outreach draft needs subject and body");
+      return;
+    }
+
+    const updatedEmail = {
+      ...email,
+      subject,
+      body_html: bodyTextToHtml(bodyText),
+    };
+
+    setRunningOutreachReviewAction("save");
+    try {
+      await updateOutreachEmailReviewRecord(updatedEmail);
+      setWorkflowStatus("outreach draft updated");
+    } catch {
+      setWorkflowStatus("outreach draft update failed");
+      setStorageStatus("Storage unavailable");
+    } finally {
+      setRunningOutreachReviewAction(null);
+    }
+  }
+
+  async function handleOutreachReviewDecision(decision: OutreachReviewDecision) {
+    if (!outreachReviewPanel) {
+      return;
+    }
+    const email = visibleOutreachEmails.find((item) => item.id === outreachReviewPanel.id);
+    if (!email) {
+      return;
+    }
+
+    const updatedEmail = applyOutreachReviewDecision(email, decision);
+    setRunningOutreachReviewAction(decision);
+    try {
+      await updateOutreachEmailReviewRecord(updatedEmail);
+      setWorkflowStatus(decision === "approve" ? "outreach email queued for sending" : "outreach email rejected");
+    } catch {
+      setWorkflowStatus("outreach review action failed");
+      setStorageStatus("Storage unavailable");
+    } finally {
+      setRunningOutreachReviewAction(null);
+    }
+  }
+
+  async function updateOutreachEmailReviewRecord(updatedEmail: OutreachEmail) {
+    if (!isDesktopRuntime() || persistedOutreachEmails.length === 0) {
+      setPreviewOutreachEmailRecords((current) =>
+        current.map((email) => (email.id === updatedEmail.id ? updatedEmail : email)),
+      );
+      setStorageStatus("Browser preview");
+      return;
+    }
+
+    const savedEmail = await updateOutreachEmailReview({
+      id: updatedEmail.id,
+      subject: updatedEmail.subject,
+      bodyHtml: updatedEmail.body_html,
+      status: updatedEmail.status,
+    });
+    const nextEmail = savedEmail ?? updatedEmail;
+    setPersistedOutreachEmails((current) =>
+      current.map((email) => (email.id === nextEmail.id ? nextEmail : email)),
+    );
+    setStorageStatus("SQLite ready");
+  }
+
   async function handleApplicationColumnDrop(columnId: ApplicationTrackerColumnId) {
     if (!draggedApplicationId) {
       return;
@@ -1130,6 +1242,16 @@ export function App() {
           <Outreach
             analytics={outreachAnalytics}
             reviewQueue={outreachReviewQueue}
+            reviewPanel={outreachReviewPanel}
+            selectedEmailId={selectedOutreachEmailId}
+            runningReviewAction={runningOutreachReviewAction}
+            onSelectEmail={setSelectedOutreachEmailId}
+            onReviewDecision={(decision) => {
+              void handleOutreachReviewDecision(decision);
+            }}
+            onSaveDraft={(draft) => {
+              void saveOutreachReviewDraft(draft);
+            }}
           />
         )}
         {route === "applications" && (
@@ -1692,10 +1814,38 @@ function Prospecting({
 function Outreach({
   analytics,
   reviewQueue,
+  reviewPanel,
+  selectedEmailId,
+  runningReviewAction,
+  onSelectEmail,
+  onReviewDecision,
+  onSaveDraft,
 }: {
   analytics: OutreachAnalyticsSummary;
   reviewQueue: OutreachReviewQueueItem[];
+  reviewPanel: OutreachReviewPanel | null;
+  selectedEmailId: string | null;
+  runningReviewAction: OutreachReviewRunningAction;
+  onSelectEmail: (emailId: string) => void;
+  onReviewDecision: (decision: OutreachReviewDecision) => void;
+  onSaveDraft: (draft: OutreachReviewDraft) => void;
 }) {
+  const [isEditingReview, setIsEditingReview] = useState(false);
+  const [reviewDraft, setReviewDraft] = useState<OutreachReviewDraft>({ subject: "", bodyText: "" });
+
+  useEffect(() => {
+    if (!reviewPanel) {
+      setIsEditingReview(false);
+      setReviewDraft({ subject: "", bodyText: "" });
+      return;
+    }
+
+    setIsEditingReview(false);
+    setReviewDraft({ subject: reviewPanel.subject, bodyText: reviewPanel.bodyText });
+  }, [reviewPanel?.id, reviewPanel?.subject, reviewPanel?.bodyText]);
+
+  const isRunning = runningReviewAction !== null;
+
   return (
     <div className="dashboard-grid">
       <section className="metric-grid" aria-label="Outreach metrics">
@@ -1723,13 +1873,18 @@ function Outreach({
         <div className="table-list">
           {reviewQueue.length > 0 ? (
             reviewQueue.map((item) => (
-              <div className="table-row" key={item.id}>
+              <button
+                className={item.id === selectedEmailId ? "table-row outreach-row selected" : "table-row outreach-row"}
+                key={item.id}
+                type="button"
+                onClick={() => onSelectEmail(item.id)}
+              >
                 <span>{item.contactLabel}</span>
                 <span>{item.companyName}</span>
                 <span>{item.subject}</span>
                 <strong>Step {item.sequenceStep}</strong>
                 <small>{item.bodyPreview}</small>
-              </div>
+              </button>
             ))
           ) : (
             <div className="table-row">
@@ -1740,6 +1895,150 @@ function Outreach({
             </div>
           )}
         </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Email review</p>
+            <h3>{reviewPanel ? reviewPanel.subject : "No email selected"}</h3>
+          </div>
+          <FileText size={19} aria-hidden="true" />
+        </div>
+        {reviewPanel ? (
+          <div className="outreach-review-card">
+            <dl className="outreach-email-meta">
+              <div>
+                <dt>To</dt>
+                <dd>{reviewPanel.contactLabel}</dd>
+              </div>
+              <div>
+                <dt>Company</dt>
+                <dd>{reviewPanel.companyName}</dd>
+              </div>
+              <div>
+                <dt>Step</dt>
+                <dd>{reviewPanel.sequenceStep}</dd>
+              </div>
+              <div>
+                <dt>Scheduled</dt>
+                <dd>{reviewPanel.scheduledAt ?? "Not scheduled"}</dd>
+              </div>
+            </dl>
+
+            {isEditingReview ? (
+              <div className="outreach-editor">
+                <label>
+                  Subject
+                  <input
+                    value={reviewDraft.subject}
+                    onChange={(event) =>
+                      setReviewDraft((current) => ({ ...current, subject: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  Body
+                  <textarea
+                    value={reviewDraft.bodyText}
+                    rows={9}
+                    onChange={(event) =>
+                      setReviewDraft((current) => ({ ...current, bodyText: event.target.value }))}
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="outreach-email-body">
+                {reviewPanel.bodyText.split(/\n{2,}/).map((paragraph, index) => (
+                  <p key={`${index}-${paragraph}`}>{paragraph}</p>
+                ))}
+              </div>
+            )}
+
+            <div className="outreach-review-toolbar">
+              <div className="outreach-navigation">
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label="Previous email"
+                  disabled={!reviewPanel.previousEmailId || isRunning}
+                  onClick={() => reviewPanel.previousEmailId && onSelectEmail(reviewPanel.previousEmailId)}
+                >
+                  <ArrowLeft size={17} aria-hidden="true" />
+                </button>
+                <span>{reviewPanel.currentPosition} of {reviewPanel.total}</span>
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label="Next email"
+                  disabled={!reviewPanel.nextEmailId || isRunning}
+                  onClick={() => reviewPanel.nextEmailId && onSelectEmail(reviewPanel.nextEmailId)}
+                >
+                  <ArrowRight size={17} aria-hidden="true" />
+                </button>
+              </div>
+              <div className="review-action-group">
+                {isEditingReview ? (
+                  <>
+                    <button
+                      className="secondary-action"
+                      type="button"
+                      disabled={isRunning}
+                      onClick={() => {
+                        setIsEditingReview(false);
+                        setReviewDraft({ subject: reviewPanel.subject, bodyText: reviewPanel.bodyText });
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="primary-action"
+                      type="button"
+                      disabled={isRunning}
+                      onClick={() => {
+                        onSaveDraft(reviewDraft);
+                        setIsEditingReview(false);
+                      }}
+                    >
+                      {runningReviewAction === "save" ? "Saving" : "Save Draft"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      className="secondary-action"
+                      type="button"
+                      disabled={isRunning}
+                      onClick={() => setIsEditingReview(true)}
+                    >
+                      <FileText size={17} aria-hidden="true" />
+                      Edit
+                    </button>
+                    <button
+                      className="primary-action"
+                      type="button"
+                      disabled={isRunning}
+                      onClick={() => onReviewDecision("approve")}
+                    >
+                      <CheckCircle2 size={17} aria-hidden="true" />
+                      {runningReviewAction === "approve" ? "Approving" : "Approve & Send"}
+                    </button>
+                    <button
+                      className="secondary-action"
+                      type="button"
+                      disabled={isRunning}
+                      onClick={() => onReviewDecision("reject")}
+                    >
+                      <XCircle size={17} aria-hidden="true" />
+                      {runningReviewAction === "reject" ? "Rejecting" : "Reject"}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p>No pending outreach emails are waiting for review.</p>
+        )}
       </section>
     </div>
   );
@@ -2758,6 +3057,24 @@ function splitList(value: string) {
 function nullableText(value: string) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function bodyTextToHtml(value: string) {
+  return value
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`)
+    .join("");
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function applicationRecord(overrides: Partial<Application>): Application {

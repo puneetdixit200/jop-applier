@@ -472,6 +472,22 @@ export async function saveOutreachEmail(email: UpsertOutreachEmail) {
   return invoke<OutreachEmail>("save_outreach_email_command", { email });
 }
 
+export async function updateOutreachEmailReview(email: {
+  id: string;
+  subject: string;
+  bodyHtml: string;
+  status: string;
+}) {
+  return invoke<OutreachEmail | null>("update_outreach_email_review_command", {
+    email: {
+      id: email.id,
+      subject: email.subject,
+      body_html: email.bodyHtml,
+      status: email.status,
+    },
+  });
+}
+
 export async function listCommunications(applicationId: string) {
   return invoke<Communication[]>("list_communications_command", { applicationId });
 }

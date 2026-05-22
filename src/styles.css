@@ -712,6 +712,94 @@ button:disabled {
   outline: 2px solid #9bd3ad;
 }
 
+.table-row.outreach-row {
+  width: 100%;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.85fr) minmax(0, 1.3fr) auto minmax(0, 1.15fr);
+  border: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.table-row.outreach-row:hover,
+.table-row.outreach-row.selected {
+  background: #edf8f1;
+}
+
+.table-row.outreach-row.selected {
+  outline: 2px solid #9bd3ad;
+}
+
+.outreach-review-card {
+  display: grid;
+  gap: 16px;
+}
+
+.outreach-email-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.outreach-email-meta div {
+  min-width: 0;
+}
+
+.outreach-email-meta dt {
+  color: #68756e;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.outreach-email-meta dd {
+  margin: 4px 0 0;
+  color: #213128;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.outreach-email-body {
+  color: #22322a;
+  line-height: 1.58;
+}
+
+.outreach-email-body p {
+  margin: 0 0 12px;
+  overflow-wrap: anywhere;
+}
+
+.outreach-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.outreach-editor label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: #35423b;
+  font-weight: 700;
+}
+
+.outreach-review-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e1e8e3;
+}
+
+.outreach-navigation {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #5f6b65;
+  font-weight: 800;
+}
+
 .activity-detail {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
@@ -1072,6 +1160,20 @@ legend {
 
   .table-row {
     grid-template-columns: 1fr;
+  }
+
+  .table-row.outreach-row,
+  .outreach-email-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .outreach-review-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .outreach-navigation {
+    justify-content: space-between;
   }
 
   .tracker-lanes {

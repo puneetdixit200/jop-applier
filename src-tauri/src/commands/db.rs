@@ -5,10 +5,10 @@ use crate::{
             AiCacheEntry, Application, ApplicationDocumentContext, ApplicationEvent,
             ApplicationWorkflowStateUpdate, Communication, Company, Contact, Document,
             EmailOptOut, FundedCompany, Job, Notification, OutreachCampaign, OutreachEmail,
-            ProspectContact, ScheduledTask, ScheduledTaskRunUpdate, Setting, SettingValue,
-            UpsertAiCacheEntry, UpsertApplication, UpsertCommunication, UpsertCompany,
-            UpsertContact, UpsertDocument, UpsertEmailOptOut, UpsertFundedCompany, UpsertJob,
-            UpsertNotification, UpsertOutreachCampaign, UpsertOutreachEmail,
+            OutreachEmailReviewUpdate, ProspectContact, ScheduledTask, ScheduledTaskRunUpdate,
+            Setting, SettingValue, UpsertAiCacheEntry, UpsertApplication, UpsertCommunication,
+            UpsertCompany, UpsertContact, UpsertDocument, UpsertEmailOptOut, UpsertFundedCompany,
+            UpsertJob, UpsertNotification, UpsertOutreachCampaign, UpsertOutreachEmail,
             UpsertProspectContact, UpsertScheduledTask, UpsertSetting, UpsertUserProfile,
             UserProfile,
         },
@@ -408,6 +408,22 @@ pub fn save_outreach_email_command(
         .lock()
         .map_err(|_| "database connection lock poisoned".to_string())?;
     queries::save_outreach_email(&connection, email).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn update_outreach_email_review_command(
+    state: State<'_, AppState>,
+    email: OutreachEmailReviewUpdate,
+) -> Result<Option<OutreachEmail>, String> {
+    if !matches!(email.status.as_str(), "pending" | "queued" | "rejected") {
+        return Err("unsupported outreach email review status".to_string());
+    }
+
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::update_outreach_email_review(&connection, email).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

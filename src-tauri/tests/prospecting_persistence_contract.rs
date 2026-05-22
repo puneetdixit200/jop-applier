@@ -1,11 +1,12 @@
 use careercaveman_lib::db::{
     models::{
-        UpsertEmailOptOut, UpsertFundedCompany, UpsertOutreachCampaign, UpsertOutreachEmail,
-        UpsertProspectContact,
+        OutreachEmailReviewUpdate, UpsertEmailOptOut, UpsertFundedCompany, UpsertOutreachCampaign,
+        UpsertOutreachEmail, UpsertProspectContact,
     },
     queries::{
         list_funded_companies, list_outreach_emails, list_prospect_contacts, record_email_opt_out,
         save_funded_company, save_outreach_campaign, save_outreach_email, save_prospect_contact,
+        update_outreach_email_review,
     },
     schema::initialize_schema,
 };
@@ -84,6 +85,21 @@ fn stores_prospecting_companies_contacts_campaigns_and_opt_outs() {
         },
     )
     .expect("save outreach email");
+
+    let reviewed_email = update_outreach_email_review(
+        &connection,
+        OutreachEmailReviewUpdate {
+            id: email.id.clone(),
+            subject: "Congrats on the Series A - Backend Engineer".to_string(),
+            body_html: "<p>Hello Priya</p>".to_string(),
+            status: "queued".to_string(),
+        },
+    )
+    .expect("update outreach email review")
+    .expect("updated email exists");
+    assert_eq!(reviewed_email.status, "queued");
+    assert_eq!(reviewed_email.subject, "Congrats on the Series A - Backend Engineer");
+    assert_eq!(reviewed_email.body_html, "<p>Hello Priya</p>");
 
     record_email_opt_out(
         &connection,

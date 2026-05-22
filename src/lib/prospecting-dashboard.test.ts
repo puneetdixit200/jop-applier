@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyOutreachReviewDecision,
+  buildOutreachReviewPanel,
   buildProspectingCompanyDetail,
   buildOutreachAnalytics,
   buildOutreachReviewQueue,
@@ -67,6 +69,47 @@ describe("prospecting dashboard helpers", () => {
       replyRate: 25,
       bounceRate: 25,
     });
+  });
+
+  it("builds a selected review panel and applies review decisions", () => {
+    const companies = [company({ id: "setu", name: "Setu" })];
+    const contacts = [contact({ id: "contact-1", company_id: "setu", full_name: "Priya", email: "priya@setu.co" })];
+    const emails = [
+      email({
+        id: "pending-2",
+        contact_id: "contact-1",
+        subject: "Follow-up on API roles",
+        body_html: "<p>Hi Priya,</p><p>Sharing one more relevant platform project.</p>",
+        scheduled_at: "2026-05-24T04:30:00.000Z",
+        sequence_step: 2,
+      }),
+      email({
+        id: "pending-1",
+        contact_id: "contact-1",
+        body_html: "<p>Hi Priya,</p><p>Saw the funding news &amp; your API expansion.</p>",
+        scheduled_at: "2026-05-23T04:30:00.000Z",
+      }),
+    ];
+
+    expect(buildOutreachReviewPanel({ companies, contacts, emails, selectedEmailId: "pending-2" })).toEqual({
+      id: "pending-2",
+      companyName: "Setu",
+      contactLabel: "Priya <priya@setu.co>",
+      subject: "Follow-up on API roles",
+      bodyPreview: "Hi Priya, Sharing one more relevant platform project.",
+      bodyText: "Hi Priya,\n\nSharing one more relevant platform project.",
+      sequenceStep: 2,
+      scheduledAt: "2026-05-24T04:30:00.000Z",
+      currentPosition: 2,
+      total: 2,
+      previousEmailId: "pending-1",
+      nextEmailId: null,
+    });
+    expect(buildOutreachReviewPanel({ companies, contacts, emails, selectedEmailId: "missing" })?.id).toBe("pending-1");
+
+    expect(applyOutreachReviewDecision(emails[0], "approve")).toMatchObject({ id: "pending-2", status: "queued" });
+    expect(applyOutreachReviewDecision(emails[0], "reject")).toMatchObject({ id: "pending-2", status: "rejected" });
+    expect(applyOutreachReviewDecision(email({ status: "sent" }), "approve")).toMatchObject({ status: "sent" });
   });
 
   it("builds a company detail view with ranked contacts and funding context", () => {

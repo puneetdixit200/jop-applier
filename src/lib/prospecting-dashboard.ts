@@ -62,6 +62,16 @@ export type OutreachReviewQueueItem = {
   scheduledAt: string | null;
 };
 
+export type OutreachReviewPanel = OutreachReviewQueueItem & {
+  bodyText: string;
+  currentPosition: number;
+  total: number;
+  previousEmailId: string | null;
+  nextEmailId: string | null;
+};
+
+export type OutreachReviewDecision = "approve" | "reject";
+
 export type OutreachAnalyticsSummary = {
   sent: number;
   opened: number;
@@ -176,6 +186,48 @@ export function buildOutreachReviewQueue(input: {
     });
 }
 
+export function buildOutreachReviewPanel(input: {
+  companies: FundedCompany[];
+  contacts: ProspectContact[];
+  emails: OutreachEmail[];
+  selectedEmailId: string | null;
+}): OutreachReviewPanel | null {
+  const reviewQueue = buildOutreachReviewQueue(input);
+  if (reviewQueue.length === 0) {
+    return null;
+  }
+
+  const selectedIndex = Math.max(0, reviewQueue.findIndex((email) => email.id === input.selectedEmailId));
+  const selected = reviewQueue[selectedIndex];
+  const email = input.emails.find((item) => item.id === selected.id);
+  if (!email) {
+    return null;
+  }
+
+  return {
+    ...selected,
+    bodyText: htmlToBodyText(email.body_html),
+    currentPosition: selectedIndex + 1,
+    total: reviewQueue.length,
+    previousEmailId: reviewQueue[selectedIndex - 1]?.id ?? null,
+    nextEmailId: reviewQueue[selectedIndex + 1]?.id ?? null,
+  };
+}
+
+export function applyOutreachReviewDecision(
+  email: OutreachEmail,
+  decision: OutreachReviewDecision,
+): OutreachEmail {
+  if (email.status !== "pending") {
+    return email;
+  }
+
+  return {
+    ...email,
+    status: decision === "approve" ? "queued" : "rejected",
+  };
+}
+
 export function buildOutreachAnalytics(emails: OutreachEmail[]): OutreachAnalyticsSummary {
   const sentEmails = emails.filter((email) => ["sent", "opened", "replied", "bounced"].includes(email.status));
   const sent = sentEmails.length;
@@ -259,6 +311,29 @@ function htmlToPreview(value: string) {
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function htmlToBodyText(value: string) {
+  return decodeHtmlEntities(
+    value
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(?:p|div|li|h[1-6])>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .split("\n")
+      .map((line) => line.replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .join("\n\n"),
+  );
+}
+
+function decodeHtmlEntities(value: string) {
+  return value
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'");
 }
 
 function rate(value: number, total: number) {
