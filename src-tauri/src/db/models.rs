@@ -225,6 +225,14 @@ pub struct ApplicationFollowUpUpdate {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ApplicationResponseUpdate {
+    pub status: String,
+    pub response_date: String,
+    pub response_type: String,
+    pub response_notes: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ApplicationDocumentContext {
     pub application_id: String,
     pub job_id: String,

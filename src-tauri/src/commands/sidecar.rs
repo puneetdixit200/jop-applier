@@ -1,9 +1,9 @@
 use crate::{
     db::{
         models::{
-            Application, ApplicationFollowUpUpdate, ApplicationWorkflowStateUpdate, ScheduledTask,
-            ScheduledTaskRunUpdate, SettingValue, UpsertCommunication, UpsertJob,
-            UpsertNotification,
+            Application, ApplicationFollowUpUpdate, ApplicationResponseUpdate,
+            ApplicationWorkflowStateUpdate, ScheduledTask, ScheduledTaskRunUpdate, SettingValue,
+            UpsertCommunication, UpsertJob, UpsertNotification,
         },
         queries,
     },
@@ -64,6 +64,9 @@ pub fn run_sidecar_workflow_and_persist_jobs_with_command(
 
     if workflow_id == "job-discovery" {
         persist_discovered_jobs(connection, &mut result)?;
+    }
+    if workflow_id == "email-check" {
+        persist_email_responses(connection, &mut result)?;
     }
     persist_sidecar_notifications(connection, &mut result)?;
 
@@ -532,6 +535,104 @@ fn persist_sidecar_notifications(
     Ok(())
 }
 
+fn persist_email_responses(connection: &Connection, result: &mut Value) -> Result<(), String> {
+    let Some(responses_value) = result.get("responses").cloned() else {
+        return Ok(());
+    };
+    let responses: Vec<SidecarEmailResponse> =
+        serde_json::from_value(responses_value).map_err(|error| error.to_string())?;
+    let mut stored = 0;
+    let mut notifications = result
+        .get("notifications")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    for response in responses
+        .into_iter()
+        .filter(|response| response.application_id.is_some())
+    {
+        let application_id = response
+            .application_id
+            .as_deref()
+            .expect("filtered email responses have an application id");
+        queries::update_application_response_state(
+            connection,
+            application_id,
+            ApplicationResponseUpdate {
+                status: "response_received".to_string(),
+                response_date: response.received_at.clone(),
+                response_type: response.response_type.clone(),
+                response_notes: response.subject.clone(),
+            },
+        )
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("email response application not found: {application_id}"))?;
+        let communication = queries::save_communication(
+            connection,
+            UpsertCommunication {
+                application_id: Some(application_id.to_string()),
+                contact_id: response.contact_id.clone(),
+                direction: "received".to_string(),
+                communication_type: "response".to_string(),
+                subject: response.subject.clone(),
+                body: response.body.clone(),
+                email_id: Some(response.email_id.clone()),
+                sent_at: Some(response.received_at.clone()),
+                read_at: None,
+            },
+        )
+        .map_err(|error| error.to_string())?;
+        notifications.extend(email_response_notifications(&response, &communication.id));
+        stored += 1;
+    }
+
+    if let Some(payload) = result.as_object_mut() {
+        payload.insert("storedEmailResponses".to_string(), json!(stored));
+        if !notifications.is_empty() {
+            payload.insert("notifications".to_string(), Value::Array(notifications));
+        }
+    }
+
+    Ok(())
+}
+
+fn email_response_notifications(
+    response: &SidecarEmailResponse,
+    communication_id: &str,
+) -> Vec<Value> {
+    let company_name = response.company_name.as_deref().unwrap_or("A company");
+    let subject = response
+        .subject
+        .as_deref()
+        .unwrap_or(response.response_type.as_str());
+    let body = format!("{company_name} replied: {subject}");
+    let metadata = json!({
+        "applicationId": response.application_id.as_deref(),
+        "jobId": response.job_id.as_deref(),
+        "companyName": response.company_name.as_deref(),
+        "communicationId": communication_id,
+        "responseType": response.response_type.as_str(),
+        "subject": response.subject.as_deref(),
+        "emailId": response.email_id.as_str(),
+    });
+
+    ["os", "in_app"]
+        .into_iter()
+        .map(|channel| {
+            json!({
+                "type": "response.received",
+                "title": "Response received",
+                "body": body.as_str(),
+                "priority": "high",
+                "channel": channel,
+                "createdAt": response.received_at.as_str(),
+                "metadata": metadata.clone(),
+            })
+        })
+        .collect()
+}
+
 #[derive(Clone, Debug, Deserialize)]
 struct SidecarNotificationDelivery {
     #[serde(rename = "type")]
@@ -542,6 +643,26 @@ struct SidecarNotificationDelivery {
     channel: String,
     #[serde(default)]
     metadata: Value,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct SidecarEmailResponse {
+    #[serde(rename = "id")]
+    email_id: String,
+    #[serde(rename = "applicationId")]
+    application_id: Option<String>,
+    #[serde(rename = "jobId")]
+    job_id: Option<String>,
+    #[serde(rename = "companyName")]
+    company_name: Option<String>,
+    #[serde(rename = "contactId")]
+    contact_id: Option<String>,
+    subject: Option<String>,
+    body: Option<String>,
+    #[serde(rename = "receivedAt")]
+    received_at: String,
+    #[serde(rename = "responseType")]
+    response_type: String,
 }
 
 fn workflow_id_for_task_type(task_type: &str) -> Option<&'static str> {
