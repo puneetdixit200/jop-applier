@@ -194,6 +194,20 @@ export type Communication = {
 
 export type UpsertCommunication = Omit<Communication, "id" | "created_at">;
 
+export type Notification = {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  priority: string;
+  channel: string;
+  metadata: Record<string, unknown>;
+  read_at: string | null;
+  created_at: string;
+};
+
+export type UpsertNotification = Omit<Notification, "id" | "read_at" | "created_at">;
+
 export type ScheduledTask = {
   id: string;
   name: string;
@@ -328,6 +342,18 @@ export async function listCommunications(applicationId: string) {
 
 export async function saveCommunication(communication: UpsertCommunication) {
   return invoke<Communication>("save_communication_command", { communication });
+}
+
+export async function listNotifications() {
+  return invoke<Notification[]>("list_notifications_command");
+}
+
+export async function saveNotification(notification: UpsertNotification) {
+  return invoke<Notification>("save_notification_command", { notification });
+}
+
+export async function markNotificationRead(id: string, readAt: string) {
+  return invoke<Notification | null>("mark_notification_read_command", { id, readAt });
 }
 
 export async function listScheduledTasks() {

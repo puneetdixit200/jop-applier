@@ -317,6 +317,31 @@ pub struct UpsertCommunication {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Notification {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub notification_type: String,
+    pub title: String,
+    pub body: String,
+    pub priority: String,
+    pub channel: String,
+    pub metadata: Value,
+    pub read_at: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UpsertNotification {
+    #[serde(rename = "type")]
+    pub notification_type: String,
+    pub title: String,
+    pub body: String,
+    pub priority: String,
+    pub channel: String,
+    pub metadata: Value,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ScheduledTask {
     pub id: String,
     pub name: String,

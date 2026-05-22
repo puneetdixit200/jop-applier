@@ -10,7 +10,7 @@ fn phase_one_schema_creates_core_tables() {
     let mut statement = connection
         .prepare(
             "SELECT name FROM sqlite_master \
-             WHERE type = 'table' AND name IN ('user_profiles', 'jobs', 'applications', 'settings', 'ai_cache') \
+             WHERE type = 'table' AND name IN ('user_profiles', 'jobs', 'applications', 'settings', 'ai_cache', 'notifications') \
              ORDER BY name",
         )
         .expect("prepare table query");
@@ -22,9 +22,16 @@ fn phase_one_schema_creates_core_tables() {
 
     assert_eq!(
         table_names,
-        vec!["ai_cache", "applications", "jobs", "settings", "user_profiles"]
+        vec![
+            "ai_cache",
+            "applications",
+            "jobs",
+            "notifications",
+            "settings",
+            "user_profiles"
+        ]
     );
-    assert_eq!(schema_version(&connection).expect("read schema version"), 2);
+    assert_eq!(schema_version(&connection).expect("read schema version"), 3);
 }
 
 #[test]

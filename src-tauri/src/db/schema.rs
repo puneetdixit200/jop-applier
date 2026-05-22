@@ -197,6 +197,26 @@ ALTER TABLE jobs ADD COLUMN match_confidence REAL;
 ALTER TABLE jobs ADD COLUMN should_apply BOOLEAN;
 "#,
     },
+    Migration {
+        version: 3,
+        name: "notification_inbox",
+        sql: r#"
+CREATE TABLE IF NOT EXISTS notifications (
+    id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    type        TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    body        TEXT NOT NULL,
+    priority    TEXT NOT NULL,
+    channel     TEXT NOT NULL DEFAULT 'in_app',
+    metadata    TEXT NOT NULL DEFAULT '{}',
+    read_at     DATETIME,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_channel_read_created
+    ON notifications(channel, read_at, created_at DESC);
+"#,
+    },
 ];
 
 pub fn initialize_schema(connection: &Connection) -> SchemaResult<()> {

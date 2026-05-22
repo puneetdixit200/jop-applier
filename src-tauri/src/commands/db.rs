@@ -3,9 +3,10 @@ use crate::{
         models::{
             AiCacheEntry, Application, ApplicationDocumentContext, ApplicationEvent,
             ApplicationWorkflowStateUpdate, Communication, Company, Contact, Document, Job,
-            ScheduledTask, ScheduledTaskRunUpdate, Setting, UpsertAiCacheEntry, UpsertApplication,
-            UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument, UpsertJob,
-            UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
+            Notification, ScheduledTask, ScheduledTaskRunUpdate, Setting, UpsertAiCacheEntry,
+            UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument,
+            UpsertJob, UpsertNotification, UpsertScheduledTask, UpsertSetting, UpsertUserProfile,
+            UserProfile,
         },
         queries, schema,
     },
@@ -234,6 +235,40 @@ pub fn save_communication_command(
         .lock()
         .map_err(|_| "database connection lock poisoned".to_string())?;
     queries::save_communication(&connection, communication).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn list_notifications_command(state: State<'_, AppState>) -> Result<Vec<Notification>, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::list_notifications(&connection).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn save_notification_command(
+    state: State<'_, AppState>,
+    notification: UpsertNotification,
+) -> Result<Notification, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::save_notification(&connection, notification).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn mark_notification_read_command(
+    state: State<'_, AppState>,
+    id: String,
+    read_at: String,
+) -> Result<Option<Notification>, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::mark_notification_read(&connection, &id, &read_at).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

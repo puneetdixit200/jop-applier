@@ -5,10 +5,11 @@ use thiserror::Error;
 
 use super::models::{
     AiCacheEntry, Application, ApplicationDocumentContext, ApplicationEvent,
-    ApplicationWorkflowStateUpdate, Communication, Company, Contact, Document, Job, ScheduledTask,
-    ScheduledTaskRunUpdate, Setting, SettingValue, UpsertAiCacheEntry, UpsertApplication,
-    UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument, UpsertJob,
-    UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
+    ApplicationWorkflowStateUpdate, Communication, Company, Contact, Document, Job, Notification,
+    ScheduledTask, ScheduledTaskRunUpdate, Setting, SettingValue, UpsertAiCacheEntry,
+    UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument,
+    UpsertJob, UpsertNotification, UpsertScheduledTask, UpsertSetting, UpsertUserProfile,
+    UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -41,6 +42,8 @@ pub enum QueryError {
     MissingScheduledTaskAfterSave,
     #[error("scheduled task run update did not return a row for id {0}")]
     MissingScheduledTaskAfterRunUpdate(String),
+    #[error("notification save did not return a row")]
+    MissingNotificationAfterSave,
     #[error("ai cache entry save did not return a row")]
     MissingAiCacheEntryAfterSave,
 }
@@ -778,6 +781,57 @@ pub fn save_communication(
     Ok(saved)
 }
 
+pub fn list_notifications(connection: &Connection) -> QueryResult<Vec<Notification>> {
+    let mut statement = connection.prepare(
+        "SELECT id, type, title, body, priority, channel, metadata, read_at, created_at
+         FROM notifications
+         ORDER BY created_at DESC, rowid DESC",
+    )?;
+
+    let rows = statement.query_map([], notification_from_row)?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(QueryError::from)
+}
+
+pub fn save_notification(
+    connection: &Connection,
+    notification: UpsertNotification,
+) -> QueryResult<Notification> {
+    let metadata = to_json_text(&notification.metadata)?;
+    connection.execute(
+        "INSERT INTO notifications (
+             type, title, body, priority, channel, metadata
+         )
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            notification.notification_type,
+            notification.title,
+            notification.body,
+            notification.priority,
+            notification.channel,
+            metadata,
+        ],
+    )?;
+
+    get_notification_by_rowid(connection, connection.last_insert_rowid())?
+        .ok_or(QueryError::MissingNotificationAfterSave)
+}
+
+pub fn mark_notification_read(
+    connection: &Connection,
+    id: &str,
+    read_at: &str,
+) -> QueryResult<Option<Notification>> {
+    connection.execute(
+        "UPDATE notifications
+         SET read_at = ?1
+         WHERE id = ?2",
+        params![read_at, id],
+    )?;
+
+    get_notification_by_id(connection, id)
+}
+
 pub fn list_scheduled_tasks(connection: &Connection) -> QueryResult<Vec<ScheduledTask>> {
     let mut statement = connection.prepare(
         "SELECT id, name, type, cron_expression, is_enabled, last_run, next_run, config, created_at
@@ -914,6 +968,41 @@ fn get_communication_by_rowid(
         return Ok(None);
     };
     communication_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
+}
+
+fn get_notification_by_rowid(
+    connection: &Connection,
+    rowid: i64,
+) -> QueryResult<Option<Notification>> {
+    let mut statement = connection.prepare(
+        "SELECT id, type, title, body, priority, channel, metadata, read_at, created_at
+         FROM notifications
+         WHERE rowid = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([rowid])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    notification_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
+}
+
+fn get_notification_by_id(connection: &Connection, id: &str) -> QueryResult<Option<Notification>> {
+    let mut statement = connection.prepare(
+        "SELECT id, type, title, body, priority, channel, metadata, read_at, created_at
+         FROM notifications
+         WHERE id = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([id])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    notification_from_row(row)
         .map(Some)
         .map_err(QueryError::from)
 }
@@ -1237,6 +1326,25 @@ fn communication_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Communica
         sent_at: row.get(8)?,
         read_at: row.get(9)?,
         created_at: row.get(10)?,
+    })
+}
+
+fn notification_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Notification> {
+    let metadata: String = row.get(6)?;
+    let metadata = serde_json::from_str(&metadata).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(6, rusqlite::types::Type::Text, Box::new(error))
+    })?;
+
+    Ok(Notification {
+        id: row.get(0)?,
+        notification_type: row.get(1)?,
+        title: row.get(2)?,
+        body: row.get(3)?,
+        priority: row.get(4)?,
+        channel: row.get(5)?,
+        metadata,
+        read_at: row.get(7)?,
+        created_at: row.get(8)?,
     })
 }
 
