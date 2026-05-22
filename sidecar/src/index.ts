@@ -72,6 +72,10 @@ import {
   HttpJsonFeedConnector,
   type HttpJsonFeedSource,
 } from "./discovery/connectors/http-json-feed-connector.js";
+import {
+  JobPortalConnector,
+  type JobPortalSource,
+} from "./discovery/connectors/job-portal-connector.js";
 import { LeverConnector } from "./discovery/connectors/lever-connector.js";
 import { WorkdayConnector } from "./discovery/connectors/workday-connector.js";
 import {
@@ -628,6 +632,9 @@ function discoveryConnectorsFromWorkflowInput(input: unknown): JobConnector[] {
     ...discoveryFeedSourcesFromWorkflowInput(input.discovery).map(
       (source) => new HttpJsonFeedConnector(source),
     ),
+    ...discoveryPortalSourcesFromWorkflowInput(input.discovery).map(
+      (source) => new JobPortalConnector(source),
+    ),
     ...discoveryAtsSourcesFromWorkflowInput(input.discovery).map((source) => {
       if (source.type === "greenhouse") {
         return new GreenhouseConnector({ boardToken: source.boardToken });
@@ -660,6 +667,15 @@ function discoveryConnectorsFromWorkflowInput(input: unknown): JobConnector[] {
       (source) => new CareerPageConnector(source),
     ),
   ];
+}
+
+function discoveryPortalSourcesFromWorkflowInput(discovery: Record<string, unknown>): JobPortalSource[] {
+  const { portalSources } = discovery;
+  if (!Array.isArray(portalSources)) {
+    return [];
+  }
+
+  return portalSources.filter(isJobPortalSource);
 }
 
 function discoveryFeedSourcesFromWorkflowInput(discovery: Record<string, unknown>): HttpJsonFeedSource[] {
@@ -731,6 +747,16 @@ function isHttpJsonFeedSource(value: unknown): value is HttpJsonFeedSource {
   );
 }
 
+function isJobPortalSource(value: unknown): value is JobPortalSource {
+  return (
+    isRecord(value) &&
+    isPortalPlatform(value.platform) &&
+    (value.name === undefined || typeof value.name === "string") &&
+    (value.searchUrl === undefined || typeof value.searchUrl === "string") &&
+    (value.headers === undefined || isStringRecord(value.headers))
+  );
+}
+
 function isDiscoveryAtsSource(value: unknown): value is DiscoveryAtsSource {
   if (!isRecord(value) || typeof value.type !== "string") {
     return false;
@@ -768,6 +794,16 @@ function isDiscoveryAtsSource(value: unknown): value is DiscoveryAtsSource {
   }
 
   return false;
+}
+
+function isPortalPlatform(value: unknown): value is JobPortalSource["platform"] {
+  return (
+    value === "linkedin" ||
+    value === "indeed" ||
+    value === "internshala" ||
+    value === "naukri" ||
+    value === "wellfound"
+  );
 }
 
 function isCareerPageSource(value: unknown): value is CareerPageSource {

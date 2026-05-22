@@ -481,6 +481,7 @@ export function App() {
         storedCache,
         storedLimit,
         storedSearchQueries,
+        storedPortalSources,
         storedFeedSources,
         storedAtsSources,
         storedCareerPageSources,
@@ -498,6 +499,7 @@ export function App() {
         getSetting("ai.cacheResponses"),
         getSetting("application.maxDailyApplications"),
         getSetting("discovery.searchQueries"),
+        getSetting("discovery.portalSources"),
         getSetting("discovery.feedSources"),
         getSetting("discovery.atsSources"),
         getSetting("discovery.careerPageSources"),
@@ -537,6 +539,7 @@ export function App() {
           storedFeedSources?.value,
           storedAtsSources?.value,
           storedCareerPageSources?.value,
+          storedPortalSources?.value,
           current.discovery,
         ),
         email: emailSettingsFromStoredValues(
@@ -1624,6 +1627,11 @@ function SettingsPanel({
           category: "discovery",
         }),
         saveSetting({
+          key: "discovery.portalSources",
+          value: discoveryValues.portalSources,
+          category: "discovery",
+        }),
+        saveSetting({
           key: "discovery.feedSources",
           value: discoveryValues.feedSources,
           category: "discovery",
@@ -1705,6 +1713,27 @@ function SettingsPanel({
             />
             <span>Remote jobs only</span>
           </label>
+        </div>
+      </fieldset>
+      <fieldset className="settings-section">
+        <legend>Job portals</legend>
+        <div className="settings-grid">
+          {([
+            ["portalLinkedIn", "LinkedIn"],
+            ["portalIndeed", "Indeed"],
+            ["portalInternshala", "Internshala"],
+            ["portalNaukri", "Naukri"],
+            ["portalWellfound", "Wellfound"],
+          ] as const).map(([key, label]) => (
+            <label className="toggle-row settings-toggle" key={key}>
+              <input
+                type="checkbox"
+                checked={settings.discovery[key]}
+                onChange={(event) => updateDiscovery(key, event.target.checked)}
+              />
+              <span>{label}</span>
+            </label>
+          ))}
         </div>
       </fieldset>
       <fieldset className="settings-section">

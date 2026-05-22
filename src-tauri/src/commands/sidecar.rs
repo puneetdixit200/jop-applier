@@ -511,6 +511,9 @@ fn discovery_workflow_params_from_settings(connection: &Connection) -> Result<Va
     if let Some(search_queries) = discovery_setting_array(connection, "discovery.searchQueries")? {
         discovery.insert("searchQueries".to_string(), Value::Array(search_queries));
     }
+    if let Some(portal_sources) = discovery_setting_array(connection, "discovery.portalSources")? {
+        discovery.insert("portalSources".to_string(), Value::Array(portal_sources));
+    }
     if let Some(feed_sources) = discovery_setting_array(connection, "discovery.feedSources")? {
         discovery.insert("feedSources".to_string(), Value::Array(feed_sources));
     }

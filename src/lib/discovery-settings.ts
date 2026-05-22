@@ -6,6 +6,11 @@ export type DiscoverySettings = {
   searchKeywords: string;
   searchLocation: string;
   remoteOnly: boolean;
+  portalLinkedIn: boolean;
+  portalIndeed: boolean;
+  portalInternshala: boolean;
+  portalNaukri: boolean;
+  portalWellfound: boolean;
   feedSourceUrl: string;
   feedSourcePlatform: string;
   feedSourceName: string;
@@ -22,6 +27,7 @@ export type DiscoverySettings = {
 
 export type SerializedDiscoverySettings = {
   searchQueries: Array<Record<string, unknown>>;
+  portalSources: Array<Record<string, unknown>>;
   feedSources: Array<Record<string, unknown>>;
   atsSources: Array<Record<string, unknown>>;
   careerPageSources: Array<Record<string, unknown>>;
@@ -31,6 +37,11 @@ export const defaultDiscoverySettings: DiscoverySettings = {
   searchKeywords: "React, TypeScript",
   searchLocation: "Remote",
   remoteOnly: true,
+  portalLinkedIn: false,
+  portalIndeed: false,
+  portalInternshala: false,
+  portalNaukri: false,
+  portalWellfound: false,
   feedSourceUrl: "",
   feedSourcePlatform: "custom",
   feedSourceName: "Custom JSON feed",
@@ -50,9 +61,11 @@ export function discoverySettingsFromStoredValues(
   feedSourcesValue: SettingValue | undefined | null,
   atsSourcesValue: SettingValue | undefined | null = null,
   careerPageSourcesValue: SettingValue | undefined | null = null,
+  portalSourcesValue: SettingValue | undefined | null = null,
   fallback: DiscoverySettings = defaultDiscoverySettings,
 ): DiscoverySettings {
   const searchQuery = firstSearchQuery(searchQueriesValue);
+  const portalSources = portalSourcesFromStoredValue(portalSourcesValue);
   const feedSource = firstFeedSource(feedSourcesValue);
   const greenhouseSource = firstAtsSource(atsSourcesValue, "greenhouse");
   const leverSource = firstAtsSource(atsSourcesValue, "lever");
@@ -73,6 +86,13 @@ export function discoverySettingsFromStoredValues(
         : fallback.searchKeywords,
     searchLocation: textOrFallback(searchQuery?.location, fallback.searchLocation),
     remoteOnly: typeof searchQuery?.remote === "boolean" ? searchQuery.remote : fallback.remoteOnly,
+    portalLinkedIn: portalSources.has("linkedin") || (!hasStoredSearchQueries && fallback.portalLinkedIn),
+    portalIndeed: portalSources.has("indeed") || (!hasStoredSearchQueries && fallback.portalIndeed),
+    portalInternshala:
+      portalSources.has("internshala") || (!hasStoredSearchQueries && fallback.portalInternshala),
+    portalNaukri: portalSources.has("naukri") || (!hasStoredSearchQueries && fallback.portalNaukri),
+    portalWellfound:
+      portalSources.has("wellfound") || (!hasStoredSearchQueries && fallback.portalWellfound),
     feedSourceUrl: feedSource?.url ?? (hasStoredFeedSources ? "" : fallback.feedSourceUrl),
     feedSourcePlatform: textOrFallback(feedSource?.platform, fallback.feedSourcePlatform),
     feedSourceName: textOrFallback(feedSource?.name, fallback.feedSourceName),
@@ -114,6 +134,13 @@ export function discoverySettingsToStoredValues(
           },
         ]
       : [];
+  const portalSources = [
+    ...(settings.portalLinkedIn ? [{ platform: "linkedin" }] : []),
+    ...(settings.portalIndeed ? [{ platform: "indeed" }] : []),
+    ...(settings.portalInternshala ? [{ platform: "internshala" }] : []),
+    ...(settings.portalNaukri ? [{ platform: "naukri" }] : []),
+    ...(settings.portalWellfound ? [{ platform: "wellfound" }] : []),
+  ];
   const feedSources =
     feedSourceUrl.length > 0
       ? [
@@ -153,7 +180,7 @@ export function discoverySettingsToStoredValues(
         ]
       : [];
 
-  return { searchQueries, feedSources, atsSources, careerPageSources };
+  return { searchQueries, portalSources, feedSources, atsSources, careerPageSources };
 }
 
 function splitKeywords(value: string) {
@@ -177,6 +204,18 @@ function firstFeedSource(value: SettingValue | undefined | null) {
   }
 
   return value.find(isFeedSource) ?? null;
+}
+
+function portalSourcesFromStoredValue(value: SettingValue | undefined | null): Set<string> {
+  if (!Array.isArray(value)) {
+    return new Set();
+  }
+
+  return new Set(
+    value
+      .filter(isPortalSource)
+      .map((source) => source.platform),
+  );
 }
 
 function firstAtsSource<Type extends AtsSource["type"]>(
@@ -225,6 +264,16 @@ function isFeedSource(value: unknown): value is {
     value.url.trim().length > 0 &&
     (value.platform === undefined || typeof value.platform === "string") &&
     (value.name === undefined || typeof value.name === "string")
+  );
+}
+
+function isPortalSource(value: unknown): value is {
+  platform: string;
+} {
+  return (
+    isRecord(value) &&
+    typeof value.platform === "string" &&
+    ["linkedin", "indeed", "internshala", "naukri", "wellfound"].includes(value.platform)
   );
 }
 

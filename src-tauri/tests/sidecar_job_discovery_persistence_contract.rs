@@ -78,6 +78,18 @@ fn sends_discovery_search_queries_from_settings_to_sidecar() {
     upsert_setting(
         &connection,
         UpsertSetting {
+            key: "discovery.portalSources".to_string(),
+            category: Some("discovery".to_string()),
+            value: SettingValue::Array(vec![
+                json!({ "platform": "linkedin" }),
+                json!({ "platform": "indeed" }),
+            ]),
+        },
+    )
+    .expect("save discovery portal source setting");
+    upsert_setting(
+        &connection,
+        UpsertSetting {
             key: "discovery.atsSources".to_string(),
             category: Some("discovery".to_string()),
             value: SettingValue::Array(vec![
@@ -128,6 +140,13 @@ fn sends_discovery_search_queries_from_settings_to_sidecar() {
             "experienceLevel": "entry",
             "jobType": "fulltime"
         }])
+    );
+    assert_eq!(
+        request["params"]["discovery"]["portalSources"],
+        json!([
+            { "platform": "linkedin" },
+            { "platform": "indeed" }
+        ])
     );
     assert_eq!(
         request["params"]["discovery"]["feedSources"],

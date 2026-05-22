@@ -606,6 +606,95 @@ describe("sidecar runtime", () => {
     }
   });
 
+  it("runs configured public job portal sources through the job-discovery workflow", async () => {
+    const originalFetch = globalThis.fetch;
+    const requestedUrls: string[] = [];
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const requestUrl = String(url);
+      requestedUrls.push(requestUrl);
+
+      if (
+        requestUrl ===
+        "https://www.linkedin.com/jobs/search/?keywords=React&location=Remote&f_WT=2"
+      ) {
+        return htmlResponse(`
+          <script type="application/ld+json">
+            {
+              "@type": "JobPosting",
+              "identifier": "li-601",
+              "title": "React LinkedIn Engineer",
+              "url": "https://www.linkedin.com/jobs/view/601",
+              "description": "<p>Build React LinkedIn tools.</p><ul><li>React</li></ul>",
+              "hiringOrganization": { "name": "Northstar Labs" },
+              "jobLocationType": "TELECOMMUTE"
+            }
+          </script>
+        `);
+      }
+
+      if (requestUrl === "https://www.indeed.com/jobs?q=React&l=Remote&remotejob=1") {
+        return htmlResponse(`
+          <script type="application/ld+json">
+            {
+              "@type": "JobPosting",
+              "identifier": "indeed-701",
+              "title": "React Indeed Engineer",
+              "url": "https://www.indeed.com/viewjob?jk=701",
+              "description": "<p>Build React Indeed tools.</p><ul><li>React</li></ul>",
+              "hiringOrganization": { "name": "Atlas" },
+              "jobLocationType": "TELECOMMUTE"
+            }
+          </script>
+        `);
+      }
+
+      throw new Error(`unexpected fetch: ${requestUrl}`);
+    }) as typeof fetch;
+
+    try {
+      const runtime = createSidecarRuntime();
+
+      await expect(
+        runtime.workflowEngine.run("job-discovery", {
+          discovery: {
+            searchQueries: [{ keywords: ["React"], location: "Remote", remote: true }],
+            portalSources: [{ platform: "linkedin" }, { platform: "indeed" }],
+          },
+        }),
+      ).resolves.toMatchObject({
+        queries: 1,
+        discovered: 2,
+        stored: 0,
+        jobs: [
+          {
+            source_id: "linkedin:li-601",
+            platform: "linkedin",
+            url: "https://www.linkedin.com/jobs/view/601",
+            title: "React LinkedIn Engineer",
+            company_name: "Northstar Labs",
+            is_remote: true,
+            requirements: ["React"],
+          },
+          {
+            source_id: "indeed:indeed-701",
+            platform: "indeed",
+            url: "https://www.indeed.com/viewjob?jk=701",
+            title: "React Indeed Engineer",
+            company_name: "Atlas",
+            is_remote: true,
+            requirements: ["React"],
+          },
+        ],
+      });
+      expect(requestedUrls).toEqual([
+        "https://www.linkedin.com/jobs/search/?keywords=React&location=Remote&f_WT=2",
+        "https://www.indeed.com/jobs?q=React&l=Remote&remotejob=1",
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("runs configured career page sources through the job-discovery workflow", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (url: string | URL | Request) => {

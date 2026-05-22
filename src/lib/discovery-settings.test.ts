@@ -34,12 +34,18 @@ describe("discovery settings", () => {
           url: "https://northstar.example/careers",
         },
       ],
+      [{ platform: "linkedin" }, { platform: "wellfound" }],
     );
 
     expect(settings).toEqual({
       searchKeywords: "react, typescript",
       searchLocation: "Remote",
       remoteOnly: true,
+      portalLinkedIn: true,
+      portalIndeed: false,
+      portalInternshala: false,
+      portalNaukri: false,
+      portalWellfound: true,
       feedSourceUrl: "https://feeds.example/jobs.json",
       feedSourcePlatform: "greenhouse",
       feedSourceName: "Curated internships",
@@ -60,6 +66,11 @@ describe("discovery settings", () => {
       searchKeywords: "react, typescript",
       searchLocation: "Remote",
       remoteOnly: true,
+      portalLinkedIn: true,
+      portalIndeed: true,
+      portalInternshala: false,
+      portalNaukri: false,
+      portalWellfound: false,
       feedSourceUrl: "https://feeds.example/jobs.json",
       feedSourcePlatform: "greenhouse",
       feedSourceName: "Curated internships",
@@ -76,6 +87,7 @@ describe("discovery settings", () => {
 
     expect(values).toEqual({
       searchQueries: [{ keywords: ["react", "typescript"], location: "Remote", remote: true }],
+      portalSources: [{ platform: "linkedin" }, { platform: "indeed" }],
       feedSources: [
         {
           id: "custom-json-feed",
@@ -110,6 +122,11 @@ describe("discovery settings", () => {
       searchKeywords: "  ",
       searchLocation: "Remote",
       remoteOnly: true,
+      portalLinkedIn: false,
+      portalIndeed: false,
+      portalInternshala: false,
+      portalNaukri: false,
+      portalWellfound: false,
       feedSourceUrl: "  ",
       feedSourcePlatform: "custom",
       feedSourceName: "Custom JSON feed",
@@ -126,6 +143,7 @@ describe("discovery settings", () => {
 
     expect(values).toEqual({
       searchQueries: [],
+      portalSources: [],
       feedSources: [],
       atsSources: [],
       careerPageSources: [],
