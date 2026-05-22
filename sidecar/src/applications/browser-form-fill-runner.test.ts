@@ -71,6 +71,43 @@ describe("browser-backed application form filler", () => {
       "fill:#interest:I want to work at Northstar Labs because the role matches my React experience.",
     ]);
   });
+
+  it("stops before filling when a captcha challenge is detected", async () => {
+    const calls: string[] = [];
+    const page = {
+      ...fakePage(calls, "https://jobs.example/apply", [
+        field("#name", "Full name", "input", true),
+      ]),
+      textContent: async (selector: string) => {
+        calls.push(`textContent:${selector}`);
+        return "Please verify you are human";
+      },
+    };
+    const fillApplicationForm = createBrowserApplicationFormFiller({
+      browserManager: {
+        openSession: async () => ({
+          newPage: async () => page,
+        }),
+      },
+      loadApplicationContext: async () => ({
+        applicationUrl: "https://jobs.example/apply",
+        platform: "generic",
+        jobTitle: "Frontend Engineer",
+        profile: {
+          fullName: "Deepak Kudi",
+          email: "deepak@example.com",
+        },
+      }),
+    });
+
+    await expect(fillApplicationForm(queuedApplication())).rejects.toThrow(
+      "generic captcha challenge detected",
+    );
+    expect(calls).toEqual([
+      "goto:https://jobs.example/apply:domcontentloaded",
+      "textContent:body",
+    ]);
+  });
 });
 
 type NavigablePlaywrightFormPage = PlaywrightFormPageLike & {

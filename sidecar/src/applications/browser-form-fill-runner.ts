@@ -2,6 +2,7 @@ import type {
   ApplicationProcessingApplication,
   ApplicationWorkerDependencies,
 } from "./application-worker.js";
+import { assertNoCaptchaChallenge } from "../browser/captcha-handler.js";
 import {
   fillApplicationFormWithStrategy,
   type ApplicationFormInput,
@@ -15,6 +16,7 @@ export type BrowserFormFillPage = PlaywrightFormPageLike & {
     url: string,
     options?: { waitUntil?: "commit" | "domcontentloaded" | "load" | "networkidle" },
   ) => Promise<unknown>;
+  textContent?: (selector: string) => Promise<string | null>;
 };
 
 export type BrowserFormFillSession = {
@@ -52,6 +54,7 @@ export function createBrowserApplicationFormFiller({
     const page = await session.newPage();
 
     await page.goto(context.applicationUrl, { waitUntil: "domcontentloaded" });
+    await assertNoCaptchaChallenge(page);
 
     return fillApplicationFormWithStrategy(
       createPlaywrightFormPage(page),

@@ -71,6 +71,7 @@ describe("browser application automation", () => {
     expect(openedPlatforms).toEqual(["lever"]);
     expect(calls).toEqual([
       "goto:https://jobs.lever.co/northstar/42:domcontentloaded",
+      "textContent:body",
       "evaluate",
       "evaluate",
       "fill:#name:Deepak Kudi",

@@ -15,6 +15,7 @@ import {
   type FormFillerStrategy,
 } from "./form-filler.js";
 import { createPlaywrightFormPage } from "./playwright-form-page.js";
+import { assertNoCaptchaChallenge } from "../browser/captcha-handler.js";
 
 const SUBMIT_SELECTOR = 'button[type="submit"], input[type="submit"]';
 
@@ -61,6 +62,7 @@ export function createBrowserApplicationAutomation({
       const page = await session.newPage();
 
       await page.goto(context.applicationUrl, { waitUntil: "domcontentloaded" });
+      await assertNoCaptchaChallenge(page);
       pages.set(application.id, page);
 
       return fillApplicationFormWithStrategy(
