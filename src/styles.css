@@ -394,6 +394,11 @@ button:disabled {
   border-left: 3px solid #b9d7c3;
 }
 
+.tracker-lane.kanban-drop-target {
+  border-left-color: #2f6b4f;
+  background: #f5fbf7;
+}
+
 .tracker-lane-heading {
   display: flex;
   align-items: center;
@@ -457,6 +462,11 @@ button:disabled {
   border: 0;
   color: inherit;
   text-align: left;
+  cursor: grab;
+}
+
+.table-row.application-row:active {
+  cursor: grabbing;
 }
 
 .table-row.application-row:hover,

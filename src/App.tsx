@@ -53,8 +53,10 @@ import {
 import {
   buildApplicationTracker,
   type ApplicationTracker,
+  type ApplicationTrackerColumnId,
   type ApplicationTrackerReviewAction,
 } from "./lib/application-tracker";
+import { runApplicationKanbanMove } from "./lib/application-kanban-control";
 import { runApplicationReviewControl } from "./lib/application-review-control";
 import {
   buildContactCrm,
@@ -347,6 +349,7 @@ export function App() {
   const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
   const [isRunningSchedules, setIsRunningSchedules] = useState(false);
   const [runningReviewActionId, setRunningReviewActionId] = useState<string | null>(null);
+  const [draggedApplicationId, setDraggedApplicationId] = useState<string | null>(null);
   const [scheduleSummaries, setScheduleSummaries] = useState<ScheduledTaskSummary[]>(() =>
     scheduledTaskSummaries(previewScheduleTasks, 8),
   );
@@ -631,6 +634,46 @@ export function App() {
     }
   }
 
+  async function handleApplicationColumnDrop(columnId: ApplicationTrackerColumnId) {
+    if (!draggedApplicationId) {
+      return;
+    }
+    const application = visibleApplications.find((item) => item.id === draggedApplicationId);
+    if (!application) {
+      setDraggedApplicationId(null);
+      return;
+    }
+
+    try {
+      const result = await runApplicationKanbanMove(application, columnId, {
+        isDesktopRuntime: () => isDesktopRuntime() && persistedApplications.length > 0,
+        updateApplicationWorkflowState,
+      });
+      setWorkflowStatus(result.workflowStatus);
+      if (!result.application) {
+        return;
+      }
+      updateApplicationRecord(result.application);
+    } finally {
+      setDraggedApplicationId(null);
+    }
+  }
+
+  function updateApplicationRecord(application: Application) {
+    if (!isDesktopRuntime() || persistedApplications.length === 0) {
+      setPreviewApplicationRecords((current) =>
+        current.map((item) => (item.id === application.id ? application : item)),
+      );
+      setStorageStatus("Browser preview");
+      return;
+    }
+
+    setPersistedApplications((current) =>
+      current.map((item) => (item.id === application.id ? application : item)),
+    );
+    setStorageStatus("SQLite ready");
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar" aria-label="Primary navigation">
@@ -723,6 +766,10 @@ export function App() {
             onSelectApplication={setSelectedApplicationId}
             onReviewAction={handleApplicationReviewAction}
             runningReviewActionId={runningReviewActionId}
+            draggedApplicationId={draggedApplicationId}
+            onApplicationDragStart={setDraggedApplicationId}
+            onApplicationDragEnd={() => setDraggedApplicationId(null)}
+            onApplicationDrop={handleApplicationColumnDrop}
           />
         )}
         {route === "profile" && (
@@ -885,6 +932,10 @@ function Applications({
   onSelectApplication,
   onReviewAction,
   runningReviewActionId,
+  draggedApplicationId,
+  onApplicationDragStart,
+  onApplicationDragEnd,
+  onApplicationDrop,
 }: {
   tracker: ApplicationTracker;
   activity: ApplicationActivity;
@@ -897,6 +948,10 @@ function Applications({
   onSelectApplication: (applicationId: string) => void;
   onReviewAction: (action: ApplicationTrackerReviewAction) => void;
   runningReviewActionId: string | null;
+  draggedApplicationId: string | null;
+  onApplicationDragStart: (applicationId: string) => void;
+  onApplicationDragEnd: () => void;
+  onApplicationDrop: (columnId: ApplicationTrackerColumnId) => void;
 }) {
   const selectedApplication = tracker.rows.find((application) => application.id === selectedApplicationId);
   const updateDraft = <Key extends keyof ApplicationEditDraft>(key: Key, value: ApplicationEditDraft[Key]) =>
@@ -923,7 +978,13 @@ function Applications({
       </div>
       <div className="tracker-lanes" aria-label="Application status columns">
         {tracker.columns.map((column) => (
-          <section className="tracker-lane" key={column.id}>
+          <section
+            className={draggedApplicationId ? "tracker-lane kanban-drop-target" : "tracker-lane"}
+            data-kanban-column={column.id}
+            key={column.id}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={() => onApplicationDrop(column.id)}
+          >
             <div className="tracker-lane-heading">
               <span>{column.label}</span>
               <strong>{column.count}</strong>
@@ -947,6 +1008,11 @@ function Applications({
             }
             key={application.id}
             type="button"
+            data-application-id={application.id}
+            draggable
+            aria-grabbed={draggedApplicationId === application.id}
+            onDragStart={() => onApplicationDragStart(application.id)}
+            onDragEnd={onApplicationDragEnd}
             onClick={() => onSelectApplication(application.id)}
           >
             <span>{application.company}</span>
