@@ -8,6 +8,9 @@ import {
   type AnalyticsRefreshWorkerDependencies,
 } from "./analytics/analytics-refresh-worker.js";
 import {
+  createAnalyticsDependenciesFromWorkflowInput,
+} from "./analytics/analytics-config.js";
+import {
   runApplicationReviewDecision,
   type ApplicationReviewDecision,
 } from "./applications/application-review-decision.js";
@@ -295,11 +298,16 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   workflowEngine.register({
     id: "analytics-refresh",
     description: "Recalculate dashboard analytics metrics",
-    run: async () =>
-      runAnalyticsRefreshWorker(analytics, {
+    run: async (input) => {
+      const configuredAnalytics = createAnalyticsDependenciesFromWorkflowInput(input, {
+        fallback: analytics,
+      });
+
+      return runAnalyticsRefreshWorker(configuredAnalytics ?? analytics, {
         now: now(),
         eventBus,
-      }),
+      });
+    },
   });
   workflowEngine.register({
     id: "email-check",

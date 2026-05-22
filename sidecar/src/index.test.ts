@@ -1636,6 +1636,88 @@ describe("sidecar runtime", () => {
     ]);
   });
 
+  it("runs configured analytics inputs through the analytics workflow", async () => {
+    const checkedAt = new Date("2026-05-29T00:00:00Z");
+    const runtime = createSidecarRuntime({
+      now: () => checkedAt,
+    });
+
+    await expect(
+      runtime.workflowEngine.run("analytics-refresh", {
+        analyticsRefresh: {
+          inputs: {
+            applications: [
+              {
+                id: "app-1",
+                companyName: "Northstar Labs",
+                platform: "linkedin",
+                status: "submitted",
+                appliedAt: "2026-05-20T00:00:00.000Z",
+                responseDate: "2026-05-22T00:00:00.000Z",
+                responseType: "interview",
+                followUpCount: 1,
+                resumeVersion: "frontend",
+              },
+              {
+                id: "app-2",
+                companyName: "Atlas Works",
+                platform: "indeed",
+                status: "submitted",
+                appliedAt: "2026-05-21T00:00:00.000Z",
+                responseDate: null,
+                responseType: null,
+                followUpCount: 0,
+                resumeVersion: null,
+              },
+            ],
+            jobs: [
+              {
+                id: "job-1",
+                platform: "linkedin",
+                companyName: "Northstar Labs",
+                matchScore: 88,
+                requiredSkills: ["React"],
+              },
+              {
+                id: "job-2",
+                platform: "indeed",
+                companyName: "Atlas Works",
+                matchScore: null,
+                requiredSkills: ["SQL"],
+              },
+            ],
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      applications: 2,
+      jobs: 2,
+      saved: true,
+      snapshot: {
+        generatedAt: "2026-05-29T00:00:00.000Z",
+        metrics: {
+          totalApplications: 2,
+          responseRate: 50,
+          interviewRate: 50,
+          offerRate: 0,
+          averageTimeToResponseDays: 2,
+          followUpEffectiveness: {
+            withFollowUp: { applications: 1, responses: 1, responseRate: 100 },
+            withoutFollowUp: { applications: 1, responses: 0, responseRate: 0 },
+          },
+          funnel: {
+            discovered: 2,
+            matched: 1,
+            applied: 2,
+            response: 1,
+            interview: 1,
+            offer: 0,
+          },
+        },
+      },
+    });
+  });
+
   it("runs due export scheduled tasks through the export sync workflow", async () => {
     const checkedAt = new Date("2026-05-29T06:00:00Z");
     const syncedExports: Array<{ exporterId: string; payload: Record<string, unknown> }> = [];

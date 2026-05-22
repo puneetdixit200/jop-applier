@@ -3,7 +3,7 @@ use crate::{
         models::{
             Application, ApplicationFollowUpUpdate, ApplicationResponseUpdate,
             ApplicationWorkflowStateUpdate, ScheduledTask, ScheduledTaskRunUpdate, SettingValue,
-            UpsertCommunication, UpsertJob, UpsertNotification,
+            UpsertCommunication, UpsertJob, UpsertNotification, UpsertSetting,
         },
         queries,
     },
@@ -74,6 +74,9 @@ pub fn run_sidecar_workflow_and_persist_jobs_with_command(
     }
     if workflow_id == "follow-up-check" {
         persist_follow_ups(connection, &mut result)?;
+    }
+    if workflow_id == "analytics-refresh" {
+        persist_analytics_snapshot(connection, &mut result)?;
     }
     persist_sidecar_notifications(connection, &mut result)?;
 
@@ -488,6 +491,10 @@ fn workflow_params_from_settings(
         return follow_up_workflow_params_from_settings(connection);
     }
 
+    if workflow_id == "analytics-refresh" {
+        return analytics_refresh_workflow_params_from_database(connection);
+    }
+
     Ok(json!({}))
 }
 
@@ -640,6 +647,59 @@ fn follow_up_applications_from_database(
 
 fn normalized_company_name(value: &str) -> String {
     value.trim().to_ascii_lowercase()
+}
+
+fn analytics_refresh_workflow_params_from_database(connection: &Connection) -> Result<Value, String> {
+    let applications = queries::list_applications(connection).map_err(|error| error.to_string())?;
+    let jobs = queries::list_jobs(connection).map_err(|error| error.to_string())?;
+    if applications.is_empty() && jobs.is_empty() {
+        return Ok(json!({}));
+    }
+
+    let job_platforms = jobs
+        .iter()
+        .map(|job| (job.id.clone(), job.platform.clone()))
+        .collect::<HashMap<_, _>>();
+    let application_values = applications
+        .into_iter()
+        .map(|application| {
+            json!({
+                "id": application.id,
+                "companyName": application.company_name,
+                "platform": job_platforms
+                    .get(&application.job_id)
+                    .cloned()
+                    .unwrap_or_else(|| "unknown".to_string()),
+                "status": application.status,
+                "appliedAt": application.submitted_at,
+                "responseDate": application.response_date,
+                "responseType": application.response_type,
+                "followUpCount": application.follow_up_count,
+                "resumeVersion": Value::Null,
+            })
+        })
+        .collect::<Vec<_>>();
+    let job_values = jobs
+        .into_iter()
+        .map(|job| {
+            json!({
+                "id": job.id,
+                "platform": job.platform,
+                "companyName": job.company_name,
+                "matchScore": job.match_score,
+                "requiredSkills": job.requirements,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    Ok(json!({
+        "analyticsRefresh": {
+            "inputs": {
+                "applications": application_values,
+                "jobs": job_values,
+            }
+        }
+    }))
 }
 
 fn email_match_context_from_database(connection: &Connection) -> Result<Option<Value>, String> {
@@ -989,6 +1049,28 @@ fn persist_follow_ups(connection: &Connection, result: &mut Value) -> Result<(),
         if !notifications.is_empty() {
             payload.insert("notifications".to_string(), Value::Array(notifications));
         }
+    }
+
+    Ok(())
+}
+
+fn persist_analytics_snapshot(connection: &Connection, result: &mut Value) -> Result<(), String> {
+    let Some(snapshot) = result.get("snapshot").cloned() else {
+        return Ok(());
+    };
+
+    queries::upsert_setting(
+        connection,
+        UpsertSetting {
+            key: "analytics.latestSnapshot".to_string(),
+            category: Some("analytics".to_string()),
+            value: SettingValue::Object(snapshot),
+        },
+    )
+    .map_err(|error| error.to_string())?;
+
+    if let Some(payload) = result.as_object_mut() {
+        payload.insert("storedAnalyticsSnapshot".to_string(), json!(true));
     }
 
     Ok(())

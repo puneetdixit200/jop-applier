@@ -85,6 +85,7 @@ export type AnalyticsRefreshWorkerResult = {
   applications: number;
   jobs: number;
   saved: boolean;
+  snapshot: AnalyticsSnapshot;
 };
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -113,6 +114,7 @@ export async function runAnalyticsRefreshWorker(
     applications: inputs.applications.length,
     jobs: inputs.jobs.length,
     saved: true,
+    snapshot,
   };
 }
 
