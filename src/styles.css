@@ -429,6 +429,29 @@ button:disabled {
   color: #2f6b4f;
 }
 
+.review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e1e8e3;
+}
+
+.review-actions h4 {
+  margin: 0;
+  color: #24332b;
+  font-size: 1rem;
+}
+
+.review-action-group {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .table-row.application-row {
   width: 100%;
   border: 0;

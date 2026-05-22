@@ -11,6 +11,7 @@ import {
   Settings,
   ShieldCheck,
   UserRound,
+  XCircle,
 } from "lucide-react";
 import {
   getSidecarStatus,
@@ -30,6 +31,7 @@ import {
   saveScheduledTask,
   saveSetting,
   saveUserProfile,
+  updateApplicationWorkflowState,
   type Application,
   type ApplicationEvent,
   type Contact,
@@ -51,7 +53,9 @@ import {
 import {
   buildApplicationTracker,
   type ApplicationTracker,
+  type ApplicationTrackerReviewAction,
 } from "./lib/application-tracker";
+import { runApplicationReviewControl } from "./lib/application-review-control";
 import {
   buildContactCrm,
   type ContactCrm,
@@ -159,8 +163,10 @@ const previewApplications: Application[] = [
     job_id: "preview-job-preparing",
     company_name: "Mosaic AI",
     job_title: "Product Intern",
-    status: "preparing",
-    notes: "Tailor product analytics examples before applying.",
+    status: "review_pending",
+    submission_url: "https://ats.example/mosaic/review",
+    error_message: "Manual review required for required fields: Work authorization",
+    notes: "Check work authorization answer before applying.",
     tags: ["ai"],
   }),
   applicationRecord({
@@ -262,8 +268,8 @@ const previewActivitySources: Record<string, ApplicationActivitySources> = {
         application_id: "preview-preparing",
         event_type: "status_change",
         old_value: "queued",
-        new_value: "preparing",
-        description: "Application status changed from queued to preparing",
+        new_value: "review_pending",
+        description: "Application status changed from queued to review_pending",
         created_at: "2026-05-21T09:00:00Z",
       }),
     ],
@@ -340,6 +346,7 @@ export function App() {
   const [workflowStatus, setWorkflowStatus] = useState("Idle");
   const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
   const [isRunningSchedules, setIsRunningSchedules] = useState(false);
+  const [runningReviewActionId, setRunningReviewActionId] = useState<string | null>(null);
   const [scheduleSummaries, setScheduleSummaries] = useState<ScheduledTaskSummary[]>(() =>
     scheduledTaskSummaries(previewScheduleTasks, 8),
   );
@@ -590,6 +597,40 @@ export function App() {
     }
   }
 
+  async function handleApplicationReviewAction(action: ApplicationTrackerReviewAction) {
+    if (!selectedApplicationRecord) {
+      return;
+    }
+
+    setRunningReviewActionId(action.id);
+    try {
+      const result = await runApplicationReviewControl(selectedApplicationRecord, action, {
+        isDesktopRuntime: () => isDesktopRuntime() && persistedApplications.length > 0,
+        updateApplicationWorkflowState,
+      });
+      setWorkflowStatus(result.workflowStatus);
+      if (!result.application) {
+        return;
+      }
+      const updatedApplication = result.application;
+
+      if (!isDesktopRuntime() || persistedApplications.length === 0) {
+        setPreviewApplicationRecords((current) =>
+          current.map((application) => (application.id === updatedApplication.id ? updatedApplication : application)),
+        );
+        setStorageStatus("Browser preview");
+        return;
+      }
+
+      setPersistedApplications((current) =>
+        current.map((application) => (application.id === updatedApplication.id ? updatedApplication : application)),
+      );
+      setStorageStatus("SQLite ready");
+    } finally {
+      setRunningReviewActionId(null);
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar" aria-label="Primary navigation">
@@ -680,6 +721,8 @@ export function App() {
             onApplicationDraftChange={setApplicationDraft}
             onSaveApplicationEdits={saveSelectedApplicationEdits}
             onSelectApplication={setSelectedApplicationId}
+            onReviewAction={handleApplicationReviewAction}
+            runningReviewActionId={runningReviewActionId}
           />
         )}
         {route === "profile" && (
@@ -840,6 +883,8 @@ function Applications({
   onApplicationDraftChange,
   onSaveApplicationEdits,
   onSelectApplication,
+  onReviewAction,
+  runningReviewActionId,
 }: {
   tracker: ApplicationTracker;
   activity: ApplicationActivity;
@@ -850,6 +895,8 @@ function Applications({
   onApplicationDraftChange: (draft: ApplicationEditDraft) => void;
   onSaveApplicationEdits: () => void;
   onSelectApplication: (applicationId: string) => void;
+  onReviewAction: (action: ApplicationTrackerReviewAction) => void;
+  runningReviewActionId: string | null;
 }) {
   const selectedApplication = tracker.rows.find((application) => application.id === selectedApplicationId);
   const updateDraft = <Key extends keyof ApplicationEditDraft>(key: Key, value: ApplicationEditDraft[Key]) =>
@@ -909,6 +956,32 @@ function Applications({
           </button>
         ))}
       </div>
+      {selectedApplication && selectedApplication.reviewActions.length > 0 && (
+        <section className="review-actions" aria-label="Application review actions">
+          <div>
+            <p className="eyebrow">Review</p>
+            <h4>{selectedApplication.company}</h4>
+          </div>
+          <div className="review-action-group">
+            {selectedApplication.reviewActions.map((action) => {
+              const isRunning = runningReviewActionId === action.id;
+              const Icon = action.id === "approve_review" ? CheckCircle2 : XCircle;
+              return (
+                <button
+                  className={action.id === "approve_review" ? "primary-action" : "secondary-action"}
+                  key={action.id}
+                  type="button"
+                  onClick={() => onReviewAction(action)}
+                  disabled={runningReviewActionId !== null}
+                >
+                  <Icon size={16} aria-hidden="true" />
+                  <span>{isRunning ? "Saving" : action.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
       <section className="contact-crm" aria-label="Recruiter contact CRM">
         <div className="activity-heading">
           <div>
