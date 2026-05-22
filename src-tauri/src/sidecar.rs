@@ -130,12 +130,37 @@ pub fn run_sidecar_workflow_with_command_and_params(
     )
 }
 
+pub fn run_application_review_decision_with_command(
+    command: &SidecarCommand,
+    application: Value,
+    decision: &str,
+) -> Result<Value, SidecarError> {
+    send_sidecar_ipc_request(
+        command,
+        SidecarIpcRequest {
+            id: "application-review-decision".to_string(),
+            method: "application.reviewDecision".to_string(),
+            params: Some(json!({
+                "application": application,
+                "decision": decision,
+            })),
+        },
+    )
+}
+
 pub fn sidecar_status() -> Result<SidecarRuntimeStatus, SidecarError> {
     sidecar_status_with_command(&default_sidecar_command()?)
 }
 
 pub fn run_sidecar_workflow(workflow_id: &str) -> Result<Value, SidecarError> {
     run_sidecar_workflow_with_command(&default_sidecar_command()?, workflow_id)
+}
+
+pub fn run_application_review_decision(
+    application: Value,
+    decision: &str,
+) -> Result<Value, SidecarError> {
+    run_application_review_decision_with_command(&default_sidecar_command()?, application, decision)
 }
 
 fn merge_json_object(base: &mut Value, extra: Value) {

@@ -129,6 +129,8 @@ export type ApplicationWorkflowStateUpdate = {
   error_message?: string | null;
 };
 
+export type ApplicationReviewDecision = "approve" | "cancel";
+
 export type ApplicationEvent = {
   id: string;
   application_id: string;
@@ -358,4 +360,14 @@ export async function getSidecarStatus() {
 
 export async function runSidecarWorkflow(workflowId: string) {
   return invoke<unknown>("run_sidecar_workflow_command", { workflowId });
+}
+
+export async function runApplicationReviewDecision(
+  application: Application,
+  decision: ApplicationReviewDecision,
+) {
+  return invoke<Application | null>("run_application_review_decision_command", {
+    application,
+    decision,
+  });
 }

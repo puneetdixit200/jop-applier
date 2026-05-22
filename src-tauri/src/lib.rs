@@ -58,6 +58,7 @@ pub fn run() {
             commands::db::save_ai_cache_entry_command,
             commands::sidecar::sidecar_status_command,
             commands::sidecar::run_sidecar_workflow_command,
+            commands::sidecar::run_application_review_decision_command,
             commands::sidecar::run_due_scheduled_tasks_command
         ])
         .run(tauri::generate_context!())

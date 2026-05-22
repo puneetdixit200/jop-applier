@@ -6,15 +6,16 @@ import {
 import type { Application } from "./tauri-api";
 
 describe("application review control", () => {
-  it("persists approval for desktop review-pending applications", async () => {
+  it("runs sidecar approval for desktop review-pending applications", async () => {
     const updated = application({ status: "submitting", error_message: null });
+    const original = application({ status: "review_pending", error_message: "Manual review required" });
     const dependencies = desktopDependencies({
-      updateApplicationWorkflowState: vi.fn(async () => updated),
+      reviewApplication: vi.fn(async () => updated),
     });
 
     await expect(
       runApplicationReviewControl(
-        application({ status: "review_pending", error_message: "Manual review required" }),
+        original,
         { id: "approve_review", label: "Approve Submit", nextStatus: "submitting" },
         dependencies,
       ),
@@ -23,16 +24,13 @@ describe("application review control", () => {
       workflowStatus: "review approved; submitting application",
       application: updated,
     });
-    expect(dependencies.updateApplicationWorkflowState).toHaveBeenCalledWith("app-1", {
-      status: "submitting",
-      error_message: null,
-    });
+    expect(dependencies.reviewApplication).toHaveBeenCalledWith(original, "approve");
   });
 
   it("updates browser preview records without calling desktop APIs", async () => {
     const dependencies = desktopDependencies({
       isDesktopRuntime: () => false,
-      updateApplicationWorkflowState: vi.fn(async () => {
+      reviewApplication: vi.fn(async () => {
         throw new Error("desktop API should not run");
       }),
     });
@@ -52,7 +50,28 @@ describe("application review control", () => {
         error_message: null,
       },
     });
-    expect(dependencies.updateApplicationWorkflowState).not.toHaveBeenCalled();
+    expect(dependencies.reviewApplication).not.toHaveBeenCalled();
+  });
+
+  it("maps desktop cancel review actions to sidecar cancel decisions", async () => {
+    const updated = application({ status: "cancelled", error_message: null });
+    const original = application({ status: "review_pending", error_message: "Manual review required" });
+    const dependencies = desktopDependencies({
+      reviewApplication: vi.fn(async () => updated),
+    });
+
+    await expect(
+      runApplicationReviewControl(
+        original,
+        { id: "cancel_review", label: "Cancel", nextStatus: "cancelled" },
+        dependencies,
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      workflowStatus: "review cancelled",
+      application: updated,
+    });
+    expect(dependencies.reviewApplication).toHaveBeenCalledWith(original, "cancel");
   });
 
   it("rejects review actions when the application is not pending review", async () => {
@@ -69,7 +88,7 @@ describe("application review control", () => {
       workflowStatus: "application is not waiting for review",
       application: null,
     });
-    expect(dependencies.updateApplicationWorkflowState).not.toHaveBeenCalled();
+    expect(dependencies.reviewApplication).not.toHaveBeenCalled();
   });
 });
 
@@ -78,7 +97,7 @@ function desktopDependencies(
 ): ApplicationReviewControlDependencies {
   return {
     isDesktopRuntime: () => true,
-    updateApplicationWorkflowState: vi.fn(async () => application({ status: "submitting" })),
+    reviewApplication: vi.fn(async () => application({ status: "submitting" })),
     ...overrides,
   };
 }

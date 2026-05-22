@@ -26,6 +26,7 @@ import {
   listJobs,
   listScheduledTasks,
   runDueScheduledTasks,
+  runApplicationReviewDecision,
   runSidecarWorkflow,
   saveApplication,
   saveScheduledTask,
@@ -609,7 +610,7 @@ export function App() {
     try {
       const result = await runApplicationReviewControl(selectedApplicationRecord, action, {
         isDesktopRuntime: () => isDesktopRuntime() && persistedApplications.length > 0,
-        updateApplicationWorkflowState,
+        reviewApplication: runApplicationReviewDecision,
       });
       setWorkflowStatus(result.workflowStatus);
       if (!result.application) {

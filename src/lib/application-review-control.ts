@@ -1,11 +1,11 @@
-import type { Application, ApplicationWorkflowStateUpdate } from "./tauri-api";
+import type { Application, ApplicationReviewDecision } from "./tauri-api";
 import type { ApplicationTrackerReviewAction } from "./application-tracker";
 
 export type ApplicationReviewControlDependencies = {
   isDesktopRuntime: () => boolean;
-  updateApplicationWorkflowState: (
-    applicationId: string,
-    update: ApplicationWorkflowStateUpdate,
+  reviewApplication: (
+    application: Application,
+    decision: ApplicationReviewDecision,
   ) => Promise<Application | null>;
 };
 
@@ -28,11 +28,6 @@ export async function runApplicationReviewControl(
     };
   }
 
-  const update: ApplicationWorkflowStateUpdate = {
-    status: action.nextStatus,
-    error_message: null,
-  };
-
   if (!dependencies.isDesktopRuntime()) {
     return {
       ok: true,
@@ -46,7 +41,7 @@ export async function runApplicationReviewControl(
   }
 
   try {
-    const updated = await dependencies.updateApplicationWorkflowState(application.id, update);
+    const updated = await dependencies.reviewApplication(application, reviewDecisionForAction(action));
     if (!updated) {
       return {
         ok: false,
@@ -71,6 +66,10 @@ export async function runApplicationReviewControl(
 
 function workflowStatusForAction(action: ApplicationTrackerReviewAction) {
   return action.id === "approve_review" ? "review approved; submitting application" : "review cancelled";
+}
+
+function reviewDecisionForAction(action: ApplicationTrackerReviewAction): ApplicationReviewDecision {
+  return action.id === "approve_review" ? "approve" : "cancel";
 }
 
 function errorMessage(error: unknown) {

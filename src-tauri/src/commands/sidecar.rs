@@ -1,13 +1,16 @@
 use crate::{
     db::{
-        models::{ScheduledTask, ScheduledTaskRunUpdate, SettingValue, UpsertJob},
+        models::{
+            Application, ApplicationWorkflowStateUpdate, ScheduledTask, ScheduledTaskRunUpdate,
+            SettingValue, UpsertJob,
+        },
         queries,
     },
     sidecar::{self, SidecarCommand, SidecarRuntimeStatus},
     AppState,
 };
 use rusqlite::Connection;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use tauri::State;
 use time::{format_description::well_known::Rfc3339, Duration, OffsetDateTime, Time, UtcOffset};
@@ -63,6 +66,53 @@ pub fn run_sidecar_workflow_and_persist_jobs_with_command(
     }
 
     Ok(result)
+}
+
+#[tauri::command]
+pub fn run_application_review_decision_command(
+    state: State<'_, AppState>,
+    application: Application,
+    decision: String,
+) -> Result<Option<Application>, String> {
+    let now = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .map_err(|error| error.to_string())?;
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+
+    run_application_review_decision_and_persist_with_command(
+        &sidecar::default_sidecar_command().map_err(|error| error.to_string())?,
+        &connection,
+        &application,
+        &decision,
+        &now,
+    )
+}
+
+pub fn run_application_review_decision_and_persist_with_command(
+    command: &SidecarCommand,
+    connection: &Connection,
+    application: &Application,
+    decision: &str,
+    now: &str,
+) -> Result<Option<Application>, String> {
+    let result = sidecar::run_application_review_decision_with_command(
+        command,
+        serde_json::to_value(application).map_err(|error| error.to_string())?,
+        decision,
+    )
+    .map_err(|error| error.to_string())?;
+    let result: ApplicationReviewDecisionResult =
+        serde_json::from_value(result).map_err(|error| error.to_string())?;
+
+    queries::update_application_workflow_state(
+        connection,
+        &application.id,
+        workflow_update_from_review_decision(application, result, now),
+    )
+    .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -125,6 +175,48 @@ pub fn run_due_scheduled_tasks_with_command(
     }
 
     Ok(result)
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+enum ApplicationReviewDecisionResult {
+    Submitted {
+        #[serde(rename = "confirmationId")]
+        confirmation_id: Option<String>,
+    },
+    Cancelled,
+    Failed {
+        reason: String,
+    },
+}
+
+fn workflow_update_from_review_decision(
+    application: &Application,
+    result: ApplicationReviewDecisionResult,
+    now: &str,
+) -> ApplicationWorkflowStateUpdate {
+    match result {
+        ApplicationReviewDecisionResult::Submitted { confirmation_id } => {
+            ApplicationWorkflowStateUpdate {
+                status: Some("submitted".to_string()),
+                submitted_at: Some(Some(now.to_string())),
+                confirmation_id: Some(confirmation_id),
+                error_message: Some(None),
+                ..Default::default()
+            }
+        }
+        ApplicationReviewDecisionResult::Cancelled => ApplicationWorkflowStateUpdate {
+            status: Some("cancelled".to_string()),
+            error_message: Some(None),
+            ..Default::default()
+        },
+        ApplicationReviewDecisionResult::Failed { reason } => ApplicationWorkflowStateUpdate {
+            status: Some("failed".to_string()),
+            retry_count: Some(application.retry_count + 1),
+            error_message: Some(Some(reason)),
+            ..Default::default()
+        },
+    }
 }
 
 fn workflow_params_from_settings(
