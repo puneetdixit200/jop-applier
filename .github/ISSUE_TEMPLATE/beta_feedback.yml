@@ -1,0 +1,33 @@
+name: Beta Feedback
+description: Share beta feedback that is not a direct bug.
+title: "[Beta]: "
+labels:
+  - beta
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Setup
+        - Job discovery
+        - Application workflow
+        - Tracker and CRM
+        - Notifications
+        - Export
+        - Build or updater
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: feedback
+    attributes:
+      label: Feedback
+      description: Describe what felt confusing, slow, risky, or missing.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Include platform, release version, connector/source, and workflow mode when relevant.

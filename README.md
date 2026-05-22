@@ -31,3 +31,5 @@ Generated local data is intentionally ignored by git:
 ## User Guide
 
 See [docs/user-guide.md](docs/user-guide.md) for first-run setup, privacy settings, automation workflows, and release packaging notes.
+
+Use [docs/beta-test-plan.md](docs/beta-test-plan.md) before publishing beta builds.

@@ -36,6 +36,8 @@ Updater signing uses the Tauri private key stored outside the repo. The public k
 
 GitHub Actions runs frontend, sidecar, and Rust tests on macOS, Windows, and Linux for pushes and pull requests. Release packaging runs on version tags or manual dispatch and expects `TAURI_SIGNING_PRIVATE_KEY` plus `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository secrets.
 
+Run the beta checklist in `docs/beta-test-plan.md` before publishing release candidates.
+
 ## Local Cleanup
 
 The following paths are rebuildable and intentionally ignored by git:
