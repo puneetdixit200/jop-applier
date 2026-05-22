@@ -31,6 +31,8 @@
     ],
     "targets": [
       "dmg",
+      "appimage",
+      "deb",
       "msi",
       "nsis"
     ]

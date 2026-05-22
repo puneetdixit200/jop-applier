@@ -30,7 +30,7 @@ Application form filling supports generic forms plus known ATS strategies. Keep 
 
 ## Build And Release
 
-Use the standard development commands from the README during local work. Tauri bundle targets are configured for macOS DMG and Windows MSI/NSIS installers, with updater artifacts enabled.
+Use the standard development commands from the README during local work. Tauri bundle targets are configured for macOS DMG, Linux AppImage/deb, and Windows MSI/NSIS installers, with updater artifacts enabled.
 
 Updater signing uses the Tauri private key stored outside the repo. The public key is committed in `src-tauri/tauri.conf.json`; do not commit the private key.
 
