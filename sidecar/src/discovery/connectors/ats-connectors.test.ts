@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GreenhouseConnector } from "./greenhouse-connector.js";
 import { LeverConnector } from "./lever-connector.js";
+import { WorkdayConnector } from "./workday-connector.js";
 
 describe("ATS job connectors", () => {
   it("searches Greenhouse board jobs and maps them to raw listings", async () => {
@@ -111,6 +112,83 @@ describe("ATS job connectors", () => {
     await expect(connector.healthCheck()).resolves.toEqual({
       ok: true,
       message: "Lever atlas returned 2 postings",
+    });
+  });
+
+  it("searches Workday CXS postings and maps them to raw listings", async () => {
+    const requests: Array<{ url: string; body: unknown }> = [];
+    const connector = new WorkdayConnector({
+      tenant: "northstar",
+      site: "careers",
+      baseUrl: "https://northstar.wd1.myworkdayjobs.com",
+      fetch: async (url, init) => {
+        requests.push({
+          url: String(url),
+          body: JSON.parse(String(init?.body)),
+        });
+
+        return jsonResponse({
+          total: 2,
+          jobPostings: [
+            {
+              id: "wd-101",
+              title: "React Platform Intern",
+              externalPath: "/en-US/careers/job/Bengaluru/React-Platform-Intern_JR-101",
+              locationsText: "Remote - Bengaluru",
+              jobDescription:
+                "<p>Build React workflow tools.</p><ul><li>React</li><li>TypeScript</li></ul>",
+              postedOn: "2026-05-29T00:00:00Z",
+              timeType: "Full time",
+            },
+            {
+              id: "wd-102",
+              title: "Finance Analyst",
+              externalPath: "/en-US/careers/job/Mumbai/Finance-Analyst_JR-102",
+              locationsText: "Mumbai",
+              jobDescription: "<p>Finance role.</p>",
+              timeType: "Full time",
+            },
+          ],
+        });
+      },
+    });
+
+    const listings = await collect(connector.search({ keywords: ["React"], remote: true }));
+
+    expect(requests).toEqual([
+      {
+        url: "https://northstar.wd1.myworkdayjobs.com/wday/cxs/northstar/careers/jobs",
+        body: {
+          appliedFacets: {},
+          limit: 50,
+          offset: 0,
+          searchText: "React",
+        },
+      },
+    ]);
+    expect(listings).toEqual([
+      {
+        sourceId: "wd-101",
+        platform: "workday",
+        url: "https://northstar.wd1.myworkdayjobs.com/en-US/careers/job/Bengaluru/React-Platform-Intern_JR-101",
+        title: "React Platform Intern",
+        company: "northstar",
+        location: "Remote - Bengaluru",
+        description: "Build React workflow tools. React TypeScript",
+        rawHtml:
+          "<p>Build React workflow tools.</p><ul><li>React</li><li>TypeScript</li></ul>",
+        postedDate: new Date("2026-05-29T00:00:00Z"),
+      },
+    ]);
+    await expect(
+      connector.getJobDetails(
+        "https://northstar.wd1.myworkdayjobs.com/en-US/careers/job/Bengaluru/React-Platform-Intern_JR-101",
+      ),
+    ).resolves.toEqual({
+      url: "https://northstar.wd1.myworkdayjobs.com/en-US/careers/job/Bengaluru/React-Platform-Intern_JR-101",
+      description: "Build React workflow tools. React TypeScript",
+      requirements: ["React", "TypeScript"],
+      rawHtml: "<p>Build React workflow tools.</p><ul><li>React</li><li>TypeScript</li></ul>",
     });
   });
 });

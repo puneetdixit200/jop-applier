@@ -70,6 +70,7 @@ import {
   type HttpJsonFeedSource,
 } from "./discovery/connectors/http-json-feed-connector.js";
 import { LeverConnector } from "./discovery/connectors/lever-connector.js";
+import { WorkdayConnector } from "./discovery/connectors/workday-connector.js";
 import {
   runExportSyncWorker,
   type ExportSyncWorkerDependencies,
@@ -621,7 +622,14 @@ function discoveryConnectorsFromWorkflowInput(input: unknown): JobConnector[] {
       if (source.type === "greenhouse") {
         return new GreenhouseConnector({ boardToken: source.boardToken });
       }
-      return new LeverConnector({ company: source.company });
+      if (source.type === "lever") {
+        return new LeverConnector({ company: source.company });
+      }
+      return new WorkdayConnector({
+        tenant: source.tenant,
+        site: source.site,
+        baseUrl: source.baseUrl,
+      });
     }),
     ...discoveryCareerPageSourcesFromWorkflowInput(input.discovery).map(
       (source) => new CareerPageConnector(source),
@@ -640,7 +648,8 @@ function discoveryFeedSourcesFromWorkflowInput(discovery: Record<string, unknown
 
 type DiscoveryAtsSource =
   | { type: "greenhouse"; boardToken: string }
-  | { type: "lever"; company: string };
+  | { type: "lever"; company: string }
+  | { type: "workday"; tenant: string; site: string; baseUrl?: string };
 
 function discoveryAtsSourcesFromWorkflowInput(discovery: Record<string, unknown>): DiscoveryAtsSource[] {
   const { atsSources } = discovery;
@@ -697,6 +706,15 @@ function isDiscoveryAtsSource(value: unknown): value is DiscoveryAtsSource {
   }
   if (value.type === "lever") {
     return typeof value.company === "string" && value.company.trim().length > 0;
+  }
+  if (value.type === "workday") {
+    return (
+      typeof value.tenant === "string" &&
+      value.tenant.trim().length > 0 &&
+      typeof value.site === "string" &&
+      value.site.trim().length > 0 &&
+      (value.baseUrl === undefined || typeof value.baseUrl === "string")
+    );
   }
 
   return false;

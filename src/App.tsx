@@ -1751,6 +1751,20 @@ function SettingsPanel({
               onChange={(event) => updateDiscovery("leverCompany", event.target.value)}
             />
           </label>
+          <label>
+            Workday tenant
+            <input
+              value={settings.discovery.workdayTenant}
+              onChange={(event) => updateDiscovery("workdayTenant", event.target.value)}
+            />
+          </label>
+          <label>
+            Workday site
+            <input
+              value={settings.discovery.workdaySite}
+              onChange={(event) => updateDiscovery("workdaySite", event.target.value)}
+            />
+          </label>
         </div>
       </fieldset>
       <fieldset className="settings-section">

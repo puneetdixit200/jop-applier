@@ -11,6 +11,8 @@ export type DiscoverySettings = {
   feedSourceName: string;
   greenhouseBoardToken: string;
   leverCompany: string;
+  workdayTenant: string;
+  workdaySite: string;
   careerPageUrl: string;
   careerPageCompany: string;
 };
@@ -31,6 +33,8 @@ export const defaultDiscoverySettings: DiscoverySettings = {
   feedSourceName: "Custom JSON feed",
   greenhouseBoardToken: "",
   leverCompany: "",
+  workdayTenant: "",
+  workdaySite: "",
   careerPageUrl: "",
   careerPageCompany: "",
 };
@@ -46,6 +50,7 @@ export function discoverySettingsFromStoredValues(
   const feedSource = firstFeedSource(feedSourcesValue);
   const greenhouseSource = firstAtsSource(atsSourcesValue, "greenhouse");
   const leverSource = firstAtsSource(atsSourcesValue, "lever");
+  const workdaySource = firstAtsSource(atsSourcesValue, "workday");
   const careerPageSource = firstCareerPageSource(careerPageSourcesValue);
   const hasStoredSearchQueries = Array.isArray(searchQueriesValue);
   const hasStoredFeedSources = Array.isArray(feedSourcesValue);
@@ -66,6 +71,8 @@ export function discoverySettingsFromStoredValues(
     greenhouseBoardToken:
       greenhouseSource?.boardToken ?? (hasStoredAtsSources ? "" : fallback.greenhouseBoardToken),
     leverCompany: leverSource?.company ?? (hasStoredAtsSources ? "" : fallback.leverCompany),
+    workdayTenant: workdaySource?.tenant ?? (hasStoredAtsSources ? "" : fallback.workdayTenant),
+    workdaySite: workdaySource?.site ?? (hasStoredAtsSources ? "" : fallback.workdaySite),
     careerPageUrl: careerPageSource?.url ?? (hasStoredCareerPageSources ? "" : fallback.careerPageUrl),
     careerPageCompany: textOrFallback(careerPageSource?.company, fallback.careerPageCompany),
   };
@@ -78,6 +85,8 @@ export function discoverySettingsToStoredValues(
   const feedSourceUrl = settings.feedSourceUrl.trim();
   const greenhouseBoardToken = settings.greenhouseBoardToken.trim();
   const leverCompany = settings.leverCompany.trim();
+  const workdayTenant = settings.workdayTenant.trim();
+  const workdaySite = settings.workdaySite.trim();
   const careerPageUrl = settings.careerPageUrl.trim();
   const careerPageCompany = settings.careerPageCompany.trim();
   const searchQueries =
@@ -104,6 +113,9 @@ export function discoverySettingsToStoredValues(
   const atsSources = [
     ...(greenhouseBoardToken ? [{ type: "greenhouse", boardToken: greenhouseBoardToken }] : []),
     ...(leverCompany ? [{ type: "lever", company: leverCompany }] : []),
+    ...(workdayTenant && workdaySite
+      ? [{ type: "workday", tenant: workdayTenant, site: workdaySite }]
+      : []),
   ];
   const careerPageSources =
     careerPageUrl.length > 0
@@ -142,12 +154,15 @@ function firstFeedSource(value: SettingValue | undefined | null) {
   return value.find(isFeedSource) ?? null;
 }
 
-function firstAtsSource(value: SettingValue | undefined | null, type: "greenhouse" | "lever") {
+function firstAtsSource<Type extends AtsSource["type"]>(
+  value: SettingValue | undefined | null,
+  type: Type,
+): Extract<AtsSource, { type: Type }> | null {
   if (!Array.isArray(value)) {
     return null;
   }
 
-  return value.find((source): source is { type: typeof type; boardToken?: string; company?: string } =>
+  return value.find((source): source is Extract<AtsSource, { type: Type }> =>
     isAtsSource(source, type),
   ) ?? null;
 }
@@ -188,19 +203,27 @@ function isFeedSource(value: unknown): value is {
   );
 }
 
-function isAtsSource(
+function isAtsSource<Type extends AtsSource["type"]>(
   value: unknown,
-  type: "greenhouse" | "lever",
-): value is { type: typeof type; boardToken?: string; company?: string } {
+  type: Type,
+): value is Extract<AtsSource, { type: Type }> {
   if (!isRecord(value) || value.type !== type) {
     return false;
   }
   if (type === "greenhouse") {
     return typeof value.boardToken === "string";
   }
+  if (type === "lever") {
+    return typeof value.company === "string";
+  }
 
-  return typeof value.company === "string";
+  return typeof value.tenant === "string" && typeof value.site === "string";
 }
+
+type AtsSource =
+  | { type: "greenhouse"; boardToken: string }
+  | { type: "lever"; company: string }
+  | { type: "workday"; tenant: string; site: string; baseUrl?: string };
 
 function isCareerPageSource(value: unknown): value is {
   url: string;

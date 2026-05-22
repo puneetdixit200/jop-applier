@@ -19,6 +19,7 @@ describe("discovery settings", () => {
       [
         { type: "greenhouse", boardToken: "northstar" },
         { type: "lever", company: "atlas" },
+        { type: "workday", tenant: "northstar", site: "careers" },
       ],
       [
         {
@@ -38,6 +39,8 @@ describe("discovery settings", () => {
       feedSourceName: "Curated internships",
       greenhouseBoardToken: "northstar",
       leverCompany: "atlas",
+      workdayTenant: "northstar",
+      workdaySite: "careers",
       careerPageUrl: "https://northstar.example/careers",
       careerPageCompany: "Northstar Labs",
     });
@@ -53,6 +56,8 @@ describe("discovery settings", () => {
       feedSourceName: "Curated internships",
       greenhouseBoardToken: "northstar",
       leverCompany: "atlas",
+      workdayTenant: "northstar",
+      workdaySite: "careers",
       careerPageUrl: "https://northstar.example/careers",
       careerPageCompany: "Northstar Labs",
     });
@@ -70,6 +75,7 @@ describe("discovery settings", () => {
       atsSources: [
         { type: "greenhouse", boardToken: "northstar" },
         { type: "lever", company: "atlas" },
+        { type: "workday", tenant: "northstar", site: "careers" },
       ],
       careerPageSources: [
         {
@@ -91,6 +97,8 @@ describe("discovery settings", () => {
       feedSourceName: "Custom JSON feed",
       greenhouseBoardToken: " ",
       leverCompany: " ",
+      workdayTenant: "northstar",
+      workdaySite: " ",
       careerPageUrl: " ",
       careerPageCompany: " ",
     });

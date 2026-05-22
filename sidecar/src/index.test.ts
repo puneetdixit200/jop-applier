@@ -448,6 +448,22 @@ describe("sidecar runtime", () => {
         ]);
       }
 
+      if (requestUrl.includes("wd1.myworkdayjobs.com")) {
+        return jsonResponse({
+          jobPostings: [
+            {
+              id: "wd-303",
+              title: "React Workday Engineer",
+              externalPath: "/en-US/careers/job/Remote/React-Workday-Engineer_JR-303",
+              locationsText: "Remote",
+              jobDescription: "<p>Build React Workday tools.</p><ul><li>React</li></ul>",
+              postedOn: "2026-05-22T10:00:00Z",
+              timeType: "Full time",
+            },
+          ],
+        });
+      }
+
       throw new Error(`unexpected fetch: ${requestUrl}`);
     }) as typeof fetch;
 
@@ -461,12 +477,18 @@ describe("sidecar runtime", () => {
             atsSources: [
               { type: "greenhouse", boardToken: "northstar" },
               { type: "lever", company: "atlas" },
+              {
+                type: "workday",
+                tenant: "northstar",
+                site: "careers",
+                baseUrl: "https://northstar.wd1.myworkdayjobs.com",
+              },
             ],
           },
         }),
       ).resolves.toMatchObject({
         queries: 1,
-        discovered: 2,
+        discovered: 3,
         stored: 0,
         jobs: [
           {
@@ -487,13 +509,24 @@ describe("sidecar runtime", () => {
             is_remote: true,
             requirements: ["React", "Node.js"],
           },
+          {
+            source_id: "wd-303",
+            platform: "workday",
+            url: "https://northstar.wd1.myworkdayjobs.com/en-US/careers/job/Remote/React-Workday-Engineer_JR-303",
+            title: "React Workday Engineer",
+            company_name: "northstar",
+            is_remote: true,
+            requirements: ["React"],
+          },
         ],
       });
       expect(requestedUrls).toEqual([
         "https://boards-api.greenhouse.io/v1/boards/northstar/jobs?content=true",
         "https://api.lever.co/v0/postings/atlas?mode=json",
+        "https://northstar.wd1.myworkdayjobs.com/wday/cxs/northstar/careers/jobs",
         "https://boards-api.greenhouse.io/v1/boards/northstar/jobs?content=true",
         "https://api.lever.co/v0/postings/atlas?mode=json",
+        "https://northstar.wd1.myworkdayjobs.com/wday/cxs/northstar/careers/jobs",
       ]);
     } finally {
       globalThis.fetch = originalFetch;
