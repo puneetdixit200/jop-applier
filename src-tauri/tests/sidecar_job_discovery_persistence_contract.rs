@@ -83,6 +83,7 @@ fn sends_discovery_search_queries_from_settings_to_sidecar() {
             value: SettingValue::Array(vec![
                 json!({ "platform": "linkedin" }),
                 json!({ "platform": "indeed" }),
+                json!({ "platform": "glassdoor" }),
             ]),
         },
     )
@@ -145,7 +146,8 @@ fn sends_discovery_search_queries_from_settings_to_sidecar() {
         request["params"]["discovery"]["portalSources"],
         json!([
             { "platform": "linkedin" },
-            { "platform": "indeed" }
+            { "platform": "indeed" },
+            { "platform": "glassdoor" }
         ])
     );
     assert_eq!(

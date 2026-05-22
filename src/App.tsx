@@ -1887,6 +1887,7 @@ function SettingsPanel({
             ["portalInternshala", "Internshala"],
             ["portalNaukri", "Naukri"],
             ["portalWellfound", "Wellfound"],
+            ["portalGlassdoor", "Glassdoor"],
           ] as const).map(([key, label]) => (
             <label className="toggle-row settings-toggle" key={key}>
               <input

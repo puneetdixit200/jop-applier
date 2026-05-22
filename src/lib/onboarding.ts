@@ -90,6 +90,7 @@ function hasDiscoverySource(settings: DiscoverySettings): boolean {
     settings.portalInternshala ||
     settings.portalNaukri ||
     settings.portalWellfound ||
+    settings.portalGlassdoor ||
     hasText(settings.feedSourceUrl) ||
     hasText(settings.greenhouseBoardToken) ||
     hasText(settings.leverCompany) ||

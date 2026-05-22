@@ -648,6 +648,25 @@ describe("sidecar runtime", () => {
         `);
       }
 
+      if (
+        requestUrl ===
+        "https://www.glassdoor.com/Job/jobs.htm?sc.keyword=React&locKeyword=Remote&remoteWorkType=1"
+      ) {
+        return htmlResponse(`
+          <script type="application/ld+json">
+            {
+              "@type": "JobPosting",
+              "identifier": "glassdoor-801",
+              "title": "React Glassdoor Engineer",
+              "url": "https://www.glassdoor.com/partner/jobListing.htm?jobListingId=801",
+              "description": "<p>Build React Glassdoor tools.</p><ul><li>React</li></ul>",
+              "hiringOrganization": { "name": "Cavern Co" },
+              "jobLocationType": "TELECOMMUTE"
+            }
+          </script>
+        `);
+      }
+
       throw new Error(`unexpected fetch: ${requestUrl}`);
     }) as typeof fetch;
 
@@ -658,12 +677,12 @@ describe("sidecar runtime", () => {
         runtime.workflowEngine.run("job-discovery", {
           discovery: {
             searchQueries: [{ keywords: ["React"], location: "Remote", remote: true }],
-            portalSources: [{ platform: "linkedin" }, { platform: "indeed" }],
+            portalSources: [{ platform: "linkedin" }, { platform: "indeed" }, { platform: "glassdoor" }],
           },
         }),
       ).resolves.toMatchObject({
         queries: 1,
-        discovered: 2,
+        discovered: 3,
         stored: 0,
         jobs: [
           {
@@ -684,11 +703,21 @@ describe("sidecar runtime", () => {
             is_remote: true,
             requirements: ["React"],
           },
+          {
+            source_id: "glassdoor:glassdoor-801",
+            platform: "glassdoor",
+            url: "https://www.glassdoor.com/partner/jobListing.htm?jobListingId=801",
+            title: "React Glassdoor Engineer",
+            company_name: "Cavern Co",
+            is_remote: true,
+            requirements: ["React"],
+          },
         ],
       });
       expect(requestedUrls).toEqual([
         "https://www.linkedin.com/jobs/search/?keywords=React&location=Remote&f_WT=2",
         "https://www.indeed.com/jobs?q=React&l=Remote&remotejob=1",
+        "https://www.glassdoor.com/Job/jobs.htm?sc.keyword=React&locKeyword=Remote&remoteWorkType=1",
       ]);
     } finally {
       globalThis.fetch = originalFetch;

@@ -802,7 +802,8 @@ function isPortalPlatform(value: unknown): value is JobPortalSource["platform"] 
     value === "indeed" ||
     value === "internshala" ||
     value === "naukri" ||
-    value === "wellfound"
+    value === "wellfound" ||
+    value === "glassdoor"
   );
 }
 

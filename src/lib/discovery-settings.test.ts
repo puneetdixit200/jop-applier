@@ -34,7 +34,7 @@ describe("discovery settings", () => {
           url: "https://northstar.example/careers",
         },
       ],
-      [{ platform: "linkedin" }, { platform: "wellfound" }],
+      [{ platform: "linkedin" }, { platform: "wellfound" }, { platform: "glassdoor" }],
     );
 
     expect(settings).toEqual({
@@ -46,6 +46,7 @@ describe("discovery settings", () => {
       portalInternshala: false,
       portalNaukri: false,
       portalWellfound: true,
+      portalGlassdoor: true,
       feedSourceUrl: "https://feeds.example/jobs.json",
       feedSourcePlatform: "greenhouse",
       feedSourceName: "Curated internships",
@@ -71,6 +72,7 @@ describe("discovery settings", () => {
       portalInternshala: false,
       portalNaukri: false,
       portalWellfound: false,
+      portalGlassdoor: true,
       feedSourceUrl: "https://feeds.example/jobs.json",
       feedSourcePlatform: "greenhouse",
       feedSourceName: "Curated internships",
@@ -87,7 +89,7 @@ describe("discovery settings", () => {
 
     expect(values).toEqual({
       searchQueries: [{ keywords: ["react", "typescript"], location: "Remote", remote: true }],
-      portalSources: [{ platform: "linkedin" }, { platform: "indeed" }],
+      portalSources: [{ platform: "linkedin" }, { platform: "indeed" }, { platform: "glassdoor" }],
       feedSources: [
         {
           id: "custom-json-feed",
@@ -127,6 +129,7 @@ describe("discovery settings", () => {
       portalInternshala: false,
       portalNaukri: false,
       portalWellfound: false,
+      portalGlassdoor: false,
       feedSourceUrl: "  ",
       feedSourcePlatform: "custom",
       feedSourceName: "Custom JSON feed",

@@ -9,7 +9,13 @@ import type {
   Session,
 } from "./connector-interface.js";
 
-export type JobPortalPlatform = "linkedin" | "indeed" | "internshala" | "naukri" | "wellfound";
+export type JobPortalPlatform =
+  | "linkedin"
+  | "indeed"
+  | "internshala"
+  | "naukri"
+  | "wellfound"
+  | "glassdoor";
 
 export type JobPortalSource = {
   platform: JobPortalPlatform;
@@ -141,6 +147,15 @@ export function searchUrlForPortal(source: JobPortalSource, query: SearchQuery):
     const keywordSlug = slug(keywords) || "jobs";
     const locationSlug = slug(location);
     return `https://www.naukri.com/${keywordSlug}-jobs${locationSlug ? `-in-${locationSlug}` : ""}`;
+  }
+  if (source.platform === "glassdoor") {
+    const url = new URL("https://www.glassdoor.com/Job/jobs.htm");
+    setParam(url, "sc.keyword", keywords);
+    setParam(url, "locKeyword", location);
+    if (query.remote) {
+      url.searchParams.set("remoteWorkType", "1");
+    }
+    return url.toString();
   }
 
   const url = new URL("https://wellfound.com/jobs");
@@ -297,6 +312,15 @@ function jobIdFromUrl(platform: JobPortalPlatform, url: string): string | null {
   if (platform === "naukri") {
     return url.match(/-(\d+)(?:\?|$)/)?.[1] ?? null;
   }
+  if (platform === "glassdoor") {
+    const parsed = new URL(url);
+    return (
+      parsed.searchParams.get("jobListingId") ??
+      parsed.searchParams.get("jl") ??
+      url.match(/job-listing\/[^?#]+?-(\d+)\.htm/i)?.[1] ??
+      null
+    );
+  }
 
   return url.match(/\/jobs\/(\d+)/i)?.[1] ?? null;
 }
@@ -313,6 +337,9 @@ function looksLikePortalJobLink(platform: JobPortalPlatform, href: string): bool
   }
   if (platform === "naukri") {
     return /job-listings|\/job-listing\//i.test(href);
+  }
+  if (platform === "glassdoor") {
+    return /\/partner\/jobListing\.htm|jobListingId=|\/Job\/.*job-listing/i.test(href);
   }
 
   return /\/jobs\/\d+/i.test(href);
@@ -363,6 +390,7 @@ function portalDisplayName(platform: JobPortalPlatform): string {
     internshala: "Internshala",
     naukri: "Naukri",
     wellfound: "Wellfound",
+    glassdoor: "Glassdoor",
   };
 
   return names[platform];

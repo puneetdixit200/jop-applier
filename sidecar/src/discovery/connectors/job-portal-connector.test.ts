@@ -23,6 +23,14 @@ describe("job portal connector", () => {
         { keywords: ["React"], location: "Remote" },
       ),
     ).toBe("https://jobs.example/search?q=React&l=Remote");
+    expect(
+      searchUrlForPortal(
+        { platform: "glassdoor" },
+        { keywords: ["Product Engineer"], location: "Remote", remote: true },
+      ),
+    ).toBe(
+      "https://www.glassdoor.com/Job/jobs.htm?sc.keyword=Product+Engineer&locKeyword=Remote&remoteWorkType=1",
+    );
   });
 
   it("parses JSON-LD jobs from public portal search pages", async () => {
@@ -116,6 +124,34 @@ describe("job portal connector", () => {
     expect(requestedUrls).toEqual([
       "https://indeed.example/jobs?q=Node",
       "https://indeed.example/viewjob?jk=abc123",
+    ]);
+  });
+
+  it("detects Glassdoor listing links from public search markup", async () => {
+    const connector = new JobPortalConnector({
+      platform: "glassdoor",
+      searchUrl: "https://glassdoor.example/search?q={keywords}",
+      fetch: async () =>
+        htmlResponse(`
+          <a href="/partner/jobListing.htm?jobListingId=9001">Product Engineer</a>
+          <a href="/Overview/company.htm">Company page</a>
+        `),
+    });
+
+    const listings = await collect(connector.search({ keywords: ["Product"] }));
+
+    expect(listings).toEqual([
+      {
+        sourceId: "glassdoor:9001",
+        platform: "glassdoor",
+        url: "https://glassdoor.example/partner/jobListing.htm?jobListingId=9001",
+        title: "Product Engineer",
+        company: "Glassdoor",
+        location: "Location unknown",
+        description: "Product Engineer",
+        rawHtml: undefined,
+        postedDate: undefined,
+      },
     ]);
   });
 });

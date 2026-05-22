@@ -11,6 +11,7 @@ export type DiscoverySettings = {
   portalInternshala: boolean;
   portalNaukri: boolean;
   portalWellfound: boolean;
+  portalGlassdoor: boolean;
   feedSourceUrl: string;
   feedSourcePlatform: string;
   feedSourceName: string;
@@ -42,6 +43,7 @@ export const defaultDiscoverySettings: DiscoverySettings = {
   portalInternshala: false,
   portalNaukri: false,
   portalWellfound: false,
+  portalGlassdoor: false,
   feedSourceUrl: "",
   feedSourcePlatform: "custom",
   feedSourceName: "Custom JSON feed",
@@ -93,6 +95,8 @@ export function discoverySettingsFromStoredValues(
     portalNaukri: portalSources.has("naukri") || (!hasStoredSearchQueries && fallback.portalNaukri),
     portalWellfound:
       portalSources.has("wellfound") || (!hasStoredSearchQueries && fallback.portalWellfound),
+    portalGlassdoor:
+      portalSources.has("glassdoor") || (!hasStoredSearchQueries && fallback.portalGlassdoor),
     feedSourceUrl: feedSource?.url ?? (hasStoredFeedSources ? "" : fallback.feedSourceUrl),
     feedSourcePlatform: textOrFallback(feedSource?.platform, fallback.feedSourcePlatform),
     feedSourceName: textOrFallback(feedSource?.name, fallback.feedSourceName),
@@ -140,6 +144,7 @@ export function discoverySettingsToStoredValues(
     ...(settings.portalInternshala ? [{ platform: "internshala" }] : []),
     ...(settings.portalNaukri ? [{ platform: "naukri" }] : []),
     ...(settings.portalWellfound ? [{ platform: "wellfound" }] : []),
+    ...(settings.portalGlassdoor ? [{ platform: "glassdoor" }] : []),
   ];
   const feedSources =
     feedSourceUrl.length > 0
@@ -273,7 +278,7 @@ function isPortalSource(value: unknown): value is {
   return (
     isRecord(value) &&
     typeof value.platform === "string" &&
-    ["linkedin", "indeed", "internshala", "naukri", "wellfound"].includes(value.platform)
+    ["linkedin", "indeed", "internshala", "naukri", "wellfound", "glassdoor"].includes(value.platform)
   );
 }
 
