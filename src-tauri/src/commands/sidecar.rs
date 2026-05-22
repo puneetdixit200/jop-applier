@@ -738,6 +738,9 @@ fn export_sync_workflow_params_from_settings(connection: &Connection) -> Result<
         if let Some(csv) = csv_export_settings(&export_config) {
             export_sync.insert("csv".to_string(), Value::Object(csv));
         }
+        if let Some(airtable) = airtable_export_settings(&export_config) {
+            export_sync.insert("airtable".to_string(), Value::Object(airtable));
+        }
     }
 
     if export_sync.is_empty() {
@@ -853,6 +856,27 @@ fn csv_export_settings(config: &Map<String, Value>) -> Option<Map<String, Value>
     csv.insert("enabled".to_string(), json!(enabled));
     insert_string_config(&mut csv, "outputPath", output_path);
     Some(csv)
+}
+
+fn airtable_export_settings(config: &Map<String, Value>) -> Option<Map<String, Value>> {
+    let enabled = config
+        .get("airtableEnabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let api_key = non_empty_config_string(config, "airtableApiKey");
+    let base_id = non_empty_config_string(config, "airtableBaseId");
+    let table_name = non_empty_config_string(config, "airtableTableName");
+
+    if !enabled && api_key.is_none() && base_id.is_none() && table_name.is_none() {
+        return None;
+    }
+
+    let mut airtable = Map::new();
+    airtable.insert("enabled".to_string(), json!(enabled));
+    insert_string_config(&mut airtable, "apiKey", api_key);
+    insert_string_config(&mut airtable, "baseId", base_id);
+    insert_string_config(&mut airtable, "tableName", table_name);
+    Some(airtable)
 }
 
 fn insert_string_config(target: &mut Map<String, Value>, key: &str, value: Option<String>) {

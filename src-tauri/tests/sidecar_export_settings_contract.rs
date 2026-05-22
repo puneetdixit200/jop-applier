@@ -115,7 +115,11 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
                 "googleSheetsAccessToken": "ya29-token",
                 "googleSheetsRange": "Applications!A1",
                 "csvEnabled": true,
-                "csvOutputPath": "/tmp/careercaveman-applications.csv"
+                "csvOutputPath": "/tmp/careercaveman-applications.csv",
+                "airtableEnabled": true,
+                "airtableApiKey": "pat_airtable",
+                "airtableBaseId": "appBase1",
+                "airtableTableName": "Applications"
             })),
         },
     )
@@ -145,11 +149,11 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
             "id": "workflow-export-sync",
             "ok": true,
             "result": {
-                "exporters": 3,
-                "succeeded": 3,
+                "exporters": 4,
+                "succeeded": 4,
                 "failed": 0,
                 "skipped": 0,
-                "recordsWritten": 6,
+                "recordsWritten": 8,
                 "runs": [
                     {
                         "exporterId": "notion",
@@ -173,6 +177,14 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
                         "status": "completed",
                         "recordsWritten": 2,
                         "externalUrl": "file:///tmp/careercaveman-applications.csv",
+                        "syncedAt": "2026-05-29T06:00:00.000Z"
+                    },
+                    {
+                        "exporterId": "airtable",
+                        "exporterName": "Airtable",
+                        "status": "completed",
+                        "recordsWritten": 2,
+                        "externalUrl": "https://airtable.com/appBase1",
                         "syncedAt": "2026-05-29T06:00:00.000Z"
                     }
                 ]
@@ -251,6 +263,15 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
             "outputPath": "/tmp/careercaveman-applications.csv"
         })
     );
+    assert_eq!(
+        request["params"]["exportSync"]["airtable"],
+        json!({
+            "enabled": true,
+            "apiKey": "pat_airtable",
+            "baseId": "appBase1",
+            "tableName": "Applications"
+        })
+    );
 
     let setting = get_setting(&connection, "export.latestRuns")
         .expect("read export runs setting")
@@ -260,10 +281,11 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
         SettingValue::Object(serde_json::Value::Array(runs)) => runs,
         other => panic!("expected export run array, got {other:?}"),
     };
-    assert_eq!(runs.len(), 3);
+    assert_eq!(runs.len(), 4);
     assert_eq!(runs[0]["exporterId"], json!("notion"));
     assert_eq!(runs[1]["exporterId"], json!("google-sheets"));
     assert_eq!(runs[2]["exporterId"], json!("csv"));
+    assert_eq!(runs[3]["exporterId"], json!("airtable"));
 }
 
 fn capture_request_sidecar_with_result(

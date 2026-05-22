@@ -3,8 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  createAirtableExporter,
   createCsvExporter,
   createExportSyncDependenciesFromWorkflowInput,
+  type AirtableExporterConfig,
   type CsvExporterConfig,
   type GoogleSheetsExporterConfig,
   type NotionExporterConfig,
@@ -25,6 +27,7 @@ describe("export sync config", () => {
     const notionConfigs: NotionExporterConfig[] = [];
     const sheetsConfigs: GoogleSheetsExporterConfig[] = [];
     const csvConfigs: CsvExporterConfig[] = [];
+    const airtableConfigs: AirtableExporterConfig[] = [];
     const syncedPayloads: Array<{ exporterId: string; payload: Record<string, unknown> }> = [];
     const savedRuns: Array<Record<string, unknown>> = [];
     const dependencies = createExportSyncDependenciesFromWorkflowInput(
@@ -60,6 +63,12 @@ describe("export sync config", () => {
           csv: {
             enabled: true,
             outputPath: "/tmp/careercaveman-applications.csv",
+          },
+          airtable: {
+            enabled: true,
+            apiKey: "pat_airtable",
+            baseId: "appBase1",
+            tableName: "Applications",
           },
         },
       },
@@ -118,6 +127,22 @@ describe("export sync config", () => {
             },
           };
         },
+        createAirtableExporter: (config) => {
+          airtableConfigs.push(config);
+
+          return {
+            id: "airtable",
+            name: "Airtable",
+            isEnabled: config.enabled,
+            sync: async (payload) => {
+              syncedPayloads.push({ exporterId: "airtable", payload });
+              return {
+                recordsWritten: payload.applications.length + (payload.analytics ? 1 : 0),
+                externalUrl: `https://airtable.com/${config.baseId}`,
+              };
+            },
+          };
+        },
       },
     );
 
@@ -141,6 +166,7 @@ describe("export sync config", () => {
       { id: "notion", name: "Notion", isEnabled: true },
       { id: "google-sheets", name: "Google Sheets", isEnabled: true },
       { id: "csv", name: "CSV", isEnabled: true },
+      { id: "airtable", name: "Airtable", isEnabled: true },
     ]);
     expect(notionConfigs).toEqual([
       {
@@ -163,17 +189,25 @@ describe("export sync config", () => {
         outputPath: "/tmp/careercaveman-applications.csv",
       },
     ]);
+    expect(airtableConfigs).toEqual([
+      {
+        enabled: true,
+        apiKey: "pat_airtable",
+        baseId: "appBase1",
+        tableName: "Applications",
+      },
+    ]);
 
     await expect(
       runExportSyncWorker(dependencies!, {
         now: new Date("2026-05-29T06:00:00Z"),
       }),
     ).resolves.toEqual({
-      exporters: 3,
-      succeeded: 3,
+      exporters: 4,
+      succeeded: 4,
       failed: 0,
       skipped: 0,
-      recordsWritten: 6,
+      recordsWritten: 8,
       runs: [
         {
           exporterId: "notion",
@@ -199,9 +233,17 @@ describe("export sync config", () => {
           externalUrl: "file:///tmp/careercaveman-applications.csv",
           syncedAt: "2026-05-29T06:00:00.000Z",
         },
+        {
+          exporterId: "airtable",
+          exporterName: "Airtable",
+          status: "completed",
+          recordsWritten: 2,
+          externalUrl: "https://airtable.com/appBase1",
+          syncedAt: "2026-05-29T06:00:00.000Z",
+        },
       ],
     });
-    expect(savedRuns).toHaveLength(3);
+    expect(savedRuns).toHaveLength(4);
     expect(syncedPayloads).toEqual([
       {
         exporterId: "notion",
@@ -245,6 +287,26 @@ describe("export sync config", () => {
       },
       {
         exporterId: "csv",
+        payload: {
+          generatedAt: "2026-05-29T06:00:00.000Z",
+          applications: [
+            {
+              id: "app-1",
+              companyName: "Northstar Labs",
+              roleTitle: "Frontend Engineer",
+              status: "submitted",
+            },
+          ],
+          analytics: {
+            metrics: {
+              totalApplications: 1,
+              responseRate: 100,
+            },
+          },
+        },
+      },
+      {
+        exporterId: "airtable",
         payload: {
           generatedAt: "2026-05-29T06:00:00.000Z",
           applications: [
@@ -308,4 +370,82 @@ describe("export sync config", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("exports application and analytics rows to Airtable in batches", async () => {
+    const requests: Array<{ url: string; body: unknown }> = [];
+    const exporter = createAirtableExporter(
+      {
+        enabled: true,
+        apiKey: "pat_airtable",
+        baseId: "appBase1",
+        tableName: "Applications",
+      },
+      async (url, init) => {
+        requests.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+        return jsonResponse({ records: [] });
+      },
+    );
+
+    await expect(
+      exporter.sync({
+        generatedAt: "2026-05-29T06:00:00.000Z",
+        applications: [
+          {
+            id: "app-1",
+            companyName: "Northstar Labs",
+            jobTitle: "Frontend Engineer",
+            status: "submitted",
+            submittedAt: "2026-05-28T10:00:00.000Z",
+            responseType: "positive",
+            followUpCount: 1,
+          },
+        ],
+        analytics: { totalApplications: 1 },
+      }),
+    ).resolves.toEqual({
+      recordsWritten: 2,
+      externalUrl: "https://airtable.com/appBase1",
+    });
+    expect(requests).toEqual([
+      {
+        url: "https://api.airtable.com/v0/appBase1/Applications",
+        body: {
+          records: [
+            {
+              fields: {
+                "Generated At": "2026-05-29T06:00:00.000Z",
+                "Application ID": "app-1",
+                Company: "Northstar Labs",
+                Role: "Frontend Engineer",
+                Status: "submitted",
+                "Submitted At": "2026-05-28T10:00:00.000Z",
+                "Response Type": "positive",
+                "Follow-up Count": 1,
+              },
+            },
+            {
+              fields: {
+                "Generated At": "2026-05-29T06:00:00.000Z",
+                "Application ID": "analytics",
+                Company: "",
+                Role: "Analytics Snapshot",
+                Status: "{\"totalApplications\":1}",
+                "Submitted At": "",
+                "Response Type": "",
+                "Follow-up Count": 0,
+              },
+            },
+          ],
+        },
+      },
+    ]);
+  });
 });
+
+function jsonResponse(body: unknown, ok = true): Response {
+  return {
+    ok,
+    status: ok ? 200 : 500,
+    json: async () => body,
+  } as Response;
+}

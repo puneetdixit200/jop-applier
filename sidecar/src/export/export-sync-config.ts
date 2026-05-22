@@ -27,15 +27,24 @@ export type CsvExporterConfig = {
   outputPath: string;
 };
 
+export type AirtableExporterConfig = {
+  enabled: boolean;
+  apiKey: string;
+  baseId: string;
+  tableName: string;
+};
+
 export type NotionExporterFactory = (config: NotionExporterConfig) => ExporterPlugin;
 export type GoogleSheetsExporterFactory = (config: GoogleSheetsExporterConfig) => ExporterPlugin;
 export type CsvExporterFactory = (config: CsvExporterConfig) => ExporterPlugin;
+export type AirtableExporterFactory = (config: AirtableExporterConfig) => ExporterPlugin;
 
 export type ConfiguredExportSyncOptions = {
   fallback: ExportSyncWorkerDependencies;
   createNotionExporter?: NotionExporterFactory;
   createGoogleSheetsExporter?: GoogleSheetsExporterFactory;
   createCsvExporter?: CsvExporterFactory;
+  createAirtableExporter?: AirtableExporterFactory;
 };
 
 export function createExportSyncDependenciesFromWorkflowInput(
@@ -52,6 +61,7 @@ export function createExportSyncDependenciesFromWorkflowInput(
   const notion = notionExporterConfig(exportSync.notion);
   const googleSheets = googleSheetsExporterConfig(exportSync.googleSheets);
   const csv = csvExporterConfig(exportSync.csv);
+  const airtable = airtableExporterConfig(exportSync.airtable);
 
   if (notion) {
     configuredExporters.push(
@@ -66,6 +76,11 @@ export function createExportSyncDependenciesFromWorkflowInput(
   if (csv) {
     configuredExporters.push(
       (options.createCsvExporter ?? createCsvExporter)(csv),
+    );
+  }
+  if (airtable) {
+    configuredExporters.push(
+      (options.createAirtableExporter ?? createAirtableExporter)(airtable),
     );
   }
 
@@ -176,6 +191,54 @@ export function createCsvExporter(config: CsvExporterConfig): ExporterPlugin {
   };
 }
 
+export function createAirtableExporter(
+  config: AirtableExporterConfig,
+  fetchClient: FetchLike = fetch,
+): ExporterPlugin {
+  return {
+    id: "airtable",
+    name: "Airtable",
+    isEnabled:
+      config.enabled &&
+      config.apiKey.length > 0 &&
+      config.baseId.length > 0 &&
+      config.tableName.length > 0,
+    sync: async (payload) => {
+      const records = airtableRecords(payload);
+      if (records.length === 0) {
+        return {
+          recordsWritten: 0,
+          externalUrl: `https://airtable.com/${config.baseId}`,
+        };
+      }
+
+      for (const batch of chunks(records, 10)) {
+        const response = await fetchClient(
+          `https://api.airtable.com/v0/${encodeURIComponent(config.baseId)}/${encodeURIComponent(
+            config.tableName,
+          )}`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${config.apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ records: batch }),
+          },
+        );
+        if (!response.ok) {
+          throw new Error(`Airtable export failed with HTTP ${response.status}`);
+        }
+      }
+
+      return {
+        recordsWritten: records.length,
+        externalUrl: `https://airtable.com/${config.baseId}`,
+      };
+    },
+  };
+}
+
 function exportSyncPayload(value: unknown): ExportSyncPayloadInput | null {
   if (!isRecord(value)) {
     return null;
@@ -227,6 +290,19 @@ function csvExporterConfig(value: unknown): CsvExporterConfig | null {
   return {
     enabled: booleanValue(value.enabled),
     outputPath: nonEmptyString(value.outputPath) ?? "",
+  };
+}
+
+function airtableExporterConfig(value: unknown): AirtableExporterConfig | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    enabled: booleanValue(value.enabled),
+    apiKey: nonEmptyString(value.apiKey) ?? "",
+    baseId: nonEmptyString(value.baseId) ?? "",
+    tableName: nonEmptyString(value.tableName) ?? "",
   };
 }
 
@@ -349,6 +425,47 @@ function csvCell(value: string): string {
   }
 
   return `"${value.replaceAll("\"", "\"\"")}"`;
+}
+
+function airtableRecords(payload: ExportSyncPayload) {
+  return [
+    ...payload.applications.map((application) => ({
+      fields: {
+        "Generated At": payload.generatedAt,
+        "Application ID": textValue(application.id, ""),
+        Company: textValue(application.companyName, ""),
+        Role: textValue(application.jobTitle, textValue(application.roleTitle, "")),
+        Status: textValue(application.status, ""),
+        "Submitted At": textValue(application.submittedAt, ""),
+        "Response Type": textValue(application.responseType, ""),
+        "Follow-up Count": Number(textValue(application.followUpCount, "0")),
+      },
+    })),
+    ...(payload.analytics
+      ? [
+          {
+            fields: {
+              "Generated At": payload.generatedAt,
+              "Application ID": "analytics",
+              Company: "",
+              Role: "Analytics Snapshot",
+              Status: JSON.stringify(payload.analytics),
+              "Submitted At": "",
+              "Response Type": "",
+              "Follow-up Count": 0,
+            },
+          },
+        ]
+      : []),
+  ];
+}
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    result.push(items.slice(index, index + size));
+  }
+  return result;
 }
 
 function textValue(value: unknown, fallback: string): string {
