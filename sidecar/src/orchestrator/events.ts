@@ -37,6 +37,24 @@ export type CareerEventMap = {
     communicationId: string | null;
     sentAt: Date;
   };
+  "cold_email.sent": {
+    applicationId: string | null;
+    jobId: string | null;
+    companyName: string;
+    contactId: string | null;
+    contactName: string | null;
+    communicationId: string | null;
+    subject: string;
+    sentAt: Date;
+  };
+  "cold_email.failed": {
+    applicationId: string | null;
+    jobId: string | null;
+    companyName: string;
+    contactId: string | null;
+    reason: string;
+    failedAt: Date;
+  };
   "follow_up.failed": {
     applicationId: string;
     jobId: string;

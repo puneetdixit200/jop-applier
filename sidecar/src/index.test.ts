@@ -1075,6 +1075,76 @@ describe("sidecar runtime", () => {
     ]);
   });
 
+  it("runs cold email outreach through profile, target, AI, and communication dependencies", async () => {
+    const sentAt = new Date("2026-05-28T10:00:00Z");
+    const savedCommunications: Array<Record<string, unknown>> = [];
+    const runtime = createSidecarRuntime({
+      now: () => sentAt,
+      coldEmail: {
+        loadProfile: async () => ({
+          fullName: "Asha Rao",
+          headline: "React and Tauri engineer",
+          skills: ["React", "Rust", "Tauri"],
+        }),
+        listTargets: async () => [
+          {
+            applicationId: "app-1",
+            jobId: "job-1",
+            companyName: "Northstar Labs",
+            companyDomain: "northstar.example",
+            companyIndustry: "developer tools",
+            contactId: "contact-1",
+            contactName: "Mira",
+            role: "recruiter",
+            context: "Hiring desktop automation engineers",
+          },
+        ],
+        generateColdEmail: async () =>
+          "Subject: Northstar Labs workflow automation intro\n\nHi Mira,\n\nI build local-first workflow tools.",
+        saveCommunication: async (communication) => {
+          savedCommunications.push(communication);
+          return { communicationId: "comm-1" };
+        },
+      },
+    });
+
+    await expect(runtime.workflowEngine.run("cold-email")).resolves.toEqual({
+      scanned: 1,
+      generated: 1,
+      sent: 1,
+      failed: 0,
+      skipped: 0,
+      coldEmails: [
+        {
+          applicationId: "app-1",
+          jobId: "job-1",
+          companyName: "Northstar Labs",
+          contactId: "contact-1",
+          contactName: "Mira",
+          communicationId: "comm-1",
+          subject: "Northstar Labs workflow automation intro",
+          body: "Hi Mira,\n\nI build local-first workflow tools.",
+          sentAt: "2026-05-28T10:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(runtime.workflowEngine.registeredWorkflows()).toContain("cold-email");
+    expect(savedCommunications).toEqual([
+      {
+        applicationId: "app-1",
+        contactId: "contact-1",
+        direction: "sent",
+        type: "cold_email",
+        subject: "Northstar Labs workflow automation intro",
+        body: "Hi Mira,\n\nI build local-first workflow tools.",
+        emailId: null,
+        sentAt: "2026-05-28T10:00:00.000Z",
+        readAt: null,
+      },
+    ]);
+  });
+
   it("runs due analytics scheduled tasks through the analytics refresh workflow", async () => {
     const checkedAt = new Date("2026-05-29T00:00:00Z");
     const savedSnapshots: Array<Record<string, unknown>> = [];

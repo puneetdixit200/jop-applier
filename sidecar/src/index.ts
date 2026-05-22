@@ -30,6 +30,10 @@ import {
   type BrowserSessionHealthTarget,
 } from "./browser/session-health.js";
 import {
+  runColdEmailWorker,
+  type ColdEmailWorkerDependencies,
+} from "./communications/cold-email-worker.js";
+import {
   runEmailResponseWorker,
   type EmailResponseWorkerDependencies,
 } from "./communications/email-response-worker.js";
@@ -176,6 +180,11 @@ export type SidecarEmailCheckOptions = EmailResponseWorkerDependencies & {
   maxResponses?: number;
 };
 
+export type SidecarColdEmailOptions = Omit<ColdEmailWorkerDependencies, "generateColdEmail"> & {
+  generateColdEmail?: ColdEmailWorkerDependencies["generateColdEmail"];
+  maxEmails?: number;
+};
+
 export type SidecarAnalyticsOptions = AnalyticsRefreshWorkerDependencies;
 
 export type SidecarExportSyncOptions = ExportSyncWorkerDependencies;
@@ -197,6 +206,7 @@ export type SidecarRuntimeOptions = {
   applicationDocuments?: SidecarApplicationDocumentOptions;
   analytics?: SidecarAnalyticsOptions;
   emailCheck?: SidecarEmailCheckOptions;
+  coldEmail?: SidecarColdEmailOptions;
   exportSync?: SidecarExportSyncOptions;
   cleanup?: SidecarCleanupOptions;
   followUps?: SidecarFollowUpOptions;
@@ -228,6 +238,7 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   );
   const analytics = options.analytics ?? createEmptyAnalyticsRefreshWorkerDependencies();
   const emailCheck = options.emailCheck ?? createEmptyEmailResponseWorkerDependencies();
+  const coldEmail = createColdEmailWorkerDependencies(options.coldEmail, aiEngine);
   const exportSync = options.exportSync ?? createEmptyExportSyncWorkerDependencies();
   const cleanup = options.cleanup ?? createEmptyCleanupWorkerDependencies();
   const followUps = options.followUps ?? createEmptyFollowUpDependencies();
@@ -283,6 +294,16 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
         now: now(),
         eventBus,
         maxResponses: options.emailCheck?.maxResponses,
+      }),
+  });
+  workflowEngine.register({
+    id: "cold-email",
+    description: "Generate cold outreach and record sent communications",
+    run: async () =>
+      runColdEmailWorker(coldEmail, {
+        now: now(),
+        eventBus,
+        maxEmails: options.coldEmail?.maxEmails,
       }),
   });
   workflowEngine.register({
@@ -599,6 +620,20 @@ function createEmptyEmailResponseWorkerDependencies(): EmailResponseWorkerDepend
     saveCommunication: async () => ({ communicationId: null }),
     updateApplicationResponse: async () => undefined,
     markResponseProcessed: async () => undefined,
+  };
+}
+
+function createColdEmailWorkerDependencies(
+  options: SidecarColdEmailOptions | undefined,
+  aiEngine: AIEngine,
+): ColdEmailWorkerDependencies {
+  return {
+    loadProfile: options?.loadProfile ?? (async () => null),
+    listTargets: options?.listTargets ?? (async () => []),
+    generateColdEmail:
+      options?.generateColdEmail ??
+      ((profile, company) => aiEngine.generateColdEmail(profile, company)),
+    saveCommunication: options?.saveCommunication ?? (async () => ({ communicationId: null })),
   };
 }
 

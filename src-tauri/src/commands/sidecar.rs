@@ -68,6 +68,9 @@ pub fn run_sidecar_workflow_and_persist_jobs_with_command(
     if workflow_id == "email-check" {
         persist_email_responses(connection, &mut result)?;
     }
+    if workflow_id == "cold-email" {
+        persist_cold_emails(connection, &mut result)?;
+    }
     persist_sidecar_notifications(connection, &mut result)?;
 
     Ok(result)
@@ -633,6 +636,45 @@ fn email_response_notifications(
         .collect()
 }
 
+fn persist_cold_emails(connection: &Connection, result: &mut Value) -> Result<(), String> {
+    let Some(cold_emails_value) = result.get("coldEmails").cloned() else {
+        return Ok(());
+    };
+    let cold_emails: Vec<SidecarColdEmail> =
+        serde_json::from_value(cold_emails_value).map_err(|error| error.to_string())?;
+    let mut stored = 0;
+    let mut persisted_cold_emails = Vec::new();
+
+    for mut cold_email in cold_emails {
+        let communication = queries::save_communication(
+            connection,
+            UpsertCommunication {
+                application_id: cold_email.application_id.clone(),
+                contact_id: cold_email.contact_id.clone(),
+                direction: "sent".to_string(),
+                communication_type: "cold_email".to_string(),
+                subject: Some(cold_email.subject.clone()),
+                body: Some(cold_email.body.clone()),
+                email_id: None,
+                sent_at: Some(cold_email.sent_at.clone()),
+                read_at: None,
+            },
+        )
+        .map_err(|error| error.to_string())?;
+        cold_email.communication_id = Some(communication.id);
+        persisted_cold_emails
+            .push(serde_json::to_value(cold_email).map_err(|error| error.to_string())?);
+        stored += 1;
+    }
+
+    if let Some(payload) = result.as_object_mut() {
+        payload.insert("storedColdEmails".to_string(), json!(stored));
+        payload.insert("coldEmails".to_string(), Value::Array(persisted_cold_emails));
+    }
+
+    Ok(())
+}
+
 #[derive(Clone, Debug, Deserialize)]
 struct SidecarNotificationDelivery {
     #[serde(rename = "type")]
@@ -663,6 +705,26 @@ struct SidecarEmailResponse {
     received_at: String,
     #[serde(rename = "responseType")]
     response_type: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct SidecarColdEmail {
+    #[serde(rename = "applicationId")]
+    application_id: Option<String>,
+    #[serde(rename = "jobId")]
+    job_id: Option<String>,
+    #[serde(rename = "companyName")]
+    company_name: String,
+    #[serde(rename = "contactId")]
+    contact_id: Option<String>,
+    #[serde(rename = "contactName")]
+    contact_name: Option<String>,
+    #[serde(rename = "communicationId")]
+    communication_id: Option<String>,
+    subject: String,
+    body: String,
+    #[serde(rename = "sentAt")]
+    sent_at: String,
 }
 
 fn workflow_id_for_task_type(task_type: &str) -> Option<&'static str> {
