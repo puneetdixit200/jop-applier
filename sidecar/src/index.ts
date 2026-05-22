@@ -55,12 +55,14 @@ import {
   runJobDiscoveryWorkflow,
   type JobDiscoveryWorkflowDependencies,
 } from "./discovery/job-discovery-workflow.js";
-import type { SearchQuery } from "./discovery/connectors/connector-interface.js";
+import type { JobConnector, SearchQuery } from "./discovery/connectors/connector-interface.js";
 import { DiscoveryManager } from "./discovery/discovery-manager.js";
+import { GreenhouseConnector } from "./discovery/connectors/greenhouse-connector.js";
 import {
   HttpJsonFeedConnector,
   type HttpJsonFeedSource,
 } from "./discovery/connectors/http-json-feed-connector.js";
+import { LeverConnector } from "./discovery/connectors/lever-connector.js";
 import {
   runExportSyncWorker,
   type ExportSyncWorkerDependencies,
@@ -286,9 +288,9 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
     id: "job-discovery",
     description: "Search configured job queries and persist discovered jobs",
     run: async (input) => {
-      const feedSources = discoveryFeedSourcesFromWorkflowInput(input);
-      const discoveryDependencies = feedSources
-        ? createHttpFeedDiscoveryDependencies(feedSources, jobDiscovery)
+      const connectors = discoveryConnectorsFromWorkflowInput(input);
+      const discoveryDependencies = connectors.length > 0
+        ? createConnectorDiscoveryDependencies(connectors, jobDiscovery)
         : jobDiscovery;
 
       return runJobDiscoveryWorkflow(discoveryDependencies, {
@@ -565,26 +567,50 @@ function discoverySearchQueriesFromWorkflowInput(input: unknown): SearchQuery[] 
   return searchQueries.filter(isSearchQuery);
 }
 
-function discoveryFeedSourcesFromWorkflowInput(input: unknown): HttpJsonFeedSource[] | undefined {
+function discoveryConnectorsFromWorkflowInput(input: unknown): JobConnector[] {
   if (!isRecord(input) || !isRecord(input.discovery)) {
-    return undefined;
+    return [];
   }
-  const { feedSources } = input.discovery;
-  if (!Array.isArray(feedSources)) {
-    return undefined;
-  }
-
-  const sources = feedSources.filter(isHttpJsonFeedSource);
-  return sources.length > 0 ? sources : undefined;
+  return [
+    ...discoveryFeedSourcesFromWorkflowInput(input.discovery).map(
+      (source) => new HttpJsonFeedConnector(source),
+    ),
+    ...discoveryAtsSourcesFromWorkflowInput(input.discovery).map((source) => {
+      if (source.type === "greenhouse") {
+        return new GreenhouseConnector({ boardToken: source.boardToken });
+      }
+      return new LeverConnector({ company: source.company });
+    }),
+  ];
 }
 
-function createHttpFeedDiscoveryDependencies(
-  feedSources: HttpJsonFeedSource[],
+function discoveryFeedSourcesFromWorkflowInput(discovery: Record<string, unknown>): HttpJsonFeedSource[] {
+  const { feedSources } = discovery;
+  if (!Array.isArray(feedSources)) {
+    return [];
+  }
+
+  return feedSources.filter(isHttpJsonFeedSource);
+}
+
+type DiscoveryAtsSource =
+  | { type: "greenhouse"; boardToken: string }
+  | { type: "lever"; company: string };
+
+function discoveryAtsSourcesFromWorkflowInput(discovery: Record<string, unknown>): DiscoveryAtsSource[] {
+  const { atsSources } = discovery;
+  if (!Array.isArray(atsSources)) {
+    return [];
+  }
+
+  return atsSources.filter(isDiscoveryAtsSource);
+}
+
+function createConnectorDiscoveryDependencies(
+  connectors: JobConnector[],
   base: JobDiscoveryWorkflowDependencies,
 ): JobDiscoveryWorkflowDependencies {
-  const manager = new DiscoveryManager(
-    feedSources.map((source) => new HttpJsonFeedConnector(source)),
-  );
+  const manager = new DiscoveryManager(connectors);
 
   return {
     searchQueries: base.searchQueries,
@@ -604,6 +630,20 @@ function isHttpJsonFeedSource(value: unknown): value is HttpJsonFeedSource {
     (value.name === undefined || typeof value.name === "string") &&
     (value.headers === undefined || isStringRecord(value.headers))
   );
+}
+
+function isDiscoveryAtsSource(value: unknown): value is DiscoveryAtsSource {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return false;
+  }
+  if (value.type === "greenhouse") {
+    return typeof value.boardToken === "string" && value.boardToken.trim().length > 0;
+  }
+  if (value.type === "lever") {
+    return typeof value.company === "string" && value.company.trim().length > 0;
+  }
+
+  return false;
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {

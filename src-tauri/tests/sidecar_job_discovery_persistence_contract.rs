@@ -75,6 +75,24 @@ fn sends_discovery_search_queries_from_settings_to_sidecar() {
         },
     )
     .expect("save discovery feed source setting");
+    upsert_setting(
+        &connection,
+        UpsertSetting {
+            key: "discovery.atsSources".to_string(),
+            category: Some("discovery".to_string()),
+            value: SettingValue::Array(vec![
+                json!({
+                    "type": "greenhouse",
+                    "boardToken": "northstar"
+                }),
+                json!({
+                    "type": "lever",
+                    "company": "atlas"
+                }),
+            ]),
+        },
+    )
+    .expect("save discovery ATS source setting");
     let request_path = std::env::temp_dir().join(format!(
         "careercaveman-sidecar-request-{}.json",
         std::process::id()
@@ -105,6 +123,19 @@ fn sends_discovery_search_queries_from_settings_to_sidecar() {
             "platform": "custom",
             "url": "https://feeds.example/jobs.json"
         }])
+    );
+    assert_eq!(
+        request["params"]["discovery"]["atsSources"],
+        json!([
+            {
+                "type": "greenhouse",
+                "boardToken": "northstar"
+            },
+            {
+                "type": "lever",
+                "company": "atlas"
+            }
+        ])
     );
 }
 

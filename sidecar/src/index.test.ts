@@ -55,6 +55,14 @@ function deferred() {
   return { promise, resolve };
 }
 
+function jsonResponse(payload: unknown): Response {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => payload,
+  } as unknown as Response;
+}
+
 describe("sidecar runtime", () => {
   it("registers and runs the session-health workflow with browser session dependencies", async () => {
     const checkedAt = new Date("2026-05-28T10:00:00Z");
@@ -328,6 +336,98 @@ describe("sidecar runtime", () => {
         },
       },
     ]);
+  });
+
+  it("runs configured ATS sources through the job-discovery workflow", async () => {
+    const originalFetch = globalThis.fetch;
+    const requestedUrls: string[] = [];
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const requestUrl = String(url);
+      requestedUrls.push(requestUrl);
+
+      if (requestUrl.includes("boards-api.greenhouse.io")) {
+        return jsonResponse({
+          jobs: [
+            {
+              id: "gh-101",
+              title: "React Platform Engineer",
+              absolute_url: "https://boards.greenhouse.io/northstar/jobs/101",
+              location: { name: "Remote" },
+              content: "<p>Build React workflow tools.</p><ul><li>React</li></ul>",
+              updated_at: "2026-05-20T10:00:00Z",
+            },
+          ],
+        });
+      }
+
+      if (requestUrl.includes("api.lever.co")) {
+        return jsonResponse([
+          {
+            id: "lever-202",
+            text: "React Integrations Engineer",
+            hostedUrl: "https://jobs.lever.co/atlas/202",
+            categories: {
+              location: "Remote - Bengaluru",
+              commitment: "Full-time",
+              team: "Integrations",
+            },
+            descriptionPlain: "Build React integrations.",
+            lists: [{ content: "<ul><li>React</li><li>Node.js</li></ul>" }],
+            createdAt: Date.parse("2026-05-21T10:00:00Z"),
+          },
+        ]);
+      }
+
+      throw new Error(`unexpected fetch: ${requestUrl}`);
+    }) as typeof fetch;
+
+    try {
+      const runtime = createSidecarRuntime();
+
+      await expect(
+        runtime.workflowEngine.run("job-discovery", {
+          discovery: {
+            searchQueries: [{ keywords: ["React"], remote: true }],
+            atsSources: [
+              { type: "greenhouse", boardToken: "northstar" },
+              { type: "lever", company: "atlas" },
+            ],
+          },
+        }),
+      ).resolves.toMatchObject({
+        queries: 1,
+        discovered: 2,
+        stored: 0,
+        jobs: [
+          {
+            source_id: "gh-101",
+            platform: "greenhouse",
+            url: "https://boards.greenhouse.io/northstar/jobs/101",
+            title: "React Platform Engineer",
+            company_name: "northstar",
+            is_remote: true,
+            requirements: ["React"],
+          },
+          {
+            source_id: "lever-202",
+            platform: "lever",
+            url: "https://jobs.lever.co/atlas/202",
+            title: "React Integrations Engineer",
+            company_name: "atlas",
+            is_remote: true,
+            requirements: ["React", "Node.js"],
+          },
+        ],
+      });
+      expect(requestedUrls).toEqual([
+        "https://boards-api.greenhouse.io/v1/boards/northstar/jobs?content=true",
+        "https://api.lever.co/v0/postings/atlas?mode=json",
+        "https://boards-api.greenhouse.io/v1/boards/northstar/jobs?content=true",
+        "https://api.lever.co/v0/postings/atlas?mode=json",
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("runs due follow-up scheduled tasks through the follow-up workflow", async () => {
