@@ -58,6 +58,27 @@ const defaultScheduleTemplates: DefaultScheduleTemplate[] = [
     cadence: { kind: "interval", minutes: 15 },
   },
   {
+    name: "Funded Company Prospecting",
+    type: "prospecting_scan",
+    cronExpression: "0 8 * * *",
+    description: "Scan recently funded companies and prepare outreach prospects",
+    cadence: { kind: "daily", hour: 8, minute: 0 },
+  },
+  {
+    name: "Outreach Sending Window",
+    type: "outreach_send",
+    cronExpression: "0 9-18/2 * * *",
+    description: "Send queued outreach emails during business hours",
+    cadence: { kind: "windowed_interval", everyHours: 2, startHour: 9, endHour: 18, minute: 0 },
+  },
+  {
+    name: "Outreach Follow-ups",
+    type: "outreach_follow_up",
+    cronExpression: "0 10 * * *",
+    description: "Queue due outreach follow-up steps",
+    cadence: { kind: "daily", hour: 10, minute: 0 },
+  },
+  {
     name: "Analytics Refresh",
     type: "analytics",
     cronExpression: "0 0 * * *",

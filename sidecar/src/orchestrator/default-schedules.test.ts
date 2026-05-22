@@ -12,6 +12,9 @@ describe("default schedules", () => {
       { name: "Application Processing", type: "apply", cronExpression: "*/30 * * * *" },
       { name: "Follow-up Check", type: "follow_up", cronExpression: "0 9 * * *" },
       { name: "Email Check", type: "email_check", cronExpression: "*/15 * * * *" },
+      { name: "Funded Company Prospecting", type: "prospecting_scan", cronExpression: "0 8 * * *" },
+      { name: "Outreach Sending Window", type: "outreach_send", cronExpression: "0 9-18/2 * * *" },
+      { name: "Outreach Follow-ups", type: "outreach_follow_up", cronExpression: "0 10 * * *" },
       { name: "Analytics Refresh", type: "analytics", cronExpression: "0 0 * * *" },
       { name: "Weekly Analytics Report", type: "weekly_analytics_report", cronExpression: "0 8 * * 0" },
       { name: "Daily Digest", type: "digest", cronExpression: "0 18 * * *" },
@@ -25,6 +28,9 @@ describe("default schedules", () => {
       apply: "application-processing",
       digest: "daily-digest",
       weekly_analytics_report: "analytics-refresh",
+      prospecting_scan: "prospecting-scan",
+      outreach_send: "outreach-send",
+      outreach_follow_up: "outreach-follow-up",
     });
   });
 

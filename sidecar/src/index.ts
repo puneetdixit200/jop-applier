@@ -128,6 +128,11 @@ import {
 import { WorkflowEngine } from "./orchestrator/workflow-engine.js";
 import { PluginManager, type Plugin } from "./plugins/plugin-manager.js";
 import {
+  runProspectingScan,
+  type ProspectingProfile,
+  type ProspectingScanDependencies,
+} from "./prospecting/prospecting-manager.js";
+import {
   createApplicationDocumentGenerators,
   type ApplicationDocumentGeneratorDependencies,
 } from "./resume/application-document-generator.js";
@@ -261,6 +266,11 @@ export type SidecarCleanupOptions = CleanupWorkerDependencies & {
   archiveJobsOlderThanDays?: number;
 };
 
+export type SidecarProspectingOptions = ProspectingScanDependencies & {
+  profile?: ProspectingProfile;
+  minRelevanceScore?: number;
+};
+
 export type SidecarRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
@@ -281,6 +291,7 @@ export type SidecarRuntimeOptions = {
   coldEmail?: SidecarColdEmailOptions;
   exportSync?: SidecarExportSyncOptions;
   cleanup?: SidecarCleanupOptions;
+  prospecting?: SidecarProspectingOptions;
   followUps?: SidecarFollowUpOptions;
   notifications?: NotificationManagerOptions;
   plugins?: Plugin[];
@@ -333,6 +344,7 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   const coldEmail = createColdEmailWorkerDependencies(options.coldEmail, aiEngine);
   const exportSync = options.exportSync ?? createEmptyExportSyncWorkerDependencies();
   const cleanup = options.cleanup ?? createEmptyCleanupWorkerDependencies();
+  const prospecting = options.prospecting ?? createEmptyProspectingDependencies();
   const followUps = options.followUps ?? createEmptyFollowUpDependencies();
   const scheduledTaskPersistence = options.scheduledTasks ?? createEmptyScheduledTaskPersistence();
   const notificationOutbox: NotificationDelivery[] = [];
@@ -434,6 +446,39 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
         maxEmails: options.coldEmail?.maxEmails,
       });
     },
+  });
+  workflowEngine.register({
+    id: "prospecting-scan",
+    description: "Scan recently funded companies and persist prospecting records",
+    run: async () =>
+      runProspectingScan(prospecting, {
+        profile: options.prospecting?.profile ?? {
+          targetRole: "Software Engineer",
+          skills: [],
+          summary: "",
+        },
+        minRelevanceScore: options.prospecting?.minRelevanceScore,
+        eventBus,
+      }),
+  });
+  workflowEngine.register({
+    id: "outreach-send",
+    description: "Send queued outreach campaign emails within compliance limits",
+    run: async () => ({
+      scanned: 0,
+      sent: 0,
+      skipped: 0,
+      failed: 0,
+    }),
+  });
+  workflowEngine.register({
+    id: "outreach-follow-up",
+    description: "Queue due follow-up emails for active outreach campaigns",
+    run: async () => ({
+      scanned: 0,
+      queued: 0,
+      skipped: 0,
+    }),
   });
   workflowEngine.register({
     id: "export-sync",
@@ -1089,6 +1134,14 @@ function createEmptyCleanupWorkerDependencies(): CleanupWorkerDependencies {
   return {
     purgeExpiredAiCache: async () => ({ deleted: 0 }),
     archiveOldJobs: async () => ({ archived: 0 }),
+  };
+}
+
+function createEmptyProspectingDependencies(): ProspectingScanDependencies {
+  return {
+    sources: [],
+    scoreCompany: async () => ({ score: 0, summary: "" }),
+    saveCompanies: async () => [],
   };
 }
 

@@ -30,6 +30,14 @@ export type CareerEventMap = {
     priority?: "high" | "medium" | "low" | null;
     shouldApply?: boolean | null;
   };
+  "prospecting.company_discovered": {
+    companyId: string;
+    companyName: string;
+    domain: string | null;
+    relevanceScore: number | null;
+    source: string;
+    discoveredAt: Date;
+  };
   "follow_up.sent": {
     applicationId: string;
     jobId: string;

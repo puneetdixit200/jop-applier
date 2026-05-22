@@ -14,6 +14,9 @@ const expectedWorkflows = [
   "export-sync",
   "follow-up-check",
   "job-discovery",
+  "outreach-follow-up",
+  "outreach-send",
+  "prospecting-scan",
   "session-health",
 ];
 

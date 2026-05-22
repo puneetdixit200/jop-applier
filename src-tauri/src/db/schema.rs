@@ -217,6 +217,98 @@ CREATE INDEX IF NOT EXISTS idx_notifications_channel_read_created
     ON notifications(channel, read_at, created_at DESC);
 "#,
     },
+    Migration {
+        version: 4,
+        name: "prospecting_outreach",
+        sql: r#"
+CREATE TABLE IF NOT EXISTS funded_companies (
+    id                TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    name              TEXT NOT NULL,
+    domain            TEXT UNIQUE,
+    description       TEXT,
+    industry          TEXT,
+    tech_stack        TEXT NOT NULL DEFAULT '[]',
+    funding_stage     TEXT,
+    funding_amount    REAL,
+    funding_currency  TEXT NOT NULL DEFAULT 'USD',
+    funding_date      DATETIME,
+    investors         TEXT NOT NULL DEFAULT '[]',
+    lead_investor     TEXT,
+    source            TEXT NOT NULL,
+    source_url        TEXT,
+    region            TEXT NOT NULL DEFAULT 'global',
+    relevance_score   REAL,
+    ai_summary        TEXT,
+    status            TEXT NOT NULL DEFAULT 'discovered',
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_funded_companies_region ON funded_companies(region);
+CREATE INDEX IF NOT EXISTS idx_funded_companies_status ON funded_companies(status);
+CREATE INDEX IF NOT EXISTS idx_funded_companies_relevance ON funded_companies(relevance_score DESC);
+CREATE INDEX IF NOT EXISTS idx_funded_companies_funding_date ON funded_companies(funding_date DESC);
+
+CREATE TABLE IF NOT EXISTS prospect_contacts (
+    id                TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    company_id        TEXT NOT NULL REFERENCES funded_companies(id),
+    full_name         TEXT NOT NULL,
+    email             TEXT NOT NULL COLLATE NOCASE,
+    email_confidence  REAL NOT NULL,
+    email_status      TEXT NOT NULL,
+    role              TEXT NOT NULL,
+    linkedin_url      TEXT,
+    source            TEXT NOT NULL,
+    opted_out         BOOLEAN DEFAULT FALSE,
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(company_id, email)
+);
+
+CREATE INDEX IF NOT EXISTS idx_prospect_contacts_company ON prospect_contacts(company_id);
+CREATE INDEX IF NOT EXISTS idx_prospect_contacts_role ON prospect_contacts(role);
+CREATE INDEX IF NOT EXISTS idx_prospect_contacts_email ON prospect_contacts(email);
+
+CREATE TABLE IF NOT EXISTS outreach_campaigns (
+    id                  TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    company_id          TEXT NOT NULL REFERENCES funded_companies(id),
+    campaign_type       TEXT NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'draft',
+    sequence_json       TEXT NOT NULL DEFAULT '[]',
+    auto_approve        BOOLEAN DEFAULT FALSE,
+    max_emails_per_day  INTEGER DEFAULT 30,
+    created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_outreach_campaigns_company ON outreach_campaigns(company_id);
+CREATE INDEX IF NOT EXISTS idx_outreach_campaigns_status ON outreach_campaigns(status);
+
+CREATE TABLE IF NOT EXISTS outreach_emails (
+    id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    campaign_id     TEXT NOT NULL REFERENCES outreach_campaigns(id),
+    contact_id      TEXT NOT NULL REFERENCES prospect_contacts(id),
+    sequence_step   INTEGER NOT NULL,
+    subject         TEXT NOT NULL,
+    body_html       TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending',
+    scheduled_at    DATETIME,
+    sent_at         DATETIME,
+    message_id      TEXT,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_outreach_emails_campaign ON outreach_emails(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_outreach_emails_contact ON outreach_emails(contact_id);
+CREATE INDEX IF NOT EXISTS idx_outreach_emails_status ON outreach_emails(status);
+CREATE INDEX IF NOT EXISTS idx_outreach_emails_scheduled ON outreach_emails(scheduled_at);
+
+CREATE TABLE IF NOT EXISTS email_opt_outs (
+    email          TEXT PRIMARY KEY COLLATE NOCASE,
+    opted_out_at   DATETIME NOT NULL,
+    reason         TEXT NOT NULL
+);
+"#,
+    },
 ];
 
 pub fn initialize_schema(connection: &Connection) -> SchemaResult<()> {

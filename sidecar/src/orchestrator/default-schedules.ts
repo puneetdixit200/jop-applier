@@ -38,6 +38,9 @@ export const DEFAULT_WORKFLOWS_BY_TASK_TYPE: Record<string, string> = {
   apply: "application-processing",
   follow_up: "follow-up-check",
   email_check: "email-check",
+  prospecting_scan: "prospecting-scan",
+  outreach_send: "outreach-send",
+  outreach_follow_up: "outreach-follow-up",
   analytics: "analytics-refresh",
   weekly_analytics_report: "analytics-refresh",
   digest: "daily-digest",
@@ -85,6 +88,36 @@ export const DEFAULT_SCHEDULED_TASKS: DefaultScheduledTask[] = [
     config: {
       description: "Check for responses via IMAP",
       cadence: { kind: "interval", minutes: 15 },
+    },
+  },
+  {
+    name: "Funded Company Prospecting",
+    type: "prospecting_scan",
+    cronExpression: "0 8 * * *",
+    isEnabled: true,
+    config: {
+      description: "Scan recently funded companies and prepare outreach prospects",
+      cadence: { kind: "daily", hour: 8, minute: 0 },
+    },
+  },
+  {
+    name: "Outreach Sending Window",
+    type: "outreach_send",
+    cronExpression: "0 9-18/2 * * *",
+    isEnabled: true,
+    config: {
+      description: "Send queued outreach emails during business hours",
+      cadence: { kind: "windowed_interval", everyHours: 2, startHour: 9, endHour: 18, minute: 0 },
+    },
+  },
+  {
+    name: "Outreach Follow-ups",
+    type: "outreach_follow_up",
+    cronExpression: "0 10 * * *",
+    isEnabled: true,
+    config: {
+      description: "Queue due outreach follow-up steps",
+      cadence: { kind: "daily", hour: 10, minute: 0 },
     },
   },
   {

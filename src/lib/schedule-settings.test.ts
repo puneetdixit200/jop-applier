@@ -36,6 +36,24 @@ describe("schedule settings", () => {
         next_run: "2026-05-29T07:45:00.000Z",
       },
       {
+        name: "Funded Company Prospecting",
+        type: "prospecting_scan",
+        cron_expression: "0 8 * * *",
+        next_run: "2026-05-29T08:00:00.000Z",
+      },
+      {
+        name: "Outreach Sending Window",
+        type: "outreach_send",
+        cron_expression: "0 9-18/2 * * *",
+        next_run: "2026-05-29T09:00:00.000Z",
+      },
+      {
+        name: "Outreach Follow-ups",
+        type: "outreach_follow_up",
+        cron_expression: "0 10 * * *",
+        next_run: "2026-05-29T10:00:00.000Z",
+      },
+      {
         name: "Analytics Refresh",
         type: "analytics",
         cron_expression: "0 0 * * *",
@@ -87,8 +105,8 @@ describe("schedule settings", () => {
       new Date("2026-05-29T07:30:00.000Z"),
     );
 
-    expect(seeded).toHaveLength(10);
-    expect(savedTasks).toHaveLength(10);
+    expect(seeded).toHaveLength(13);
+    expect(savedTasks).toHaveLength(13);
 
     const existing = [persistedTask(buildDefaultScheduledTasks(new Date("2026-05-29T07:30:00.000Z"))[0], "existing")];
     const loaded = await loadOrSeedScheduledTasks(

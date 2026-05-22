@@ -407,3 +407,141 @@ pub struct UpsertAiCacheEntry {
     pub tokens_used: Option<i64>,
     pub expires_at: Option<String>,
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FundedCompany {
+    pub id: String,
+    pub name: String,
+    pub domain: Option<String>,
+    pub description: Option<String>,
+    pub industry: Option<String>,
+    pub tech_stack: Vec<String>,
+    pub funding_stage: Option<String>,
+    pub funding_amount: Option<f64>,
+    pub funding_currency: String,
+    pub funding_date: Option<String>,
+    pub investors: Vec<String>,
+    pub lead_investor: Option<String>,
+    pub source: String,
+    pub source_url: Option<String>,
+    pub region: String,
+    pub relevance_score: Option<f64>,
+    pub ai_summary: Option<String>,
+    pub status: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UpsertFundedCompany {
+    pub name: String,
+    pub domain: Option<String>,
+    pub description: Option<String>,
+    pub industry: Option<String>,
+    pub tech_stack: Vec<String>,
+    pub funding_stage: Option<String>,
+    pub funding_amount: Option<f64>,
+    pub funding_currency: String,
+    pub funding_date: Option<String>,
+    pub investors: Vec<String>,
+    pub lead_investor: Option<String>,
+    pub source: String,
+    pub source_url: Option<String>,
+    pub region: String,
+    pub relevance_score: Option<f64>,
+    pub ai_summary: Option<String>,
+    pub status: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProspectContact {
+    pub id: String,
+    pub company_id: String,
+    pub full_name: String,
+    pub email: String,
+    pub email_confidence: f64,
+    pub email_status: String,
+    pub role: String,
+    pub linkedin_url: Option<String>,
+    pub source: String,
+    pub opted_out: bool,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UpsertProspectContact {
+    pub company_id: String,
+    pub full_name: String,
+    pub email: String,
+    pub email_confidence: f64,
+    pub email_status: String,
+    pub role: String,
+    pub linkedin_url: Option<String>,
+    pub source: String,
+    pub opted_out: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OutreachCampaign {
+    pub id: String,
+    pub company_id: String,
+    pub campaign_type: String,
+    pub status: String,
+    pub sequence_json: String,
+    pub auto_approve: bool,
+    pub max_emails_per_day: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UpsertOutreachCampaign {
+    pub company_id: String,
+    pub campaign_type: String,
+    pub status: String,
+    pub sequence_json: String,
+    pub auto_approve: bool,
+    pub max_emails_per_day: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OutreachEmail {
+    pub id: String,
+    pub campaign_id: String,
+    pub contact_id: String,
+    pub sequence_step: i64,
+    pub subject: String,
+    pub body_html: String,
+    pub status: String,
+    pub scheduled_at: Option<String>,
+    pub sent_at: Option<String>,
+    pub message_id: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UpsertOutreachEmail {
+    pub campaign_id: String,
+    pub contact_id: String,
+    pub sequence_step: i64,
+    pub subject: String,
+    pub body_html: String,
+    pub status: String,
+    pub scheduled_at: Option<String>,
+    pub sent_at: Option<String>,
+    pub message_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct EmailOptOut {
+    pub email: String,
+    pub opted_out_at: String,
+    pub reason: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UpsertEmailOptOut {
+    pub email: String,
+    pub opted_out_at: String,
+    pub reason: String,
+}

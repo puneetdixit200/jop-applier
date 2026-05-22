@@ -26,6 +26,14 @@ When a profile is configured, discovery can classify raw postings, score jobs ag
 
 Optional email notifications use SMTP settings from environment variables such as `CAREERCAVEMAN_NOTIFICATION_EMAIL_TO`, `CAREERCAVEMAN_SMTP_HOST`, `CAREERCAVEMAN_SMTP_USER`, `CAREERCAVEMAN_SMTP_PASS`, and `CAREERCAVEMAN_EMAIL_FROM`.
 
+## Prospecting And Outreach
+
+Prospecting adds a proactive channel alongside posted-job discovery. The sidecar can scan funded-company sources such as Inc42, YourStory, TechCrunch, Crunchbase, and Tracxn, normalize duplicate funding events, score companies against your profile, enrich contacts, and prepare outreach campaigns.
+
+The Prospecting screen shows funded companies, relevance score, funding round, contact count, and review status. The Outreach screen shows pending review emails and campaign analytics for sent, opened, replied, and bounced messages.
+
+Outreach is review-first by default. Every generated message must pass content checks, include an unsubscribe link, respect the daily hard cap, avoid recent re-contact, stay inside business hours, and skip opted-out recipients.
+
 ## Connectors
 
 Built-in discovery sources include LinkedIn, Indeed, Internshala, Naukri, Wellfound, Glassdoor, JSON feeds, company career pages, Greenhouse, Lever, Workday, BambooHR, and iCIMS. Portal discovery is opt-in from Settings.

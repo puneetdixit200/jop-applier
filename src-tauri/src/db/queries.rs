@@ -6,10 +6,12 @@ use thiserror::Error;
 use super::models::{
     AiCacheEntry, Application, ApplicationDocumentContext, ApplicationEvent,
     ApplicationFollowUpUpdate, ApplicationResponseUpdate, ApplicationWorkflowStateUpdate,
-    Communication, Company, Contact, Document, Job, Notification, ScheduledTask,
-    ScheduledTaskRunUpdate, Setting, SettingValue, UpsertAiCacheEntry, UpsertApplication,
-    UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument, UpsertJob,
-    UpsertNotification, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
+    Communication, Company, Contact, Document, EmailOptOut, FundedCompany, Job, Notification,
+    OutreachCampaign, OutreachEmail, ProspectContact, ScheduledTask, ScheduledTaskRunUpdate,
+    Setting, SettingValue, UpsertAiCacheEntry, UpsertApplication, UpsertCommunication,
+    UpsertCompany, UpsertContact, UpsertDocument, UpsertEmailOptOut, UpsertFundedCompany,
+    UpsertJob, UpsertNotification, UpsertOutreachCampaign, UpsertOutreachEmail,
+    UpsertProspectContact, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -46,6 +48,14 @@ pub enum QueryError {
     MissingNotificationAfterSave,
     #[error("ai cache entry save did not return a row")]
     MissingAiCacheEntryAfterSave,
+    #[error("funded company save did not return a row")]
+    MissingFundedCompanyAfterSave,
+    #[error("prospect contact save did not return a row")]
+    MissingProspectContactAfterSave,
+    #[error("outreach campaign save did not return a row")]
+    MissingOutreachCampaignAfterSave,
+    #[error("outreach email save did not return a row")]
+    MissingOutreachEmailAfterSave,
 }
 
 pub type QueryResult<T> = Result<T, QueryError>;
@@ -812,6 +822,247 @@ pub fn save_contact(connection: &Connection, contact: UpsertContact) -> QueryRes
         .ok_or(QueryError::MissingContactAfterSave)
 }
 
+pub fn list_funded_companies(connection: &Connection) -> QueryResult<Vec<FundedCompany>> {
+    let mut statement = connection.prepare(
+        "SELECT id, name, domain, description, industry, tech_stack, funding_stage, funding_amount,
+                funding_currency, funding_date, investors, lead_investor, source, source_url,
+                region, relevance_score, ai_summary, status, created_at, updated_at
+         FROM funded_companies
+         ORDER BY COALESCE(relevance_score, -1) DESC, funding_date DESC, created_at DESC",
+    )?;
+
+    let rows = statement.query_map([], funded_company_from_row)?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(QueryError::from)
+}
+
+pub fn save_funded_company(
+    connection: &Connection,
+    company: UpsertFundedCompany,
+) -> QueryResult<FundedCompany> {
+    let tech_stack = to_json_text(&company.tech_stack)?;
+    let investors = to_json_text(&company.investors)?;
+    let domain = company.domain.as_ref().map(|value| value.to_lowercase());
+    connection.execute(
+        "INSERT INTO funded_companies (
+             name, domain, description, industry, tech_stack, funding_stage, funding_amount,
+             funding_currency, funding_date, investors, lead_investor, source, source_url, region,
+             relevance_score, ai_summary, status
+         )
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+         ON CONFLICT(domain) DO UPDATE SET
+             name = excluded.name,
+             description = COALESCE(funded_companies.description, excluded.description),
+             industry = COALESCE(funded_companies.industry, excluded.industry),
+             tech_stack = excluded.tech_stack,
+             funding_stage = COALESCE(funded_companies.funding_stage, excluded.funding_stage),
+             funding_amount = COALESCE(funded_companies.funding_amount, excluded.funding_amount),
+             funding_currency = excluded.funding_currency,
+             funding_date = COALESCE(funded_companies.funding_date, excluded.funding_date),
+             investors = excluded.investors,
+             lead_investor = COALESCE(funded_companies.lead_investor, excluded.lead_investor),
+             source = funded_companies.source,
+             source_url = COALESCE(funded_companies.source_url, excluded.source_url),
+             region = excluded.region,
+             relevance_score = excluded.relevance_score,
+             ai_summary = excluded.ai_summary,
+             status = excluded.status,
+             updated_at = CURRENT_TIMESTAMP",
+        params![
+            company.name,
+            domain,
+            company.description,
+            company.industry,
+            tech_stack,
+            company.funding_stage,
+            company.funding_amount,
+            company.funding_currency,
+            company.funding_date,
+            investors,
+            company.lead_investor,
+            company.source,
+            company.source_url,
+            company.region,
+            company.relevance_score,
+            company.ai_summary,
+            company.status,
+        ],
+    )?;
+
+    if let Some(domain) = company.domain.as_ref() {
+        get_funded_company_by_domain(connection, domain)?
+            .ok_or(QueryError::MissingFundedCompanyAfterSave)
+    } else {
+        get_funded_company_by_rowid(connection, connection.last_insert_rowid())?
+            .ok_or(QueryError::MissingFundedCompanyAfterSave)
+    }
+}
+
+pub fn list_prospect_contacts(
+    connection: &Connection,
+    company_id: &str,
+) -> QueryResult<Vec<ProspectContact>> {
+    let mut statement = connection.prepare(
+        "SELECT id, company_id, full_name, email, email_confidence, email_status, role,
+                linkedin_url, source, opted_out, created_at
+         FROM prospect_contacts
+         WHERE company_id = ?1
+         ORDER BY opted_out ASC, email_confidence DESC, created_at DESC",
+    )?;
+
+    let rows = statement.query_map([company_id], prospect_contact_from_row)?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(QueryError::from)
+}
+
+pub fn save_prospect_contact(
+    connection: &Connection,
+    contact: UpsertProspectContact,
+) -> QueryResult<ProspectContact> {
+    let email = contact.email.to_lowercase();
+    let opted_out: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM email_opt_outs WHERE email = ?1)",
+        [&email],
+        |row| row.get(0),
+    )?;
+    connection.execute(
+        "INSERT INTO prospect_contacts (
+             company_id, full_name, email, email_confidence, email_status, role, linkedin_url,
+             source, opted_out
+         )
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+         ON CONFLICT(company_id, email) DO UPDATE SET
+             full_name = excluded.full_name,
+             email_confidence = excluded.email_confidence,
+             email_status = excluded.email_status,
+             role = excluded.role,
+             linkedin_url = excluded.linkedin_url,
+             source = excluded.source,
+             opted_out = excluded.opted_out",
+        params![
+            contact.company_id,
+            contact.full_name,
+            email,
+            contact.email_confidence,
+            contact.email_status,
+            contact.role,
+            contact.linkedin_url,
+            contact.source,
+            contact.opted_out || opted_out,
+        ],
+    )?;
+
+    get_prospect_contact_by_email(connection, &contact.company_id, &contact.email)?
+        .ok_or(QueryError::MissingProspectContactAfterSave)
+}
+
+pub fn save_outreach_campaign(
+    connection: &Connection,
+    campaign: UpsertOutreachCampaign,
+) -> QueryResult<OutreachCampaign> {
+    connection.execute(
+        "INSERT INTO outreach_campaigns (
+             company_id, campaign_type, status, sequence_json, auto_approve, max_emails_per_day
+         )
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            campaign.company_id,
+            campaign.campaign_type,
+            campaign.status,
+            campaign.sequence_json,
+            campaign.auto_approve,
+            campaign.max_emails_per_day,
+        ],
+    )?;
+
+    get_outreach_campaign_by_rowid(connection, connection.last_insert_rowid())?
+        .ok_or(QueryError::MissingOutreachCampaignAfterSave)
+}
+
+pub fn list_outreach_emails(
+    connection: &Connection,
+    status: Option<&str>,
+) -> QueryResult<Vec<OutreachEmail>> {
+    if let Some(status) = status {
+        let mut statement = connection.prepare(
+            "SELECT id, campaign_id, contact_id, sequence_step, subject, body_html, status,
+                    scheduled_at, sent_at, message_id, created_at
+             FROM outreach_emails
+             WHERE status = ?1
+             ORDER BY scheduled_at ASC, created_at ASC",
+        )?;
+        let rows = statement.query_map([status], outreach_email_from_row)?;
+        return rows.collect::<Result<Vec<_>, _>>().map_err(QueryError::from);
+    }
+
+    let mut statement = connection.prepare(
+        "SELECT id, campaign_id, contact_id, sequence_step, subject, body_html, status,
+                scheduled_at, sent_at, message_id, created_at
+         FROM outreach_emails
+         ORDER BY created_at DESC",
+    )?;
+    let rows = statement.query_map([], outreach_email_from_row)?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(QueryError::from)
+}
+
+pub fn save_outreach_email(
+    connection: &Connection,
+    email: UpsertOutreachEmail,
+) -> QueryResult<OutreachEmail> {
+    connection.execute(
+        "INSERT INTO outreach_emails (
+             campaign_id, contact_id, sequence_step, subject, body_html, status, scheduled_at,
+             sent_at, message_id
+         )
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![
+            email.campaign_id,
+            email.contact_id,
+            email.sequence_step,
+            email.subject,
+            email.body_html,
+            email.status,
+            email.scheduled_at,
+            email.sent_at,
+            email.message_id,
+        ],
+    )?;
+
+    get_outreach_email_by_rowid(connection, connection.last_insert_rowid())?
+        .ok_or(QueryError::MissingOutreachEmailAfterSave)
+}
+
+pub fn record_email_opt_out(
+    connection: &Connection,
+    opt_out: UpsertEmailOptOut,
+) -> QueryResult<EmailOptOut> {
+    let email = opt_out.email.to_lowercase();
+    connection.execute(
+        "INSERT INTO email_opt_outs (email, opted_out_at, reason)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(email) DO UPDATE SET
+             opted_out_at = excluded.opted_out_at,
+             reason = excluded.reason",
+        params![email, opt_out.opted_out_at, opt_out.reason],
+    )?;
+    connection.execute(
+        "UPDATE prospect_contacts
+         SET opted_out = TRUE
+         WHERE email = ?1",
+        [&email],
+    )?;
+    connection.execute(
+        "UPDATE outreach_emails
+         SET status = 'cancelled'
+         WHERE contact_id IN (SELECT id FROM prospect_contacts WHERE email = ?1)
+           AND status IN ('pending', 'queued')",
+        [&email],
+    )?;
+
+    get_email_opt_out(connection, &email)
+}
+
 pub fn list_communications(
     connection: &Connection,
     application_id: &str,
@@ -1127,6 +1378,127 @@ fn get_scheduled_task_by_id(
         .map_err(QueryError::from)
 }
 
+fn get_funded_company_by_domain(
+    connection: &Connection,
+    domain: &str,
+) -> QueryResult<Option<FundedCompany>> {
+    let mut statement = connection.prepare(
+        "SELECT id, name, domain, description, industry, tech_stack, funding_stage, funding_amount,
+                funding_currency, funding_date, investors, lead_investor, source, source_url,
+                region, relevance_score, ai_summary, status, created_at, updated_at
+         FROM funded_companies
+         WHERE domain = ?1
+         LIMIT 1",
+    )?;
+    let domain = domain.to_lowercase();
+    let mut rows = statement.query([domain])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    funded_company_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
+}
+
+fn get_funded_company_by_rowid(
+    connection: &Connection,
+    rowid: i64,
+) -> QueryResult<Option<FundedCompany>> {
+    let mut statement = connection.prepare(
+        "SELECT id, name, domain, description, industry, tech_stack, funding_stage, funding_amount,
+                funding_currency, funding_date, investors, lead_investor, source, source_url,
+                region, relevance_score, ai_summary, status, created_at, updated_at
+         FROM funded_companies
+         WHERE rowid = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([rowid])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    funded_company_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
+}
+
+fn get_prospect_contact_by_email(
+    connection: &Connection,
+    company_id: &str,
+    email: &str,
+) -> QueryResult<Option<ProspectContact>> {
+    let mut statement = connection.prepare(
+        "SELECT id, company_id, full_name, email, email_confidence, email_status, role,
+                linkedin_url, source, opted_out, created_at
+         FROM prospect_contacts
+         WHERE company_id = ?1 AND email = ?2
+         LIMIT 1",
+    )?;
+    let email = email.to_lowercase();
+    let mut rows = statement.query(params![company_id, email])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    prospect_contact_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
+}
+
+fn get_outreach_campaign_by_rowid(
+    connection: &Connection,
+    rowid: i64,
+) -> QueryResult<Option<OutreachCampaign>> {
+    let mut statement = connection.prepare(
+        "SELECT id, company_id, campaign_type, status, sequence_json, auto_approve,
+                max_emails_per_day, created_at, updated_at
+         FROM outreach_campaigns
+         WHERE rowid = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([rowid])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    outreach_campaign_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
+}
+
+fn get_outreach_email_by_rowid(
+    connection: &Connection,
+    rowid: i64,
+) -> QueryResult<Option<OutreachEmail>> {
+    let mut statement = connection.prepare(
+        "SELECT id, campaign_id, contact_id, sequence_step, subject, body_html, status,
+                scheduled_at, sent_at, message_id, created_at
+         FROM outreach_emails
+         WHERE rowid = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([rowid])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    outreach_email_from_row(row)
+        .map(Some)
+        .map_err(QueryError::from)
+}
+
+fn get_email_opt_out(connection: &Connection, email: &str) -> QueryResult<EmailOptOut> {
+    let mut statement = connection.prepare(
+        "SELECT email, opted_out_at, reason
+         FROM email_opt_outs
+         WHERE email = ?1
+         LIMIT 1",
+    )?;
+    let mut rows = statement.query([email])?;
+    let row = rows.next()?.expect("email opt-out should exist after upsert");
+    Ok(EmailOptOut {
+        email: row.get(0)?,
+        opted_out_at: row.get(1)?,
+        reason: row.get(2)?,
+    })
+}
+
 fn get_contact_by_rowid(connection: &Connection, rowid: i64) -> QueryResult<Option<Contact>> {
     let mut statement = connection.prepare(
         "SELECT id, company_id, name, email, phone, linkedin_url, role, notes, created_at
@@ -1392,6 +1764,80 @@ fn contact_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Contact> {
         role: row.get(6)?,
         notes: row.get(7)?,
         created_at: row.get(8)?,
+    })
+}
+
+fn funded_company_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<FundedCompany> {
+    let tech_stack = json_cell(row, 5)?;
+    let investors = json_cell(row, 10)?;
+
+    Ok(FundedCompany {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        domain: row.get(2)?,
+        description: row.get(3)?,
+        industry: row.get(4)?,
+        tech_stack,
+        funding_stage: row.get(6)?,
+        funding_amount: row.get(7)?,
+        funding_currency: row.get(8)?,
+        funding_date: row.get(9)?,
+        investors,
+        lead_investor: row.get(11)?,
+        source: row.get(12)?,
+        source_url: row.get(13)?,
+        region: row.get(14)?,
+        relevance_score: row.get(15)?,
+        ai_summary: row.get(16)?,
+        status: row.get(17)?,
+        created_at: row.get(18)?,
+        updated_at: row.get(19)?,
+    })
+}
+
+fn prospect_contact_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProspectContact> {
+    Ok(ProspectContact {
+        id: row.get(0)?,
+        company_id: row.get(1)?,
+        full_name: row.get(2)?,
+        email: row.get(3)?,
+        email_confidence: row.get(4)?,
+        email_status: row.get(5)?,
+        role: row.get(6)?,
+        linkedin_url: row.get(7)?,
+        source: row.get(8)?,
+        opted_out: row.get(9)?,
+        created_at: row.get(10)?,
+    })
+}
+
+fn outreach_campaign_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<OutreachCampaign> {
+    Ok(OutreachCampaign {
+        id: row.get(0)?,
+        company_id: row.get(1)?,
+        campaign_type: row.get(2)?,
+        status: row.get(3)?,
+        sequence_json: row.get(4)?,
+        auto_approve: row.get(5)?,
+        max_emails_per_day: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+    })
+}
+
+fn outreach_email_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<OutreachEmail> {
+    Ok(OutreachEmail {
+        id: row.get(0)?,
+        campaign_id: row.get(1)?,
+        contact_id: row.get(2)?,
+        sequence_step: row.get(3)?,
+        subject: row.get(4)?,
+        body_html: row.get(5)?,
+        status: row.get(6)?,
+        scheduled_at: row.get(7)?,
+        sent_at: row.get(8)?,
+        message_id: row.get(9)?,
+        created_at: row.get(10)?,
     })
 }
 

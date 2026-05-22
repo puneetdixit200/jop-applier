@@ -3,11 +3,14 @@ use crate::{
         encryption::{self, DatabaseEncryptionStatus},
         models::{
             AiCacheEntry, Application, ApplicationDocumentContext, ApplicationEvent,
-            ApplicationWorkflowStateUpdate, Communication, Company, Contact, Document, Job,
-            Notification, ScheduledTask, ScheduledTaskRunUpdate, Setting, SettingValue,
+            ApplicationWorkflowStateUpdate, Communication, Company, Contact, Document,
+            EmailOptOut, FundedCompany, Job, Notification, OutreachCampaign, OutreachEmail,
+            ProspectContact, ScheduledTask, ScheduledTaskRunUpdate, Setting, SettingValue,
             UpsertAiCacheEntry, UpsertApplication, UpsertCommunication, UpsertCompany,
-            UpsertContact, UpsertDocument, UpsertJob, UpsertNotification, UpsertScheduledTask,
-            UpsertSetting, UpsertUserProfile, UserProfile,
+            UpsertContact, UpsertDocument, UpsertEmailOptOut, UpsertFundedCompany, UpsertJob,
+            UpsertNotification, UpsertOutreachCampaign, UpsertOutreachEmail,
+            UpsertProspectContact, UpsertScheduledTask, UpsertSetting, UpsertUserProfile,
+            UserProfile,
         },
         queries, schema,
     },
@@ -322,6 +325,101 @@ pub fn save_contact_command(
         .lock()
         .map_err(|_| "database connection lock poisoned".to_string())?;
     queries::save_contact(&connection, contact).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn list_funded_companies_command(
+    state: State<'_, AppState>,
+) -> Result<Vec<FundedCompany>, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::list_funded_companies(&connection).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn save_funded_company_command(
+    state: State<'_, AppState>,
+    company: UpsertFundedCompany,
+) -> Result<FundedCompany, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::save_funded_company(&connection, company).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn list_prospect_contacts_command(
+    state: State<'_, AppState>,
+    company_id: String,
+) -> Result<Vec<ProspectContact>, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::list_prospect_contacts(&connection, &company_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn save_prospect_contact_command(
+    state: State<'_, AppState>,
+    contact: UpsertProspectContact,
+) -> Result<ProspectContact, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::save_prospect_contact(&connection, contact).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn save_outreach_campaign_command(
+    state: State<'_, AppState>,
+    campaign: UpsertOutreachCampaign,
+) -> Result<OutreachCampaign, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::save_outreach_campaign(&connection, campaign).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn list_outreach_emails_command(
+    state: State<'_, AppState>,
+    status: Option<String>,
+) -> Result<Vec<OutreachEmail>, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::list_outreach_emails(&connection, status.as_deref()).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn save_outreach_email_command(
+    state: State<'_, AppState>,
+    email: UpsertOutreachEmail,
+) -> Result<OutreachEmail, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::save_outreach_email(&connection, email).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn record_email_opt_out_command(
+    state: State<'_, AppState>,
+    opt_out: UpsertEmailOptOut,
+) -> Result<EmailOptOut, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    queries::record_email_opt_out(&connection, opt_out).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

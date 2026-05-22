@@ -1,0 +1,9 @@
+Subject: Congrats on {{fundingStage}} - {{targetRole}} interest
+
+Hi {{contactFirstName}},
+
+Saw {{companyName}} raised {{fundingAmount}} {{daysAgo}}. I build {{userSkillMatch}} and would be interested in helping the team as a {{senderRole}}.
+
+Would you be open to a quick conversation?
+
+{{senderName}}

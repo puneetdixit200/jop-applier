@@ -1,0 +1,9 @@
+Subject: Re: {{companyName}} and {{targetRole}}
+
+Hi {{contactFirstName}},
+
+Quick follow-up on my note from {{daysSinceLastEmail}} days ago. I am especially interested in {{companyName}} because of the recent {{fundingStage}} and the work around {{userSkillMatch}}.
+
+Worth a brief chat?
+
+{{senderName}}

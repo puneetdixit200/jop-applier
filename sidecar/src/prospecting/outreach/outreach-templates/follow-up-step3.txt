@@ -1,0 +1,9 @@
+Subject: Last note - {{companyName}}
+
+Hi {{contactFirstName}},
+
+Last note from me. If full-time roles are not open, I would still be glad to explore contract or internship work around {{userSkillMatch}}.
+
+Should I close the loop here?
+
+{{senderName}}

@@ -1,0 +1,9 @@
+Subject: {{companyName}} funding and {{senderRole}} fit
+
+Hi {{contactFirstName}},
+
+Congrats on the {{fundingStage}} round led by {{leadInvestor}}. Your work at {{companyName}} lines up with my background in {{userSkillMatch}}.
+
+Would a short intro call be useful?
+
+{{senderName}}

@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   CheckCheck,
   FileText,
+  Send,
   Play,
   Plus,
   Search,
@@ -30,8 +31,11 @@ import {
   listCommunications,
   listContacts,
   listDocuments,
+  listFundedCompanies,
   listJobs,
   listNotifications,
+  listOutreachEmails,
+  listProspectContacts,
   listScheduledTasks,
   markNotificationRead,
   runDueScheduledTasks,
@@ -49,7 +53,10 @@ import {
   type Communication,
   type DatabaseEncryptionStatus,
   type Document,
+  type FundedCompany,
   type Notification as AppNotification,
+  type OutreachEmail,
+  type ProspectContact,
   type UpsertUserProfile,
   type UserProfile,
 } from "./lib/tauri-api";
@@ -122,6 +129,14 @@ import {
   buildNotificationInbox,
   type NotificationInbox,
 } from "./lib/notification-inbox";
+import {
+  buildOutreachAnalytics,
+  buildOutreachReviewQueue,
+  buildProspectingDashboard,
+  type OutreachAnalyticsSummary,
+  type OutreachReviewQueueItem,
+  type ProspectingDashboard,
+} from "./lib/prospecting-dashboard";
 import { deliverTauriWorkflowOsNotifications } from "./lib/tauri-notifications";
 import {
   buildOnboardingStatus,
@@ -153,6 +168,8 @@ type AutomationSettings = {
 const routes: Array<{ id: RouteId; label: string; icon: typeof BarChart3 }> = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
   { id: "jobs", label: "Jobs", icon: BriefcaseBusiness },
+  { id: "prospecting", label: "Prospecting", icon: Bot },
+  { id: "outreach", label: "Outreach", icon: Send },
   { id: "applications", label: "Applications", icon: FileText },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "profile", label: "Profile", icon: UserRound },
@@ -241,6 +258,95 @@ const previewContacts: Contact[] = [
     linkedin_url: "https://linkedin.example/in/nisha",
     role: "referral",
     notes: "Alumni referral",
+  }),
+];
+
+const previewFundedCompanies: FundedCompany[] = [
+  fundedCompanyRecord({
+    id: "preview-setu",
+    name: "Setu by Pine Labs",
+    domain: "setu.co",
+    funding_stage: "series_a",
+    funding_amount: 30_000_000,
+    investors: ["Bharat Inclusion Fund"],
+    lead_investor: "Bharat Inclusion Fund",
+    relevance_score: 91,
+    status: "review",
+    ai_summary: "Fintech API platform with strong backend fit.",
+  }),
+  fundedCompanyRecord({
+    id: "preview-zolve",
+    name: "Zolve",
+    domain: "zolve.com",
+    funding_stage: "series_b",
+    funding_amount: 100_000_000,
+    investors: ["Accel"],
+    lead_investor: "Accel",
+    relevance_score: 82,
+    status: "queued",
+    ai_summary: "Global fintech hiring across product and platform teams.",
+  }),
+  fundedCompanyRecord({
+    id: "preview-groww",
+    name: "Groww",
+    domain: "groww.in",
+    funding_stage: "series_e",
+    funding_amount: 250_000_000,
+    investors: ["Tiger Global"],
+    lead_investor: "Tiger Global",
+    relevance_score: 74,
+    status: "draft",
+  }),
+];
+
+const previewProspectContacts: ProspectContact[] = [
+  prospectContactRecord({
+    id: "preview-setu-priya",
+    company_id: "preview-setu",
+    full_name: "Priya Sharma",
+    email: "priya@setu.co",
+    email_confidence: 0.91,
+    role: "hr_manager",
+  }),
+  prospectContactRecord({
+    id: "preview-setu-aman",
+    company_id: "preview-setu",
+    full_name: "Aman Founder",
+    email: "aman@setu.co",
+    email_confidence: 0.82,
+    role: "founder",
+  }),
+  prospectContactRecord({
+    id: "preview-zolve-divya",
+    company_id: "preview-zolve",
+    full_name: "Divya Mehta",
+    email: "divya@zolve.com",
+    email_confidence: 0.8,
+    role: "recruiter",
+  }),
+];
+
+const previewOutreachEmails: OutreachEmail[] = [
+  outreachEmailRecord({
+    id: "preview-review-setu",
+    campaign_id: "preview-campaign-setu",
+    contact_id: "preview-setu-priya",
+    status: "pending",
+    scheduled_at: "2026-05-23T04:30:00.000Z",
+  }),
+  outreachEmailRecord({
+    id: "preview-sent-zolve",
+    campaign_id: "preview-campaign-zolve",
+    contact_id: "preview-zolve-divya",
+    status: "sent",
+    sent_at: "2026-05-22T04:30:00.000Z",
+  }),
+  outreachEmailRecord({
+    id: "preview-replied-setu",
+    campaign_id: "preview-campaign-setu",
+    contact_id: "preview-setu-aman",
+    status: "replied",
+    sent_at: "2026-05-21T04:30:00.000Z",
   }),
 ];
 
@@ -403,6 +509,9 @@ export function App() {
   const [persistedApplications, setPersistedApplications] = useState<Application[]>([]);
   const [previewApplicationRecords, setPreviewApplicationRecords] = useState<Application[]>(previewApplications);
   const [persistedContacts, setPersistedContacts] = useState<Contact[]>([]);
+  const [persistedFundedCompanies, setPersistedFundedCompanies] = useState<FundedCompany[]>([]);
+  const [persistedProspectContacts, setPersistedProspectContacts] = useState<ProspectContact[]>([]);
+  const [persistedOutreachEmails, setPersistedOutreachEmails] = useState<OutreachEmail[]>([]);
   const [contactDraft, setContactDraft] = useState<ContactEditorDraft>(() => emptyContactDraft());
   const [persistedNotifications, setPersistedNotifications] = useState<AppNotification[]>([]);
   const [previewNotificationRecords, setPreviewNotificationRecords] = useState<AppNotification[]>(previewNotifications);
@@ -447,6 +556,33 @@ export function App() {
   const notificationInbox = useMemo(
     () => buildNotificationInbox(visibleNotifications),
     [visibleNotifications],
+  );
+  const visibleFundedCompanies =
+    persistedFundedCompanies.length > 0 ? persistedFundedCompanies : previewFundedCompanies;
+  const visibleProspectContacts =
+    persistedProspectContacts.length > 0 ? persistedProspectContacts : previewProspectContacts;
+  const visibleOutreachEmails =
+    persistedOutreachEmails.length > 0 ? persistedOutreachEmails : previewOutreachEmails;
+  const prospectingDashboard = useMemo(
+    () =>
+      buildProspectingDashboard(
+        { companies: visibleFundedCompanies, contacts: visibleProspectContacts },
+        { minScore: 0 },
+      ),
+    [visibleFundedCompanies, visibleProspectContacts],
+  );
+  const outreachReviewQueue = useMemo(
+    () =>
+      buildOutreachReviewQueue({
+        companies: visibleFundedCompanies,
+        contacts: visibleProspectContacts,
+        emails: visibleOutreachEmails,
+      }),
+    [visibleFundedCompanies, visibleProspectContacts, visibleOutreachEmails],
+  );
+  const outreachAnalytics = useMemo(
+    () => buildOutreachAnalytics(visibleOutreachEmails),
+    [visibleOutreachEmails],
   );
   const onboardingStatus = useMemo(
     () => buildOnboardingStatus(profile, settings),
@@ -509,6 +645,8 @@ export function App() {
         storedApplications,
         storedContacts,
         storedNotifications,
+        storedFundedCompanies,
+        storedOutreachEmails,
       ] = await Promise.all([
         getUserProfile(),
         getSetting("ai.provider"),
@@ -528,7 +666,12 @@ export function App() {
         listApplications(),
         listContacts(),
         listNotifications(),
+        listFundedCompanies(),
+        listOutreachEmails(),
       ]);
+      const storedProspectContacts = storedFundedCompanies.length > 0
+        ? (await Promise.all(storedFundedCompanies.map((company) => listProspectContacts(company.id)))).flat()
+        : [];
 
       if (storedProfile) {
         setProfile(profileFromRecord(storedProfile));
@@ -541,6 +684,15 @@ export function App() {
       }
       if (storedContacts.length > 0) {
         setPersistedContacts(storedContacts);
+      }
+      if (storedFundedCompanies.length > 0) {
+        setPersistedFundedCompanies(storedFundedCompanies);
+      }
+      if (storedProspectContacts.length > 0) {
+        setPersistedProspectContacts(storedProspectContacts);
+      }
+      if (storedOutreachEmails.length > 0) {
+        setPersistedOutreachEmails(storedOutreachEmails);
       }
       setPersistedNotifications(storedNotifications);
       setScheduleSummaries(scheduledTaskSummaries(storedScheduledTasks, 8));
@@ -946,6 +1098,15 @@ export function App() {
           />
         )}
         {route === "jobs" && <Jobs jobs={visibleJobs} />}
+        {route === "prospecting" && (
+          <Prospecting dashboard={prospectingDashboard} companies={visibleFundedCompanies} />
+        )}
+        {route === "outreach" && (
+          <Outreach
+            analytics={outreachAnalytics}
+            reviewQueue={outreachReviewQueue}
+          />
+        )}
         {route === "applications" && (
           <Applications
             tracker={applicationTracker}
@@ -1369,6 +1530,112 @@ function Jobs({ jobs }: { jobs: JobSummary[] }) {
         ))}
       </div>
     </section>
+  );
+}
+
+function Prospecting({
+  dashboard,
+  companies,
+}: {
+  dashboard: ProspectingDashboard;
+  companies: FundedCompany[];
+}) {
+  return (
+    <div className="dashboard-grid">
+      <section className="metric-grid" aria-label="Prospecting metrics">
+        {[
+          { label: "Funded Companies", value: String(dashboard.summary.companies), tone: "green" },
+          { label: "Contacts Found", value: String(dashboard.summary.contacts), tone: "blue" },
+          { label: "Average Score", value: String(dashboard.summary.averageScore), tone: "amber" },
+          { label: "Review Ready", value: String(dashboard.rows.filter((row) => row.statusLabel === "Review").length), tone: "violet" },
+        ].map((metric) => (
+          <article className={`metric-card ${metric.tone}`} key={metric.label}>
+            <span>{metric.label}</span>
+            <strong>{metric.value}</strong>
+          </article>
+        ))}
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">ProspectCave</p>
+            <h3>Recently funded companies</h3>
+          </div>
+          <Bot size={19} aria-hidden="true" />
+        </div>
+        <div className="table-list">
+          {dashboard.rows.map((row) => {
+            const company = companies.find((item) => item.id === row.id);
+            return (
+              <div className="table-row" key={row.id}>
+                <span>{row.companyName}</span>
+                <span>{row.fundingLabel}</span>
+                <span>{row.contacts} contacts · {row.region}</span>
+                <strong>{row.score}</strong>
+                {company?.ai_summary && <small>{company.ai_summary}</small>}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function Outreach({
+  analytics,
+  reviewQueue,
+}: {
+  analytics: OutreachAnalyticsSummary;
+  reviewQueue: OutreachReviewQueueItem[];
+}) {
+  return (
+    <div className="dashboard-grid">
+      <section className="metric-grid" aria-label="Outreach metrics">
+        {[
+          { label: "Sent", value: String(analytics.sent), tone: "green" },
+          { label: "Opened", value: `${analytics.opened} (${analytics.openRate}%)`, tone: "blue" },
+          { label: "Replied", value: `${analytics.replied} (${analytics.replyRate}%)`, tone: "amber" },
+          { label: "Bounced", value: `${analytics.bounced} (${analytics.bounceRate}%)`, tone: "violet" },
+        ].map((metric) => (
+          <article className={`metric-card ${metric.tone}`} key={metric.label}>
+            <span>{metric.label}</span>
+            <strong>{metric.value}</strong>
+          </article>
+        ))}
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Review queue</p>
+            <h3>{reviewQueue.length} emails awaiting approval</h3>
+          </div>
+          <Send size={19} aria-hidden="true" />
+        </div>
+        <div className="table-list">
+          {reviewQueue.length > 0 ? (
+            reviewQueue.map((item) => (
+              <div className="table-row" key={item.id}>
+                <span>{item.contactLabel}</span>
+                <span>{item.companyName}</span>
+                <span>{item.subject}</span>
+                <strong>Step {item.sequenceStep}</strong>
+                <small>{item.bodyPreview}</small>
+              </div>
+            ))
+          ) : (
+            <div className="table-row">
+              <span>No outreach emails need review.</span>
+              <span>Queued campaigns will appear here.</span>
+              <span>-</span>
+              <strong>0</strong>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -2471,6 +2738,66 @@ function contactRecord(overrides: Partial<Contact>): Contact {
     role: null,
     notes: null,
     created_at: "2026-05-21T10:00:00Z",
+    ...overrides,
+  };
+}
+
+function fundedCompanyRecord(overrides: Partial<FundedCompany>): FundedCompany {
+  return {
+    id: "preview-funded-company",
+    name: "Funded Company",
+    domain: "company.example",
+    description: "Recently funded startup",
+    industry: "Technology",
+    tech_stack: ["React", "Node.js"],
+    funding_stage: "seed",
+    funding_amount: null,
+    funding_currency: "USD",
+    funding_date: "2026-05-01T00:00:00.000Z",
+    investors: [],
+    lead_investor: null,
+    source: "inc42",
+    source_url: "https://source.example/company",
+    region: "india",
+    relevance_score: 70,
+    ai_summary: null,
+    status: "discovered",
+    created_at: "2026-05-23T04:30:00.000Z",
+    updated_at: "2026-05-23T04:30:00.000Z",
+    ...overrides,
+  };
+}
+
+function prospectContactRecord(overrides: Partial<ProspectContact>): ProspectContact {
+  return {
+    id: "preview-prospect-contact",
+    company_id: "preview-funded-company",
+    full_name: "Prospect Contact",
+    email: "contact@company.example",
+    email_confidence: 0.8,
+    email_status: "valid",
+    role: "recruiter",
+    linkedin_url: null,
+    source: "hunter",
+    opted_out: false,
+    created_at: "2026-05-23T04:30:00.000Z",
+    ...overrides,
+  };
+}
+
+function outreachEmailRecord(overrides: Partial<OutreachEmail>): OutreachEmail {
+  return {
+    id: "preview-outreach-email",
+    campaign_id: "preview-campaign",
+    contact_id: "preview-prospect-contact",
+    sequence_step: 1,
+    subject: "Congrats on the funding",
+    body_html: "<p>Hi, saw the funding news. Open to a quick chat?</p>",
+    status: "pending",
+    scheduled_at: "2026-05-23T04:30:00.000Z",
+    sent_at: null,
+    message_id: null,
+    created_at: "2026-05-23T04:30:00.000Z",
     ...overrides,
   };
 }

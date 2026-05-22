@@ -58,7 +58,7 @@ fn converts_existing_sqlite_database_to_sqlcipher_and_back() {
 
     let encrypted = open_encrypted_database(&database_path, "correct horse battery staple")
         .expect("open with key");
-    assert_eq!(schema_version(&encrypted).expect("read schema version"), 3);
+    assert_eq!(schema_version(&encrypted).expect("read schema version"), 4);
     assert_eq!(
         get_user_profile(&encrypted)
             .expect("read encrypted profile")
@@ -89,12 +89,12 @@ fn startup_opens_new_database_encrypted_when_key_is_configured() {
     std::env::set_var(DATABASE_KEY_ENV, "startup passphrase");
 
     let connection = open_application_database(&database_path).expect("open app database");
-    assert_eq!(schema_version(&connection).expect("read schema version"), 3);
+    assert_eq!(schema_version(&connection).expect("read schema version"), 4);
     drop(connection);
 
     assert!(database_file_is_encrypted(&database_path).expect("read encrypted header"));
     let reopened = open_application_database(&database_path).expect("reopen encrypted database");
-    assert_eq!(schema_version(&reopened).expect("read schema version"), 3);
+    assert_eq!(schema_version(&reopened).expect("read schema version"), 4);
 
     std::env::remove_var(DATABASE_KEY_ENV);
     fs::remove_dir_all(dir).expect("remove temp database dir");

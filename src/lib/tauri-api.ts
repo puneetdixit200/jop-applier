@@ -178,6 +178,77 @@ export type Contact = {
 
 export type UpsertContact = Omit<Contact, "id" | "created_at">;
 
+export type FundedCompany = {
+  id: string;
+  name: string;
+  domain: string | null;
+  description: string | null;
+  industry: string | null;
+  tech_stack: string[];
+  funding_stage: string | null;
+  funding_amount: number | null;
+  funding_currency: string;
+  funding_date: string | null;
+  investors: string[];
+  lead_investor: string | null;
+  source: string;
+  source_url: string | null;
+  region: string;
+  relevance_score: number | null;
+  ai_summary: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UpsertFundedCompany = Omit<FundedCompany, "id" | "created_at" | "updated_at">;
+
+export type ProspectContact = {
+  id: string;
+  company_id: string;
+  full_name: string;
+  email: string;
+  email_confidence: number;
+  email_status: string;
+  role: string;
+  linkedin_url: string | null;
+  source: string;
+  opted_out: boolean;
+  created_at: string;
+};
+
+export type UpsertProspectContact = Omit<ProspectContact, "id" | "created_at">;
+
+export type OutreachCampaign = {
+  id: string;
+  company_id: string;
+  campaign_type: string;
+  status: string;
+  sequence_json: string;
+  auto_approve: boolean;
+  max_emails_per_day: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UpsertOutreachCampaign = Omit<OutreachCampaign, "id" | "created_at" | "updated_at">;
+
+export type OutreachEmail = {
+  id: string;
+  campaign_id: string;
+  contact_id: string;
+  sequence_step: number;
+  subject: string;
+  body_html: string;
+  status: string;
+  scheduled_at: string | null;
+  sent_at: string | null;
+  message_id: string | null;
+  created_at: string;
+};
+
+export type UpsertOutreachEmail = Omit<OutreachEmail, "id" | "created_at">;
+
 export type Communication = {
   id: string;
   application_id: string | null;
@@ -371,6 +442,34 @@ export async function listContacts() {
 
 export async function saveContact(contact: UpsertContact) {
   return invoke<Contact>("save_contact_command", { contact });
+}
+
+export async function listFundedCompanies() {
+  return invoke<FundedCompany[]>("list_funded_companies_command");
+}
+
+export async function saveFundedCompany(company: UpsertFundedCompany) {
+  return invoke<FundedCompany>("save_funded_company_command", { company });
+}
+
+export async function listProspectContacts(companyId: string) {
+  return invoke<ProspectContact[]>("list_prospect_contacts_command", { companyId });
+}
+
+export async function saveProspectContact(contact: UpsertProspectContact) {
+  return invoke<ProspectContact>("save_prospect_contact_command", { contact });
+}
+
+export async function saveOutreachCampaign(campaign: UpsertOutreachCampaign) {
+  return invoke<OutreachCampaign>("save_outreach_campaign_command", { campaign });
+}
+
+export async function listOutreachEmails(status?: string) {
+  return invoke<OutreachEmail[]>("list_outreach_emails_command", { status: status ?? null });
+}
+
+export async function saveOutreachEmail(email: UpsertOutreachEmail) {
+  return invoke<OutreachEmail>("save_outreach_email_command", { email });
 }
 
 export async function listCommunications(applicationId: string) {

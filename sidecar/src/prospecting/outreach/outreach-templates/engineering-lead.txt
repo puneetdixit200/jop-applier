@@ -1,0 +1,9 @@
+Subject: {{companyName}} engineering growth
+
+Hi {{contactFirstName}},
+
+I saw {{companyName}} recently raised {{fundingAmount}} and is likely growing the engineering team. My background is strongest in {{userSkillMatch}}.
+
+Could I send over a short profile for {{targetRole}} roles?
+
+{{senderName}}

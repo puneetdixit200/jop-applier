@@ -1,6 +1,14 @@
 import { create } from "zustand";
 
-export type RouteId = "dashboard" | "jobs" | "applications" | "analytics" | "profile" | "settings";
+export type RouteId =
+  | "dashboard"
+  | "jobs"
+  | "prospecting"
+  | "outreach"
+  | "applications"
+  | "analytics"
+  | "profile"
+  | "settings";
 
 type AppStore = {
   route: RouteId;
