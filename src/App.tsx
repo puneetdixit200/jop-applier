@@ -1668,7 +1668,7 @@ function SettingsPanel({
       <fieldset>
         <legend>AI provider</legend>
         <div className="segmented-control">
-          {["ollama", "openrouter", "openai"].map((option) => (
+          {["ollama", "openrouter", "openai", "anthropic", "groq"].map((option) => (
             <button
               key={option}
               className={settings.provider === option ? "selected" : ""}

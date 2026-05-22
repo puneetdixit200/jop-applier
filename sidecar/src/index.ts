@@ -1,5 +1,7 @@
 import { AIEngine } from "./ai/ai-engine.js";
 import type { AIProvider } from "./ai/provider-interface.js";
+import { AnthropicProvider } from "./ai/providers/anthropic-provider.js";
+import { GroqProvider } from "./ai/providers/groq-provider.js";
 import { OllamaProvider } from "./ai/providers/ollama-provider.js";
 import { OpenAIProvider } from "./ai/providers/openai-provider.js";
 import { OpenRouterProvider } from "./ai/providers/openrouter-provider.js";
@@ -166,6 +168,24 @@ export function createAIEngineFromEnv(env: NodeJS.ProcessEnv = process.env): AIE
         apiKey: env.OPENAI_API_KEY,
         model: env.OPENAI_MODEL ?? "gpt-4.1-mini",
         embeddingModel: env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small",
+      }),
+    );
+  }
+
+  if (env.ANTHROPIC_API_KEY) {
+    providers.push(
+      new AnthropicProvider({
+        apiKey: env.ANTHROPIC_API_KEY,
+        model: env.ANTHROPIC_MODEL ?? "claude-3-5-haiku-latest",
+      }),
+    );
+  }
+
+  if (env.GROQ_API_KEY) {
+    providers.push(
+      new GroqProvider({
+        apiKey: env.GROQ_API_KEY,
+        model: env.GROQ_MODEL ?? "llama-3.1-8b-instant",
       }),
     );
   }

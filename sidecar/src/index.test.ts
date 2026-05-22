@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createSidecarRuntime } from "./index.js";
+import { createAIEngineFromEnv, createSidecarRuntime } from "./index.js";
 import type { BrowserSession } from "./browser/browser-manager.js";
 import type { BrowserSessionHealthTarget } from "./browser/session-health.js";
 import type { FollowUpApplication, FollowUpUpdate } from "./applications/follow-up-scheduler.js";
@@ -64,6 +64,30 @@ function jsonResponse(payload: unknown): Response {
 }
 
 describe("sidecar runtime", () => {
+  it("wires configured Anthropic and Groq providers into the AI engine", () => {
+    const engine = createAIEngineFromEnv({
+      OLLAMA_BASE_URL: "http://localhost:11434",
+      OLLAMA_MODEL: "mistral:7b-instruct",
+      ANTHROPIC_API_KEY: "anthropic-key",
+      ANTHROPIC_MODEL: "claude-3-5-haiku-latest",
+      GROQ_API_KEY: "groq-key",
+      GROQ_MODEL: "llama-3.1-8b-instant",
+    } as NodeJS.ProcessEnv);
+
+    engine.switchProvider("anthropic");
+    expect(engine.activeProvider()).toEqual({
+      provider: "anthropic",
+      model: "claude-3-5-haiku-latest",
+      local: false,
+    });
+    engine.switchProvider("groq");
+    expect(engine.activeProvider()).toEqual({
+      provider: "groq",
+      model: "llama-3.1-8b-instant",
+      local: false,
+    });
+  });
+
   it("registers and runs the session-health workflow with browser session dependencies", async () => {
     const checkedAt = new Date("2026-05-28T10:00:00Z");
     const openedPlatforms: string[] = [];
