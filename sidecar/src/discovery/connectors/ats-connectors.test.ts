@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { BambooHrConnector } from "./bamboohr-connector.js";
 import { GreenhouseConnector } from "./greenhouse-connector.js";
+import { IcimsConnector } from "./icims-connector.js";
 import { LeverConnector } from "./lever-connector.js";
 import { WorkdayConnector } from "./workday-connector.js";
 
@@ -191,6 +193,122 @@ describe("ATS job connectors", () => {
       rawHtml: "<p>Build React workflow tools.</p><ul><li>React</li><li>TypeScript</li></ul>",
     });
   });
+
+  it("searches BambooHR public career listings and maps them to raw listings", async () => {
+    const requestedUrls: string[] = [];
+    const connector = new BambooHrConnector({
+      subdomain: "northstar",
+      fetch: async (url) => {
+        requestedUrls.push(String(url));
+        return jsonResponse({
+          result: [
+            {
+              id: 404,
+              jobOpeningName: "React Support Intern",
+              locationLabel: "Remote",
+              departmentLabel: "Engineering",
+              employmentStatus: "Internship",
+              datePosted: "2026-05-29T00:00:00Z",
+              description: "<p>Support React applicants.</p><ul><li>React</li><li>TypeScript</li></ul>",
+            },
+            {
+              id: 405,
+              jobOpeningName: "Office Manager",
+              locationLabel: "Mumbai",
+              description: "<p>Office coordination.</p>",
+            },
+          ],
+        });
+      },
+    });
+
+    const listings = await collect(connector.search({ keywords: ["React"], remote: true }));
+
+    expect(requestedUrls).toEqual(["https://northstar.bamboohr.com/careers/list"]);
+    expect(listings).toEqual([
+      {
+        sourceId: "404",
+        platform: "bamboohr",
+        url: "https://northstar.bamboohr.com/careers/404",
+        title: "React Support Intern",
+        company: "northstar",
+        location: "Remote",
+        description: "Support React applicants. React TypeScript",
+        rawHtml: "<p>Support React applicants.</p><ul><li>React</li><li>TypeScript</li></ul>",
+        postedDate: new Date("2026-05-29T00:00:00Z"),
+      },
+    ]);
+    await expect(connector.getJobDetails("https://northstar.bamboohr.com/careers/404"))
+      .resolves.toEqual({
+        url: "https://northstar.bamboohr.com/careers/404",
+        description: "Support React applicants. React TypeScript",
+        requirements: ["React", "TypeScript"],
+        rawHtml: "<p>Support React applicants.</p><ul><li>React</li><li>TypeScript</li></ul>",
+      });
+  });
+
+  it("searches iCIMS public career pages and maps them to raw listings", async () => {
+    const requestedUrls: string[] = [];
+    const connector = new IcimsConnector({
+      searchUrl: "https://northstar.icims.com/jobs/search",
+      company: "Northstar Labs",
+      fetch: async (url) => {
+        const requestUrl = String(url);
+        requestedUrls.push(requestUrl);
+
+        if (requestUrl === "https://northstar.icims.com/jobs/search?ss=1&searchKeyword=React") {
+          return htmlResponse(`
+            <a href="/jobs/501/react-platform-intern/job">React Platform Intern</a>
+            <a href="/jobs/502/finance-analyst/job">Finance Analyst</a>
+          `);
+        }
+        if (requestUrl === "https://northstar.icims.com/jobs/501/react-platform-intern/job") {
+          return htmlResponse(`
+            <h1>React Platform Intern</h1>
+            <span class="job-location">Remote - Bengaluru</span>
+            <section><p>Build React tooling.</p><ul><li>React</li><li>Node.js</li></ul></section>
+          `);
+        }
+        if (requestUrl === "https://northstar.icims.com/jobs/502/finance-analyst/job") {
+          return htmlResponse(`
+            <h1>Finance Analyst</h1>
+            <span class="job-location">Mumbai</span>
+            <p>Finance reporting.</p>
+          `);
+        }
+
+        throw new Error(`unexpected fetch: ${requestUrl}`);
+      },
+    });
+
+    const listings = await collect(connector.search({ keywords: ["React"], remote: true }));
+
+    expect(requestedUrls).toEqual([
+      "https://northstar.icims.com/jobs/search?ss=1&searchKeyword=React",
+      "https://northstar.icims.com/jobs/501/react-platform-intern/job",
+      "https://northstar.icims.com/jobs/502/finance-analyst/job",
+    ]);
+    expect(listings).toEqual([
+      {
+        sourceId: "501",
+        platform: "icims",
+        url: "https://northstar.icims.com/jobs/501/react-platform-intern/job",
+        title: "React Platform Intern",
+        company: "Northstar Labs",
+        location: "Remote - Bengaluru",
+        description: "React Platform Intern Remote - Bengaluru Build React tooling. React Node.js",
+        rawHtml:
+          "\n            <h1>React Platform Intern</h1>\n            <span class=\"job-location\">Remote - Bengaluru</span>\n            <section><p>Build React tooling.</p><ul><li>React</li><li>Node.js</li></ul></section>\n          ",
+        postedDate: undefined,
+      },
+    ]);
+    await expect(
+      connector.getJobDetails("https://northstar.icims.com/jobs/501/react-platform-intern/job"),
+    ).resolves.toMatchObject({
+      url: "https://northstar.icims.com/jobs/501/react-platform-intern/job",
+      requirements: ["React", "Node.js"],
+    });
+  });
 });
 
 async function collect<T>(items: AsyncGenerator<T>): Promise<T[]> {
@@ -206,5 +324,12 @@ function jsonResponse(value: unknown): Response {
   return new Response(JSON.stringify(value), {
     status: 200,
     headers: { "Content-Type": "application/json" },
+  });
+}
+
+function htmlResponse(value: string): Response {
+  return new Response(value, {
+    status: 200,
+    headers: { "Content-Type": "text/html" },
   });
 }

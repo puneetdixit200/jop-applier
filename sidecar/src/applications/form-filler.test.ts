@@ -78,6 +78,17 @@ describe("application form filler strategies", () => {
     expect(uploadedFiles).toEqual([{ selector: "#resume", path: "/docs/deepak-resume.pdf" }]);
   });
 
+  it("selects Workday, BambooHR, and iCIMS strategies before generic fallback", async () => {
+    const strategies = createDefaultFormFillerStrategies();
+
+    await expect(selectedPlatform(strategies, "https://northstar.wd1.myworkdayjobs.com/job/1"))
+      .resolves.toBe("workday");
+    await expect(selectedPlatform(strategies, "https://northstar.bamboohr.com/careers/404"))
+      .resolves.toBe("bamboohr");
+    await expect(selectedPlatform(strategies, "https://northstar.icims.com/jobs/501/role/job"))
+      .resolves.toBe("icims");
+  });
+
   it("selects LinkedIn Easy Apply and fills custom screening questions from natural labels", async () => {
     const filledText: Array<{ selector: string; value: string }> = [];
     const selectedOptions: Array<{ selector: string; value: string }> = [];
@@ -196,6 +207,20 @@ describe("application form filler strategies", () => {
     expect(selectedOptions).toEqual([{ selector: "#authorized", value: "Yes" }]);
   });
 });
+
+async function selectedPlatform(
+  strategies: ReturnType<typeof createDefaultFormFillerStrategies>,
+  url: string,
+): Promise<string> {
+  const page = formPage(url, []);
+  for (const strategy of strategies) {
+    if (await strategy.detect(page, applicationForm())) {
+      return strategy.platform;
+    }
+  }
+
+  throw new Error("No strategy selected");
+}
 
 function applicationForm(overrides: Partial<ApplicationFormInput> = {}): ApplicationFormInput {
   return {

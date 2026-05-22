@@ -13,6 +13,9 @@ export type DiscoverySettings = {
   leverCompany: string;
   workdayTenant: string;
   workdaySite: string;
+  bambooHrSubdomain: string;
+  icimsSearchUrl: string;
+  icimsCompany: string;
   careerPageUrl: string;
   careerPageCompany: string;
 };
@@ -35,6 +38,9 @@ export const defaultDiscoverySettings: DiscoverySettings = {
   leverCompany: "",
   workdayTenant: "",
   workdaySite: "",
+  bambooHrSubdomain: "",
+  icimsSearchUrl: "",
+  icimsCompany: "",
   careerPageUrl: "",
   careerPageCompany: "",
 };
@@ -51,6 +57,8 @@ export function discoverySettingsFromStoredValues(
   const greenhouseSource = firstAtsSource(atsSourcesValue, "greenhouse");
   const leverSource = firstAtsSource(atsSourcesValue, "lever");
   const workdaySource = firstAtsSource(atsSourcesValue, "workday");
+  const bambooHrSource = firstAtsSource(atsSourcesValue, "bamboohr");
+  const icimsSource = firstAtsSource(atsSourcesValue, "icims");
   const careerPageSource = firstCareerPageSource(careerPageSourcesValue);
   const hasStoredSearchQueries = Array.isArray(searchQueriesValue);
   const hasStoredFeedSources = Array.isArray(feedSourcesValue);
@@ -73,6 +81,10 @@ export function discoverySettingsFromStoredValues(
     leverCompany: leverSource?.company ?? (hasStoredAtsSources ? "" : fallback.leverCompany),
     workdayTenant: workdaySource?.tenant ?? (hasStoredAtsSources ? "" : fallback.workdayTenant),
     workdaySite: workdaySource?.site ?? (hasStoredAtsSources ? "" : fallback.workdaySite),
+    bambooHrSubdomain:
+      bambooHrSource?.subdomain ?? (hasStoredAtsSources ? "" : fallback.bambooHrSubdomain),
+    icimsSearchUrl: icimsSource?.searchUrl ?? (hasStoredAtsSources ? "" : fallback.icimsSearchUrl),
+    icimsCompany: textOrFallback(icimsSource?.company, fallback.icimsCompany),
     careerPageUrl: careerPageSource?.url ?? (hasStoredCareerPageSources ? "" : fallback.careerPageUrl),
     careerPageCompany: textOrFallback(careerPageSource?.company, fallback.careerPageCompany),
   };
@@ -87,6 +99,9 @@ export function discoverySettingsToStoredValues(
   const leverCompany = settings.leverCompany.trim();
   const workdayTenant = settings.workdayTenant.trim();
   const workdaySite = settings.workdaySite.trim();
+  const bambooHrSubdomain = settings.bambooHrSubdomain.trim();
+  const icimsSearchUrl = settings.icimsSearchUrl.trim();
+  const icimsCompany = settings.icimsCompany.trim();
   const careerPageUrl = settings.careerPageUrl.trim();
   const careerPageCompany = settings.careerPageCompany.trim();
   const searchQueries =
@@ -115,6 +130,16 @@ export function discoverySettingsToStoredValues(
     ...(leverCompany ? [{ type: "lever", company: leverCompany }] : []),
     ...(workdayTenant && workdaySite
       ? [{ type: "workday", tenant: workdayTenant, site: workdaySite }]
+      : []),
+    ...(bambooHrSubdomain ? [{ type: "bamboohr", subdomain: bambooHrSubdomain }] : []),
+    ...(icimsSearchUrl
+      ? [
+          {
+            type: "icims",
+            searchUrl: icimsSearchUrl,
+            ...(icimsCompany ? { company: icimsCompany } : {}),
+          },
+        ]
       : []),
   ];
   const careerPageSources =
@@ -216,6 +241,15 @@ function isAtsSource<Type extends AtsSource["type"]>(
   if (type === "lever") {
     return typeof value.company === "string";
   }
+  if (type === "bamboohr") {
+    return typeof value.subdomain === "string";
+  }
+  if (type === "icims") {
+    return (
+      (typeof value.searchUrl === "string" || typeof value.customerId === "string") &&
+      (value.company === undefined || typeof value.company === "string")
+    );
+  }
 
   return typeof value.tenant === "string" && typeof value.site === "string";
 }
@@ -223,7 +257,16 @@ function isAtsSource<Type extends AtsSource["type"]>(
 type AtsSource =
   | { type: "greenhouse"; boardToken: string }
   | { type: "lever"; company: string }
-  | { type: "workday"; tenant: string; site: string; baseUrl?: string };
+  | { type: "workday"; tenant: string; site: string; baseUrl?: string }
+  | { type: "bamboohr"; subdomain: string; baseUrl?: string }
+  | {
+      type: "icims";
+      searchUrl?: string;
+      customerId?: string;
+      portal?: string;
+      company?: string;
+      apiBaseUrl?: string;
+    };
 
 function isCareerPageSource(value: unknown): value is {
   url: string;

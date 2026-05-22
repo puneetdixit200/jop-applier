@@ -20,6 +20,12 @@ describe("discovery settings", () => {
         { type: "greenhouse", boardToken: "northstar" },
         { type: "lever", company: "atlas" },
         { type: "workday", tenant: "northstar", site: "careers" },
+        { type: "bamboohr", subdomain: "northstar" },
+        {
+          type: "icims",
+          searchUrl: "https://northstar.icims.com/jobs/search",
+          company: "Northstar Labs",
+        },
       ],
       [
         {
@@ -41,6 +47,9 @@ describe("discovery settings", () => {
       leverCompany: "atlas",
       workdayTenant: "northstar",
       workdaySite: "careers",
+      bambooHrSubdomain: "northstar",
+      icimsSearchUrl: "https://northstar.icims.com/jobs/search",
+      icimsCompany: "Northstar Labs",
       careerPageUrl: "https://northstar.example/careers",
       careerPageCompany: "Northstar Labs",
     });
@@ -58,6 +67,9 @@ describe("discovery settings", () => {
       leverCompany: "atlas",
       workdayTenant: "northstar",
       workdaySite: "careers",
+      bambooHrSubdomain: "northstar",
+      icimsSearchUrl: "https://northstar.icims.com/jobs/search",
+      icimsCompany: "Northstar Labs",
       careerPageUrl: "https://northstar.example/careers",
       careerPageCompany: "Northstar Labs",
     });
@@ -76,6 +88,12 @@ describe("discovery settings", () => {
         { type: "greenhouse", boardToken: "northstar" },
         { type: "lever", company: "atlas" },
         { type: "workday", tenant: "northstar", site: "careers" },
+        { type: "bamboohr", subdomain: "northstar" },
+        {
+          type: "icims",
+          searchUrl: "https://northstar.icims.com/jobs/search",
+          company: "Northstar Labs",
+        },
       ],
       careerPageSources: [
         {
@@ -99,6 +117,9 @@ describe("discovery settings", () => {
       leverCompany: " ",
       workdayTenant: "northstar",
       workdaySite: " ",
+      bambooHrSubdomain: " ",
+      icimsSearchUrl: " ",
+      icimsCompany: "Northstar Labs",
       careerPageUrl: " ",
       careerPageCompany: " ",
     });

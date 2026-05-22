@@ -63,6 +63,14 @@ function jsonResponse(payload: unknown): Response {
   } as unknown as Response;
 }
 
+function htmlResponse(payload: string): Response {
+  return {
+    ok: true,
+    status: 200,
+    text: async () => payload,
+  } as unknown as Response;
+}
+
 describe("sidecar runtime", () => {
   it("wires configured Anthropic and Groq providers into the AI engine", () => {
     const engine = createAIEngineFromEnv({
@@ -464,6 +472,43 @@ describe("sidecar runtime", () => {
         });
       }
 
+      if (requestUrl === "https://northstar.bamboohr.com/careers/list") {
+        return jsonResponse({
+          result: [
+            {
+              id: "bamboo-404",
+              jobOpeningName: "React BambooHR Engineer",
+              locationLabel: "Remote",
+              description: "<p>Build React BambooHR tools.</p><ul><li>React</li></ul>",
+              datePosted: "2026-05-23T10:00:00Z",
+            },
+          ],
+        });
+      }
+
+      if (requestUrl === "https://northstar.icims.com/jobs/search?ss=1&searchKeyword=React") {
+        return htmlResponse(`
+          <a href="/jobs/501/react-icims-engineer/job">React iCIMS Engineer</a>
+          <a href="/jobs/502/finance-analyst/job">Finance Analyst</a>
+        `);
+      }
+
+      if (requestUrl === "https://northstar.icims.com/jobs/501/react-icims-engineer/job") {
+        return htmlResponse(`
+          <h1>React iCIMS Engineer</h1>
+          <span class="job-location">Remote</span>
+          <p>Build React iCIMS tools.</p><ul><li>React</li></ul>
+        `);
+      }
+
+      if (requestUrl === "https://northstar.icims.com/jobs/502/finance-analyst/job") {
+        return htmlResponse(`
+          <h1>Finance Analyst</h1>
+          <span class="job-location">Mumbai</span>
+          <p>Finance reports.</p>
+        `);
+      }
+
       throw new Error(`unexpected fetch: ${requestUrl}`);
     }) as typeof fetch;
 
@@ -483,12 +528,18 @@ describe("sidecar runtime", () => {
                 site: "careers",
                 baseUrl: "https://northstar.wd1.myworkdayjobs.com",
               },
+              { type: "bamboohr", subdomain: "northstar" },
+              {
+                type: "icims",
+                searchUrl: "https://northstar.icims.com/jobs/search",
+                company: "Northstar Labs",
+              },
             ],
           },
         }),
       ).resolves.toMatchObject({
         queries: 1,
-        discovered: 3,
+        discovered: 5,
         stored: 0,
         jobs: [
           {
@@ -518,12 +569,34 @@ describe("sidecar runtime", () => {
             is_remote: true,
             requirements: ["React"],
           },
+          {
+            source_id: "bamboo-404",
+            platform: "bamboohr",
+            url: "https://northstar.bamboohr.com/careers/bamboo-404",
+            title: "React BambooHR Engineer",
+            company_name: "northstar",
+            is_remote: true,
+            requirements: ["React"],
+          },
+          {
+            source_id: "501",
+            platform: "icims",
+            url: "https://northstar.icims.com/jobs/501/react-icims-engineer/job",
+            title: "React iCIMS Engineer",
+            company_name: "Northstar Labs",
+            is_remote: true,
+            requirements: ["React"],
+          },
         ],
       });
       expect(requestedUrls).toEqual([
         "https://boards-api.greenhouse.io/v1/boards/northstar/jobs?content=true",
         "https://api.lever.co/v0/postings/atlas?mode=json",
         "https://northstar.wd1.myworkdayjobs.com/wday/cxs/northstar/careers/jobs",
+        "https://northstar.bamboohr.com/careers/list",
+        "https://northstar.icims.com/jobs/search?ss=1&searchKeyword=React",
+        "https://northstar.icims.com/jobs/501/react-icims-engineer/job",
+        "https://northstar.icims.com/jobs/502/finance-analyst/job",
         "https://boards-api.greenhouse.io/v1/boards/northstar/jobs?content=true",
         "https://api.lever.co/v0/postings/atlas?mode=json",
         "https://northstar.wd1.myworkdayjobs.com/wday/cxs/northstar/careers/jobs",

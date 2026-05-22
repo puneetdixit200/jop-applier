@@ -1765,6 +1765,27 @@ function SettingsPanel({
               onChange={(event) => updateDiscovery("workdaySite", event.target.value)}
             />
           </label>
+          <label>
+            BambooHR subdomain
+            <input
+              value={settings.discovery.bambooHrSubdomain}
+              onChange={(event) => updateDiscovery("bambooHrSubdomain", event.target.value)}
+            />
+          </label>
+          <label>
+            iCIMS search URL
+            <input
+              value={settings.discovery.icimsSearchUrl}
+              onChange={(event) => updateDiscovery("icimsSearchUrl", event.target.value)}
+            />
+          </label>
+          <label>
+            iCIMS company
+            <input
+              value={settings.discovery.icimsCompany}
+              onChange={(event) => updateDiscovery("icimsCompany", event.target.value)}
+            />
+          </label>
         </div>
       </fieldset>
       <fieldset className="settings-section">

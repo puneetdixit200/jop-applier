@@ -73,6 +73,9 @@ export function createDefaultFormFillerStrategies(): FormFillerStrategy[] {
     createCommonAtsStrategy("linkedin", (url) => url.includes("linkedin.com/jobs")),
     createCommonAtsStrategy("greenhouse", (url) => url.includes("greenhouse.io")),
     createCommonAtsStrategy("lever", (url) => url.includes("jobs.lever.co")),
+    createCommonAtsStrategy("workday", (url) => url.includes("myworkdayjobs.com")),
+    createCommonAtsStrategy("bamboohr", (url) => url.includes("bamboohr.com/careers")),
+    createCommonAtsStrategy("icims", (url) => url.includes("icims.com/jobs")),
     createCommonAtsStrategy("generic", () => true),
   ];
 }

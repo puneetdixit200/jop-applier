@@ -61,11 +61,13 @@ import {
 } from "./discovery/job-discovery-workflow.js";
 import type { JobConnector, SearchQuery } from "./discovery/connectors/connector-interface.js";
 import { DiscoveryManager } from "./discovery/discovery-manager.js";
+import { BambooHrConnector } from "./discovery/connectors/bamboohr-connector.js";
 import {
   CareerPageConnector,
   type CareerPageSource,
 } from "./discovery/connectors/career-page-connector.js";
 import { GreenhouseConnector } from "./discovery/connectors/greenhouse-connector.js";
+import { IcimsConnector } from "./discovery/connectors/icims-connector.js";
 import {
   HttpJsonFeedConnector,
   type HttpJsonFeedSource,
@@ -633,10 +635,25 @@ function discoveryConnectorsFromWorkflowInput(input: unknown): JobConnector[] {
       if (source.type === "lever") {
         return new LeverConnector({ company: source.company });
       }
-      return new WorkdayConnector({
-        tenant: source.tenant,
-        site: source.site,
-        baseUrl: source.baseUrl,
+      if (source.type === "workday") {
+        return new WorkdayConnector({
+          tenant: source.tenant,
+          site: source.site,
+          baseUrl: source.baseUrl,
+        });
+      }
+      if (source.type === "bamboohr") {
+        return new BambooHrConnector({
+          subdomain: source.subdomain,
+          baseUrl: source.baseUrl,
+        });
+      }
+      return new IcimsConnector({
+        searchUrl: source.searchUrl,
+        customerId: source.customerId,
+        portal: source.portal,
+        company: source.company,
+        apiBaseUrl: source.apiBaseUrl,
       });
     }),
     ...discoveryCareerPageSourcesFromWorkflowInput(input.discovery).map(
@@ -657,7 +674,16 @@ function discoveryFeedSourcesFromWorkflowInput(discovery: Record<string, unknown
 type DiscoveryAtsSource =
   | { type: "greenhouse"; boardToken: string }
   | { type: "lever"; company: string }
-  | { type: "workday"; tenant: string; site: string; baseUrl?: string };
+  | { type: "workday"; tenant: string; site: string; baseUrl?: string }
+  | { type: "bamboohr"; subdomain: string; baseUrl?: string }
+  | {
+      type: "icims";
+      searchUrl?: string;
+      customerId?: string;
+      portal?: string;
+      company?: string;
+      apiBaseUrl?: string;
+    };
 
 function discoveryAtsSourcesFromWorkflowInput(discovery: Record<string, unknown>): DiscoveryAtsSource[] {
   const { atsSources } = discovery;
@@ -722,6 +748,22 @@ function isDiscoveryAtsSource(value: unknown): value is DiscoveryAtsSource {
       typeof value.site === "string" &&
       value.site.trim().length > 0 &&
       (value.baseUrl === undefined || typeof value.baseUrl === "string")
+    );
+  }
+  if (value.type === "bamboohr") {
+    return (
+      typeof value.subdomain === "string" &&
+      value.subdomain.trim().length > 0 &&
+      (value.baseUrl === undefined || typeof value.baseUrl === "string")
+    );
+  }
+  if (value.type === "icims") {
+    return (
+      ((typeof value.searchUrl === "string" && value.searchUrl.trim().length > 0) ||
+        (typeof value.customerId === "string" && value.customerId.trim().length > 0)) &&
+      (value.portal === undefined || typeof value.portal === "string") &&
+      (value.company === undefined || typeof value.company === "string") &&
+      (value.apiBaseUrl === undefined || typeof value.apiBaseUrl === "string")
     );
   }
 
