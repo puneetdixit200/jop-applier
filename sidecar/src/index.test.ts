@@ -257,6 +257,61 @@ describe("sidecar runtime", () => {
     ]);
   });
 
+  it("runs due digest scheduled tasks through the daily digest workflow", async () => {
+    const checkedAt = new Date("2026-05-28T18:00:00Z");
+    const updates: Array<{ id: string; update: PersistedScheduledTaskRunUpdate }> = [];
+    const runtime = createSidecarRuntime({
+      now: () => checkedAt,
+      scheduledTasks: {
+        listScheduledTasks: async () => [
+          {
+            id: "digest-task",
+            name: "Daily Digest",
+            type: "digest",
+            cron_expression: "0 18 * * *",
+            is_enabled: true,
+            last_run: null,
+            next_run: "2026-05-28T18:00:00.000Z",
+            config: {
+              cadence: { kind: "daily", hour: 18, minute: 0 },
+            },
+            created_at: "2026-05-28T08:00:00.000Z",
+          },
+        ],
+        updateScheduledTaskRun: async (id, update) => {
+          updates.push({ id, update });
+        },
+      },
+    });
+
+    await expect(runtime.runDueScheduledTasks()).resolves.toEqual({
+      scanned: 1,
+      due: 1,
+      completed: 1,
+      failed: 0,
+      skipped: 0,
+    });
+
+    expect(updates).toEqual([
+      {
+        id: "digest-task",
+        update: {
+          last_run: "2026-05-28T18:00:00.000Z",
+          next_run: "2026-05-29T18:00:00.000Z",
+        },
+      },
+    ]);
+    await expect(runtime.drainNotifications()).resolves.toEqual([
+      expect.objectContaining({
+        type: "digest.daily",
+        channel: "in_app",
+        priority: "low",
+        title: "Daily digest",
+        body: "Daily job search digest is ready.",
+      }),
+    ]);
+  });
+
   it("exposes a scheduler service that polls due scheduled tasks", async () => {
     const checkedAt = new Date("2026-05-28T10:00:00Z");
     const updates: Array<{ id: string; update: PersistedScheduledTaskRunUpdate }> = [];

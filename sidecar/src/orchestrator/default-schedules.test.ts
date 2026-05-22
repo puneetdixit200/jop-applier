@@ -13,6 +13,7 @@ describe("default schedules", () => {
       { name: "Follow-up Check", type: "follow_up", cronExpression: "0 9 * * *" },
       { name: "Email Check", type: "email_check", cronExpression: "*/15 * * * *" },
       { name: "Analytics Refresh", type: "analytics", cronExpression: "0 0 * * *" },
+      { name: "Daily Digest", type: "digest", cronExpression: "0 18 * * *" },
       { name: "Export Sync", type: "export", cronExpression: "0 */6 * * *" },
       { name: "Session Health", type: "session_health", cronExpression: "0 */2 * * *" },
       { name: "Cleanup", type: "cleanup", cronExpression: "0 3 * * 0" },
@@ -21,6 +22,7 @@ describe("default schedules", () => {
       follow_up: "follow-up-check",
       discovery: "job-discovery",
       apply: "application-processing",
+      digest: "daily-digest",
     });
   });
 

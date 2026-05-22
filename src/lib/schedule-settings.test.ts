@@ -42,6 +42,12 @@ describe("schedule settings", () => {
         next_run: "2026-05-30T00:00:00.000Z",
       },
       {
+        name: "Daily Digest",
+        type: "digest",
+        cron_expression: "0 18 * * *",
+        next_run: "2026-05-29T18:00:00.000Z",
+      },
+      {
         name: "Export Sync",
         type: "export",
         cron_expression: "0 */6 * * *",
@@ -75,8 +81,8 @@ describe("schedule settings", () => {
       new Date("2026-05-29T07:30:00.000Z"),
     );
 
-    expect(seeded).toHaveLength(8);
-    expect(savedTasks).toHaveLength(8);
+    expect(seeded).toHaveLength(9);
+    expect(savedTasks).toHaveLength(9);
 
     const existing = [persistedTask(buildDefaultScheduledTasks(new Date("2026-05-29T07:30:00.000Z"))[0], "existing")];
     const loaded = await loadOrSeedScheduledTasks(

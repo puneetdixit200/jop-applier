@@ -39,6 +39,7 @@ export const DEFAULT_WORKFLOWS_BY_TASK_TYPE: Record<string, string> = {
   follow_up: "follow-up-check",
   email_check: "email-check",
   analytics: "analytics-refresh",
+  digest: "daily-digest",
   export: "export-sync",
   session_health: "session-health",
   cleanup: "cleanup",
@@ -93,6 +94,16 @@ export const DEFAULT_SCHEDULED_TASKS: DefaultScheduledTask[] = [
     config: {
       description: "Recalculate all metrics",
       cadence: { kind: "daily", hour: 0, minute: 0 },
+    },
+  },
+  {
+    name: "Daily Digest",
+    type: "digest",
+    cronExpression: "0 18 * * *",
+    isEnabled: true,
+    config: {
+      description: "Send daily application digest",
+      cadence: { kind: "daily", hour: 18, minute: 0 },
     },
   },
   {

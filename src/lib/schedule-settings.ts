@@ -65,6 +65,13 @@ const defaultScheduleTemplates: DefaultScheduleTemplate[] = [
     cadence: { kind: "daily", hour: 0, minute: 0 },
   },
   {
+    name: "Daily Digest",
+    type: "digest",
+    cronExpression: "0 18 * * *",
+    description: "Send daily application digest",
+    cadence: { kind: "daily", hour: 18, minute: 0 },
+  },
+  {
     name: "Export Sync",
     type: "export",
     cronExpression: "0 */6 * * *",

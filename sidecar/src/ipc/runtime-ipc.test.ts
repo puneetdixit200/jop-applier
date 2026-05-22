@@ -9,6 +9,7 @@ const expectedWorkflows = [
   "application-processing",
   "cleanup",
   "cold-email",
+  "daily-digest",
   "email-check",
   "export-sync",
   "follow-up-check",

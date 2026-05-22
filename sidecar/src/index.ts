@@ -331,12 +331,10 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   const followUps = options.followUps ?? createEmptyFollowUpDependencies();
   const scheduledTaskPersistence = options.scheduledTasks ?? createEmptyScheduledTaskPersistence();
   const notificationOutbox: NotificationDelivery[] = [];
-  bindNotificationManager(
-    eventBus,
-    new NotificationManager(
-      createRuntimeNotificationOptions(options.notifications, notificationOutbox, now, env),
-    ),
+  const notificationManager = new NotificationManager(
+    createRuntimeNotificationOptions(options.notifications, notificationOutbox, now, env),
   );
+  bindNotificationManager(eventBus, notificationManager);
 
   workflowEngine.register({
     id: "job-discovery",
@@ -376,6 +374,26 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
         now: now(),
         eventBus,
       });
+    },
+  });
+  workflowEngine.register({
+    id: "daily-digest",
+    description: "Send the daily application digest notification",
+    run: async () => {
+      const generatedAt = now();
+      const deliveries = await notificationManager.notify({
+        type: "digest.daily",
+        title: "Daily digest",
+        body: "Daily job search digest is ready.",
+        metadata: {
+          generatedAt: generatedAt.toISOString(),
+        },
+      });
+
+      return {
+        delivered: deliveries.length,
+        channels: deliveries.map((delivery) => delivery.channel),
+      };
     },
   });
   workflowEngine.register({
