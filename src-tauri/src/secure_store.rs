@@ -1,5 +1,6 @@
 use keyring_core::{Entry, Error as KeyringError};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Map, Value};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -54,6 +55,31 @@ pub fn delete_secret(key: &str) -> SecureStoreResult<bool> {
         Err(KeyringError::NoEntry) => Ok(false),
         Err(error) => Err(map_keyring_error(error)),
     }
+}
+
+pub fn secret_ref_value(reference: &SecureSecretRef) -> Value {
+    json!({
+        "secretRef": reference.key,
+        "service": reference.service,
+        "uri": reference.uri,
+    })
+}
+
+pub fn secret_ref_key(value: &Value) -> Option<&str> {
+    let Value::Object(object) = value else {
+        return None;
+    };
+
+    secret_ref_key_from_object(object)
+}
+
+pub fn secret_ref_key_from_object(object: &Map<String, Value>) -> Option<&str> {
+    object
+        .get("service")
+        .and_then(Value::as_str)
+        .filter(|service| *service == SERVICE_NAME)?;
+
+    object.get("secretRef").and_then(Value::as_str)
 }
 
 pub fn initialize_default_store() -> SecureStoreResult<()> {

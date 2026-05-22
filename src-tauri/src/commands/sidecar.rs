@@ -7,6 +7,7 @@ use crate::{
         },
         queries,
     },
+    secure_store,
     sidecar::{self, SidecarCommand, SidecarRuntimeStatus},
     AppState,
 };
@@ -976,8 +977,39 @@ fn setting_object(
     };
 
     match setting.value {
-        SettingValue::Object(Value::Object(value)) if !value.is_empty() => Ok(Some(value)),
+        SettingValue::Object(Value::Object(value)) if !value.is_empty() => {
+            let resolved = resolve_secret_refs(Value::Object(value))?;
+            match resolved {
+                Value::Object(value) if !value.is_empty() => Ok(Some(value)),
+                _ => Ok(None),
+            }
+        }
         _ => Ok(None),
+    }
+}
+
+fn resolve_secret_refs(value: Value) -> Result<Value, String> {
+    match value {
+        Value::Object(mut object) => {
+            if let Some(key) = secure_store::secret_ref_key_from_object(&object) {
+                let secret = secure_store::get_secret(key)
+                    .map_err(|error| error.to_string())?
+                    .ok_or_else(|| format!("missing secure secret: {key}"))?;
+                return Ok(Value::String(secret));
+            }
+
+            for child in object.values_mut() {
+                *child = resolve_secret_refs(child.take())?;
+            }
+
+            Ok(Value::Object(object))
+        }
+        Value::Array(values) => values
+            .into_iter()
+            .map(resolve_secret_refs)
+            .collect::<Result<Vec<_>, _>>()
+            .map(Value::Array),
+        other => Ok(other),
     }
 }
 

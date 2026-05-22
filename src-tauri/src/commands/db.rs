@@ -6,12 +6,13 @@ use crate::{
             Notification, ScheduledTask, ScheduledTaskRunUpdate, Setting, UpsertAiCacheEntry,
             UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument,
             UpsertJob, UpsertNotification, UpsertScheduledTask, UpsertSetting, UpsertUserProfile,
-            UserProfile,
+            SettingValue, UserProfile,
         },
         queries, schema,
     },
-    AppState,
+    secure_store, AppState,
 };
+use serde_json::Value;
 use tauri::State;
 
 #[tauri::command]
@@ -65,7 +66,61 @@ pub fn save_setting_command(
         .connection
         .lock()
         .map_err(|_| "database connection lock poisoned".to_string())?;
+    let setting = protect_setting_secrets(setting)?;
     queries::upsert_setting(&connection, setting).map_err(|error| error.to_string())
+}
+
+pub fn protect_setting_secrets(setting: UpsertSetting) -> Result<UpsertSetting, String> {
+    match setting.key.as_str() {
+        "email.account" => protect_object_setting_fields(
+            setting,
+            &[
+                ("smtpPass", "email.account.smtpPass"),
+                ("imapPass", "email.account.imapPass"),
+            ],
+        ),
+        "export.config" => protect_object_setting_fields(
+            setting,
+            &[
+                ("notionApiKey", "export.notion.apiKey"),
+                ("googleSheetsAccessToken", "export.googleSheets.accessToken"),
+                ("googleSheetsApiKey", "export.googleSheets.apiKey"),
+                ("googleSheetsCredentialsJson", "export.googleSheets.credentialsJson"),
+                ("airtableApiKey", "export.airtable.apiKey"),
+            ],
+        ),
+        _ => Ok(setting),
+    }
+}
+
+fn protect_object_setting_fields(
+    mut setting: UpsertSetting,
+    fields: &[(&str, &str)],
+) -> Result<UpsertSetting, String> {
+    let value = std::mem::replace(&mut setting.value, SettingValue::Null);
+    let SettingValue::Object(Value::Object(mut object)) = value else {
+        setting.value = value;
+        return Ok(setting);
+    };
+
+    for (field, secret_key) in fields {
+        let Some(value) = object.get(*field) else {
+            continue;
+        };
+        if secure_store::secret_ref_key(value).is_some() {
+            continue;
+        }
+        let Some(secret) = value.as_str().map(str::trim).filter(|secret| !secret.is_empty()) else {
+            continue;
+        };
+
+        let reference = secure_store::save_secret(secret_key, secret)
+            .map_err(|error| error.to_string())?;
+        object.insert((*field).to_string(), secure_store::secret_ref_value(&reference));
+    }
+
+    setting.value = SettingValue::Object(Value::Object(object));
+    Ok(setting)
 }
 
 #[tauri::command]

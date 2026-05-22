@@ -1,4 +1,9 @@
-use careercaveman_lib::secure_store::{delete_secret, get_secret, save_secret};
+use careercaveman_lib::{
+    commands::db::protect_setting_secrets,
+    db::models::{SettingValue, UpsertSetting},
+    secure_store::{delete_secret, get_secret, save_secret},
+};
+use serde_json::json;
 use std::sync::Mutex;
 
 static SECURE_STORE_TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -45,6 +50,55 @@ fn rejects_invalid_secret_keys_and_empty_values() {
     assert!(save_secret("", "secret").is_err());
     assert!(save_secret("email/account", "secret").is_err());
     assert!(save_secret("email.account.smtpPass", "").is_err());
+
+    keyring_core::unset_default_store();
+}
+
+#[test]
+fn replaces_known_setting_secrets_with_keyring_references() {
+    let _guard = SECURE_STORE_TEST_LOCK
+        .lock()
+        .expect("lock secure store test");
+    keyring_core::set_default_store(keyring_core::mock::Store::new().expect("mock keyring store"));
+
+    let protected = protect_setting_secrets(UpsertSetting {
+        key: "email.account".to_string(),
+        category: Some("email".to_string()),
+        value: SettingValue::Object(json!({
+            "fromEmail": "asha@gmail.example",
+            "smtpPass": "smtp-secret",
+            "imapPass": "imap-secret"
+        })),
+    })
+    .expect("protect setting secrets");
+
+    let SettingValue::Object(value) = protected.value else {
+        panic!("expected object setting");
+    };
+    assert_eq!(
+        value["smtpPass"],
+        json!({
+            "secretRef": "email.account.smtpPass",
+            "service": "careercaveman",
+            "uri": "keyring://careercaveman/email.account.smtpPass"
+        })
+    );
+    assert_eq!(
+        value["imapPass"],
+        json!({
+            "secretRef": "email.account.imapPass",
+            "service": "careercaveman",
+            "uri": "keyring://careercaveman/email.account.imapPass"
+        })
+    );
+    assert_eq!(
+        get_secret("email.account.smtpPass").expect("read smtp secret"),
+        Some("smtp-secret".to_string()),
+    );
+    assert_eq!(
+        get_secret("email.account.imapPass").expect("read imap secret"),
+        Some("imap-secret".to_string()),
+    );
 
     keyring_core::unset_default_store();
 }

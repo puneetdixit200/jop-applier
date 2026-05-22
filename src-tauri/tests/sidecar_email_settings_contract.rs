@@ -20,7 +20,10 @@ use serde_json::json;
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
+
+static SECURE_STORE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn sends_email_account_settings_to_email_check_sidecar() {
@@ -103,6 +106,69 @@ fn sends_email_account_settings_to_email_check_sidecar() {
             "limit": 25
         })
     );
+}
+
+#[test]
+fn resolves_keyring_email_secret_references_for_sidecar_workflows() {
+    let _guard = SECURE_STORE_TEST_LOCK
+        .lock()
+        .expect("lock secure store test");
+    keyring_core::set_default_store(keyring_core::mock::Store::new().expect("mock keyring store"));
+    careercaveman_lib::secure_store::save_secret("email.account.smtpPass", "smtp-secret")
+        .expect("save smtp secret");
+    careercaveman_lib::secure_store::save_secret("email.account.imapPass", "imap-secret")
+        .expect("save imap secret");
+
+    let connection = Connection::open_in_memory().expect("open in-memory database");
+    initialize_schema(&connection).expect("initialize schema");
+    upsert_setting(
+        &connection,
+        UpsertSetting {
+            key: "email.account".to_string(),
+            category: Some("email".to_string()),
+            value: SettingValue::Object(json!({
+                "provider": "gmail",
+                "fromName": "Asha Rao",
+                "fromEmail": "asha@gmail.example",
+                "smtpHost": "smtp.gmail.com",
+                "smtpPort": 465,
+                "smtpSecure": true,
+                "smtpUser": "asha@gmail.example",
+                "smtpPass": {
+                    "secretRef": "email.account.smtpPass",
+                    "service": "careercaveman",
+                    "uri": "keyring://careercaveman/email.account.smtpPass"
+                },
+                "imapHost": "imap.gmail.com",
+                "imapPort": 993,
+                "imapSecure": true,
+                "imapUser": "asha@gmail.example",
+                "imapPass": {
+                    "secretRef": "email.account.imapPass",
+                    "service": "careercaveman",
+                    "uri": "keyring://careercaveman/email.account.imapPass"
+                }
+            })),
+        },
+    )
+    .expect("save email account setting");
+    let request_path = std::env::temp_dir().join(format!(
+        "careercaveman-email-secret-ref-request-{}.json",
+        std::process::id()
+    ));
+    let command = capture_request_sidecar(&request_path);
+
+    run_sidecar_workflow_and_persist_jobs_with_command(&command, &connection, "email-check")
+        .expect("run configured email check workflow");
+
+    let request: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&request_path).expect("read captured request"))
+            .expect("captured request is JSON");
+    let _ = fs::remove_file(&request_path);
+    assert_eq!(request["params"]["emailCheck"]["account"]["smtpPass"], json!("smtp-secret"));
+    assert_eq!(request["params"]["emailCheck"]["account"]["imapPass"], json!("imap-secret"));
+
+    keyring_core::unset_default_store();
 }
 
 #[test]
