@@ -13,6 +13,7 @@ import type {
   NotificationChannel,
   NotificationDelivery,
 } from "./notifications/notification-manager.js";
+import type { Plugin } from "./plugins/plugin-manager.js";
 import type { CareerEventMap } from "./orchestrator/events.js";
 import type { PersistedScheduledTaskRunUpdate } from "./orchestrator/scheduled-task-persistence.js";
 
@@ -915,6 +916,53 @@ describe("sidecar runtime", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("exposes a plugin manager for registered sidecar plugins", async () => {
+    const calls: string[] = [];
+    const runtimePlugin: Plugin = {
+      manifest: {
+        name: "runtime-exporter",
+        version: "1.0.0",
+        type: "exporter",
+        entry: "./dist/index.js",
+        permissions: ["network"],
+      },
+      initialize: async (context) => {
+        calls.push(`initialize:${context.env.CAREERCAVEMAN_PLUGIN_TEST}`);
+      },
+      destroy: async () => {
+        calls.push("destroy");
+      },
+      healthCheck: async () => ({
+        ok: true,
+        message: "runtime exporter ready",
+      }),
+    };
+    const runtime = createSidecarRuntime({
+      env: {
+        ...process.env,
+        CAREERCAVEMAN_PLUGIN_TEST: "enabled",
+      },
+      plugins: [runtimePlugin],
+    });
+
+    await expect(runtime.pluginManager.initializeAll()).resolves.toEqual([
+      {
+        name: "runtime-exporter",
+        status: "initialized",
+      },
+    ]);
+    await expect(runtime.pluginManager.health()).resolves.toEqual({
+      "runtime-exporter": {
+        ok: true,
+        message: "runtime exporter ready",
+      },
+    });
+
+    await runtime.pluginManager.destroyAll();
+
+    expect(calls).toEqual(["initialize:enabled", "destroy"]);
   });
 
   it("wires document generation into due application processing tasks", async () => {

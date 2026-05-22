@@ -101,6 +101,7 @@ import {
   type ScheduledTaskRunnerResult,
 } from "./orchestrator/scheduled-task-runner.js";
 import { WorkflowEngine } from "./orchestrator/workflow-engine.js";
+import { PluginManager, type Plugin } from "./plugins/plugin-manager.js";
 import {
   createApplicationDocumentGenerators,
   type ApplicationDocumentGeneratorDependencies,
@@ -236,6 +237,7 @@ export type SidecarRuntimeOptions = {
   cleanup?: SidecarCleanupOptions;
   followUps?: SidecarFollowUpOptions;
   notifications?: NotificationManagerOptions;
+  plugins?: Plugin[];
   scheduledTasks?: ScheduledTaskPersistence;
   scheduler?: {
     pollIntervalMs?: number;
@@ -250,6 +252,10 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   const env = options.env ?? process.env;
   const eventBus = new EventBus<CareerEventMap>();
   const workflowEngine = new WorkflowEngine(eventBus);
+  const pluginManager = new PluginManager({ eventBus, workflowEngine, env });
+  for (const plugin of options.plugins ?? []) {
+    pluginManager.register(plugin);
+  }
   const aiEngine = createAIEngineFromEnv(env);
   const browserManager = new BrowserManager(createPlaywrightBrowserAdapter());
   const now = options.now ?? (() => new Date());
@@ -442,6 +448,7 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
       }),
     drainNotifications: () => drainNotificationOutbox(notificationOutbox),
     runDueScheduledTasks: runDueRuntimeScheduledTasks,
+    pluginManager,
     schedulerService,
     workflowEngine,
   };
