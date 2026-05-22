@@ -1,5 +1,6 @@
 import path from "node:path";
 import { chromium, type BrowserContext } from "playwright-core";
+import { ProxyManager, type BrowserProxy } from "./proxy-manager.js";
 
 type PlaywrightLaunchPersistentContextOptions = NonNullable<
   Parameters<typeof chromium.launchPersistentContext>[1]
@@ -21,6 +22,7 @@ export type StealthConfig = {
   typingSpeed: { min: number; max: number };
   persistCookies: boolean;
   rotateProxy: boolean;
+  proxyList: BrowserProxy[];
   maxConcurrentPages: number;
   headless: boolean;
   sessionRoot: string;
@@ -32,6 +34,7 @@ export type BrowserLaunchOptions = {
   headless: boolean;
   locale: string;
   maxConcurrentPages: number;
+  proxy?: BrowserProxy;
   timezoneId: string;
   userAgent: string;
   viewport: BrowserViewport;
@@ -60,11 +63,14 @@ type ActiveSession = {
 
 export class BrowserManager {
   private readonly activeSessions = new Map<string, ActiveSession>();
+  private readonly proxyManager: ProxyManager;
 
   constructor(
     private readonly adapter: BrowserAutomationAdapter,
     private readonly config: StealthConfig = createDefaultStealthConfig(),
-  ) {}
+  ) {
+    this.proxyManager = new ProxyManager(config.proxyList);
+  }
 
   async openSession(platform: string): Promise<BrowserSession> {
     const key = platformKey(platform);
@@ -75,7 +81,7 @@ export class BrowserManager {
 
     const session = await this.adapter.launchPersistentContext(
       sessionDirectoryForPlatform(this.config.sessionRoot, platform),
-      toBrowserLaunchOptions(this.config),
+      toBrowserLaunchOptions(this.config, this.proxyForSession()),
     );
     this.activeSessions.set(key, { platform, session });
 
@@ -100,6 +106,14 @@ export class BrowserManager {
   async closeAll(): Promise<void> {
     await Promise.all(this.activePlatforms().map((platform) => this.closeSession(platform)));
   }
+
+  private proxyForSession(): BrowserProxy | undefined {
+    if (this.proxyManager.count() === 0) {
+      return undefined;
+    }
+
+    return this.config.rotateProxy ? this.proxyManager.nextProxy() : this.proxyManager.firstProxy();
+  }
 }
 
 export function createDefaultStealthConfig(overrides: Partial<StealthConfig> = {}): StealthConfig {
@@ -115,6 +129,7 @@ export function createDefaultStealthConfig(overrides: Partial<StealthConfig> = {
     typingSpeed: { min: 40, max: 120 },
     persistCookies: true,
     rotateProxy: false,
+    proxyList: [],
     maxConcurrentPages: 2,
     headless: true,
     sessionRoot: path.join(process.cwd(), "data", "sessions"),
@@ -142,13 +157,17 @@ export function sessionDirectoryForPlatform(sessionRoot: string, platform: strin
   return path.join(sessionRoot, platformKey(platform));
 }
 
-function toBrowserLaunchOptions(config: StealthConfig): BrowserLaunchOptions {
+function toBrowserLaunchOptions(
+  config: StealthConfig,
+  proxy: BrowserProxy | undefined,
+): BrowserLaunchOptions {
   return {
     args: ["--disable-blink-features=AutomationControlled"],
     extraHTTPHeaders: { "Accept-Language": config.locale },
     headless: config.headless,
     locale: config.locale,
     maxConcurrentPages: config.maxConcurrentPages,
+    ...(proxy ? { proxy } : {}),
     timezoneId: config.timezone,
     userAgent: config.userAgent,
     viewport: config.viewport,
@@ -161,6 +180,7 @@ function toPlaywrightOptions(options: BrowserLaunchOptions): PlaywrightLaunchPer
     extraHTTPHeaders: options.extraHTTPHeaders,
     headless: options.headless,
     locale: options.locale,
+    ...(options.proxy ? { proxy: options.proxy } : {}),
     timezoneId: options.timezoneId,
     userAgent: options.userAgent,
     viewport: options.viewport,

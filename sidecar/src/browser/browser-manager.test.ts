@@ -112,4 +112,41 @@ describe("browser manager", () => {
       },
     ]);
   });
+
+  it("rotates configured proxies across newly opened browser sessions", async () => {
+    const launches: Array<{ userDataDir: string; options: BrowserLaunchOptions }> = [];
+    const adapter: BrowserAutomationAdapter = {
+      launchPersistentContext: async (userDataDir, options): Promise<BrowserSession> => {
+        launches.push({ userDataDir, options });
+
+        return {
+          close: async () => {},
+          newPage: async () => {
+            throw new Error("not used in this test");
+          },
+        };
+      },
+    };
+    const manager = new BrowserManager(
+      adapter,
+      createDefaultStealthConfig({
+        rotateProxy: true,
+        proxyList: [
+          { server: "http://proxy-a.example:8080" },
+          { server: "http://proxy-b.example:8080", username: "user", password: "pass" },
+        ],
+        sessionRoot: "/tmp/careercaveman-sessions",
+      }),
+    );
+
+    await manager.openSession("LinkedIn");
+    await manager.openSession("Indeed");
+    await manager.openSession("Internshala");
+
+    expect(launches.map((launch) => launch.options.proxy)).toEqual([
+      { server: "http://proxy-a.example:8080" },
+      { server: "http://proxy-b.example:8080", username: "user", password: "pass" },
+      { server: "http://proxy-a.example:8080" },
+    ]);
+  });
 });

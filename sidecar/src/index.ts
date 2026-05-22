@@ -30,6 +30,7 @@ import {
 } from "./applications/follow-up-config.js";
 import {
   BrowserManager,
+  createDefaultStealthConfig,
   createPlaywrightBrowserAdapter,
   type BrowserSession,
 } from "./browser/browser-manager.js";
@@ -283,7 +284,10 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
     pluginManager.register(plugin);
   }
   const aiEngine = createAIEngineFromEnv(env);
-  const browserManager = new BrowserManager(createPlaywrightBrowserAdapter());
+  const browserManager = new BrowserManager(
+    createPlaywrightBrowserAdapter(),
+    browserStealthConfigFromEnv(env),
+  );
   const now = options.now ?? (() => new Date());
   const jobDiscovery = options.jobDiscovery ?? createEmptyJobDiscoveryDependencies();
   const applicationProcessing = createApplicationWorkerDependencies(
@@ -864,6 +868,23 @@ export function browserSessionTargetsFromEnv(env: NodeJS.ProcessEnv = process.en
     .map((platform) => platform.trim())
     .filter((platform) => platform.length > 0)
     .map((platform) => ({ platform, isEnabled: true }));
+}
+
+function browserStealthConfigFromEnv(env: NodeJS.ProcessEnv) {
+  const proxyList = (env.BROWSER_PROXY_LIST ?? env.CAREERCAVEMAN_BROWSER_PROXY_LIST ?? "")
+    .split(",")
+    .map((server) => server.trim())
+    .filter(Boolean)
+    .map((server) => ({ server }));
+
+  return createDefaultStealthConfig({
+    rotateProxy: booleanEnv(env.BROWSER_ROTATE_PROXY ?? env.CAREERCAVEMAN_BROWSER_ROTATE_PROXY),
+    proxyList,
+  });
+}
+
+function booleanEnv(value: string | undefined): boolean {
+  return value === "1" || value?.toLowerCase() === "true";
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
