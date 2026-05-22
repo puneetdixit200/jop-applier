@@ -24,7 +24,7 @@ The dashboard can run due scheduled tasks or start discovery manually. The defau
 
 ## Connectors
 
-Built-in discovery sources include public portal search, JSON feeds, company career pages, Greenhouse, Lever, Workday, BambooHR, and iCIMS. Portal discovery is opt-in from Settings.
+Built-in discovery sources include LinkedIn, Indeed, Internshala, Naukri, Wellfound, Glassdoor, JSON feeds, company career pages, Greenhouse, Lever, Workday, BambooHR, and iCIMS. Portal discovery is opt-in from Settings.
 
 Application form filling supports generic forms plus known ATS strategies. Keep review-before-submit enabled for new portals or unfamiliar forms.
 
