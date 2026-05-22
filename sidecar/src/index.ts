@@ -79,6 +79,11 @@ import {
 } from "./export/export-sync-config.js";
 import { runSidecarIpc } from "./ipc/runtime-ipc.js";
 import {
+  bindLocalEventLog,
+  defaultLocalEventLogDir,
+  type LocalEventLogOptions,
+} from "./logging/local-event-log.js";
+import {
   runCleanupWorker,
   type CleanupWorkerDependencies,
 } from "./maintenance/cleanup-worker.js";
@@ -265,6 +270,7 @@ export type SidecarRuntimeOptions = {
   followUps?: SidecarFollowUpOptions;
   notifications?: NotificationManagerOptions;
   plugins?: Plugin[];
+  logging?: LocalEventLogOptions | false;
   scheduledTasks?: ScheduledTaskPersistence;
   scheduler?: {
     pollIntervalMs?: number;
@@ -278,6 +284,12 @@ export type SidecarRuntimeOptions = {
 export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   const env = options.env ?? process.env;
   const eventBus = new EventBus<CareerEventMap>();
+  const eventLog = options.logging
+    ? bindLocalEventLog(eventBus, {
+        ...options.logging,
+        now: options.logging.now ?? options.now,
+      })
+    : undefined;
   const workflowEngine = new WorkflowEngine(eventBus);
   const pluginManager = new PluginManager({ eventBus, workflowEngine, env });
   for (const plugin of options.plugins ?? []) {
@@ -477,6 +489,8 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
         eventBus,
       }),
     drainNotifications: () => drainNotificationOutbox(notificationOutbox),
+    flushLogs: () => eventLog?.flush() ?? Promise.resolve(),
+    closeLogs: () => eventLog?.close() ?? Promise.resolve(),
     runDueScheduledTasks: runDueRuntimeScheduledTasks,
     pluginManager,
     schedulerService,
@@ -888,7 +902,11 @@ function booleanEnv(value: string | undefined): boolean {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const runtime = createSidecarRuntime();
+  const runtime = createSidecarRuntime({
+    logging: {
+      logDir: process.env.CAREERCAVEMAN_LOG_DIR ?? defaultLocalEventLogDir(),
+    },
+  });
   if (process.argv.includes("--stdio")) {
     runSidecarIpc(runtime).catch((error: unknown) => {
       console.error(error instanceof Error ? error.message : String(error));

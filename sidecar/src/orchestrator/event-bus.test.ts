@@ -25,5 +25,30 @@ describe("EventBus", () => {
 
     expect(seen).toEqual(["daily-discovery:completed"]);
   });
-});
 
+  it("delivers every event to wildcard subscribers", () => {
+    const bus = new EventBus<CareerEventMap>();
+    const seen: string[] = [];
+
+    const unsubscribe = bus.onAny((event) => {
+      if (event.name === "workflow.completed") {
+        seen.push(`${event.name}:${event.payload.workflowId}:${event.payload.status}`);
+      }
+    });
+
+    bus.emit("workflow.completed", {
+      workflowId: "daily-discovery",
+      status: "failed",
+      durationMs: 42,
+      error: "provider unavailable",
+    });
+    unsubscribe();
+    bus.emit("workflow.completed", {
+      workflowId: "daily-discovery",
+      status: "completed",
+      durationMs: 99,
+    });
+
+    expect(seen).toEqual(["workflow.completed:daily-discovery:failed"]);
+  });
+});

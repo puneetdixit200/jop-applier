@@ -88,6 +88,52 @@ describe("sidecar runtime", () => {
     });
   });
 
+  it("persists runtime event logs when configured", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "careercaveman-runtime-log-"));
+
+    try {
+      const runtime = createSidecarRuntime({
+        now: () => new Date("2026-05-28T10:15:00.000Z"),
+        logging: { logDir },
+      });
+
+      await runtime.workflowEngine.run("cleanup");
+      await runtime.flushLogs();
+      await runtime.closeLogs();
+
+      const jsonl = await readFile(join(logDir, "events-2026-05-28.jsonl"), "utf8");
+      const events = jsonl.trim().split("\n").map((line) => JSON.parse(line));
+
+      expect(events.map((event) => event.event)).toEqual([
+        "workflow.started",
+        "cleanup.completed",
+        "workflow.completed",
+      ]);
+      expect(events[0]).toMatchObject({
+        timestamp: "2026-05-28T10:15:00.000Z",
+        event: "workflow.started",
+        payload: { workflowId: "cleanup" },
+      });
+      expect(events[1]).toMatchObject({
+        event: "cleanup.completed",
+        payload: {
+          completedAt: "2026-05-28T10:15:00.000Z",
+          expiredAiCacheDeleted: 0,
+          archivedJobs: 0,
+        },
+      });
+      expect(events[2]).toMatchObject({
+        event: "workflow.completed",
+        payload: {
+          workflowId: "cleanup",
+          status: "completed",
+        },
+      });
+    } finally {
+      await rm(logDir, { recursive: true, force: true });
+    }
+  });
+
   it("registers and runs the session-health workflow with browser session dependencies", async () => {
     const checkedAt = new Date("2026-05-28T10:00:00Z");
     const openedPlatforms: string[] = [];

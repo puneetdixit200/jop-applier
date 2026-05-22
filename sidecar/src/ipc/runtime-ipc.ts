@@ -12,6 +12,7 @@ import type { WorkflowEngine } from "../orchestrator/workflow-engine.js";
 export type SidecarRuntimeHost = {
   aiEngine: Pick<AIEngine, "activeProvider">;
   drainNotifications?: () => Promise<unknown[]>;
+  flushLogs?: () => Promise<void>;
   reviewApplication: (
     application: ApplicationProcessingApplication,
     decision: ApplicationReviewDecision,
@@ -66,6 +67,7 @@ export async function handleSidecarIpcRequest(
         const workflowId = requireString(params.workflowId, "workflowId");
         const result = await runtime.workflowEngine.run(workflowId, params);
         const notifications = (await runtime.drainNotifications?.()) ?? [];
+        await flushRuntimeLogs(runtime);
         return {
           id,
           ok: true,
@@ -74,20 +76,32 @@ export async function handleSidecarIpcRequest(
       }
       case "application.reviewDecision": {
         const params = requireRecord(request.params, "application.reviewDecision params");
+        const result = await runtime.reviewApplication(
+          requireApplicationProcessingApplication(params.application),
+          requireApplicationReviewDecision(params.decision),
+        );
+        await flushRuntimeLogs(runtime);
+
         return {
           id,
           ok: true,
-          result: await runtime.reviewApplication(
-            requireApplicationProcessingApplication(params.application),
-            requireApplicationReviewDecision(params.decision),
-          ),
+          result,
         };
       }
       default:
         throw new Error(`Unknown IPC method: ${request.method}`);
     }
   } catch (error) {
+    await flushRuntimeLogs(runtime);
     return errorResponse(id, error);
+  }
+}
+
+async function flushRuntimeLogs(runtime: SidecarRuntimeHost): Promise<void> {
+  try {
+    await runtime.flushLogs?.();
+  } catch {
+    // Logging must not break IPC responses.
   }
 }
 

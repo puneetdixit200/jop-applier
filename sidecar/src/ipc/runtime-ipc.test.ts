@@ -46,6 +46,7 @@ describe("sidecar runtime IPC", () => {
 
   it("runs registered workflows over the IPC request handler", async () => {
     const persistedUrls: string[] = [];
+    const flushedLogs: string[] = [];
     const runtime = createSidecarRuntime({
       jobDiscovery: {
         searchQueries: [{ keywords: ["react"], remote: true }],
@@ -67,9 +68,15 @@ describe("sidecar runtime IPC", () => {
         },
       },
     });
+    const host = {
+      ...runtime,
+      flushLogs: async () => {
+        flushedLogs.push("flush");
+      },
+    };
 
     await expect(
-      handleSidecarIpcRequest(runtime, {
+      handleSidecarIpcRequest(host, {
         id: "workflow-1",
         method: "workflow.run",
         params: {
@@ -93,6 +100,7 @@ describe("sidecar runtime IPC", () => {
       },
     });
     expect(persistedUrls).toEqual(["https://jobs.example/react"]);
+    expect(flushedLogs).toEqual(["flush"]);
   });
 
   it("returns native and in-app notifications emitted during workflow runs", async () => {
