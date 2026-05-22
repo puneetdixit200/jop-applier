@@ -140,10 +140,42 @@ export function bindNotificationManager(
       },
     });
   });
+  const unsubscribeApplicationSubmitted = bus.on("application.submitted", (event) => {
+    void manager.notify({
+      type: "application.submitted",
+      title: "Application submitted",
+      body: `Application submitted to ${event.companyName}.`,
+      metadata: {
+        applicationId: event.applicationId,
+        jobId: event.jobId,
+        companyName: event.companyName,
+        confirmationId: event.confirmationId,
+      },
+    });
+  });
+  const unsubscribeResponseReceived = bus.on("response.received", (event) => {
+    const companyName = event.companyName ?? "A company";
+    const subject = event.subject ?? event.responseType;
+    void manager.notify({
+      type: "response.received",
+      title: "Response received",
+      body: `${companyName} replied: ${subject}`,
+      metadata: {
+        applicationId: event.applicationId,
+        jobId: event.jobId,
+        companyName: event.companyName,
+        communicationId: event.communicationId,
+        responseType: event.responseType,
+        subject: event.subject,
+      },
+    });
+  });
 
   return () => {
     unsubscribeProviderOffline();
     unsubscribeFollowUpSent();
     unsubscribeApplicationFailed();
+    unsubscribeApplicationSubmitted();
+    unsubscribeResponseReceived();
   };
 }

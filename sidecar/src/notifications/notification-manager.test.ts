@@ -58,7 +58,7 @@ describe("NotificationManager", () => {
       model: "llama3.1",
       reason: "connection refused",
     });
-    await Promise.resolve();
+    await flushNotifications();
 
     expect(os.sent).toHaveLength(1);
     expect(inApp.sent).toHaveLength(1);
@@ -80,7 +80,7 @@ describe("NotificationManager", () => {
       model: "auto",
       reason: "rate limited",
     });
-    await Promise.resolve();
+    await flushNotifications();
 
     expect(os.sent).toHaveLength(1);
     expect(inApp.sent).toHaveLength(1);
@@ -104,7 +104,7 @@ describe("NotificationManager", () => {
       communicationId: "comm-1",
       sentAt: new Date("2026-05-27T09:00:00Z"),
     });
-    await Promise.resolve();
+    await flushNotifications();
 
     expect(os.sent).toHaveLength(1);
     expect(inApp.sent).toHaveLength(1);
@@ -134,9 +134,87 @@ describe("NotificationManager", () => {
       communicationId: "comm-2",
       sentAt: new Date("2026-05-27T09:00:00Z"),
     });
-    await Promise.resolve();
+    await flushNotifications();
 
     expect(os.sent).toHaveLength(1);
     expect(inApp.sent).toHaveLength(1);
   });
+
+  it("subscribes to application submitted events and emits in-app notifications", async () => {
+    const bus = new EventBus<CareerEventMap>();
+    const os = new RecordingAdapter("os");
+    const inApp = new RecordingAdapter("in_app");
+    const manager = new NotificationManager({ adapters: [os, inApp] });
+
+    bindNotificationManager(bus, manager);
+
+    bus.emit("application.submitted", {
+      applicationId: "app-1",
+      jobId: "job-1",
+      companyName: "Northstar Labs",
+      confirmationId: "CONF-42",
+      submittedAt: new Date("2026-05-28T12:00:00Z"),
+    });
+    await flushNotifications();
+
+    expect(os.sent).toHaveLength(0);
+    expect(inApp.sent).toHaveLength(1);
+    expect(inApp.sent[0]).toMatchObject({
+      type: "application.submitted",
+      priority: "medium",
+      title: "Application submitted",
+      body: "Application submitted to Northstar Labs.",
+      metadata: {
+        applicationId: "app-1",
+        jobId: "job-1",
+        companyName: "Northstar Labs",
+        confirmationId: "CONF-42",
+      },
+    });
+  });
+
+  it("subscribes to response received events and emits high-priority response notifications", async () => {
+    const bus = new EventBus<CareerEventMap>();
+    const os = new RecordingAdapter("os");
+    const inApp = new RecordingAdapter("in_app");
+    const telegram = new RecordingAdapter("telegram");
+    const manager = new NotificationManager({ adapters: [os, inApp, telegram] });
+
+    bindNotificationManager(bus, manager);
+
+    bus.emit("response.received", {
+      applicationId: "app-1",
+      jobId: "job-1",
+      companyName: "Northstar Labs",
+      communicationId: "comm-1",
+      responseType: "positive",
+      subject: "Interview availability",
+      receivedAt: new Date("2026-05-29T09:30:00Z"),
+    });
+    await flushNotifications();
+
+    expect(os.sent).toHaveLength(1);
+    expect(telegram.sent).toHaveLength(1);
+    expect(inApp.sent).toHaveLength(1);
+    expect(os.sent[0]).toMatchObject({
+      type: "response.received",
+      priority: "high",
+      title: "Response received",
+      body: "Northstar Labs replied: Interview availability",
+      metadata: {
+        applicationId: "app-1",
+        jobId: "job-1",
+        companyName: "Northstar Labs",
+        communicationId: "comm-1",
+        responseType: "positive",
+        subject: "Interview availability",
+      },
+    });
+  });
 });
+
+async function flushNotifications(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
