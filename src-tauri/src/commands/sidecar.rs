@@ -452,6 +452,10 @@ fn workflow_params_from_settings(
         return email_check_workflow_params_from_settings(connection);
     }
 
+    if workflow_id == "cold-email" {
+        return cold_email_workflow_params_from_settings(connection);
+    }
+
     Ok(json!({}))
 }
 
@@ -507,6 +511,19 @@ fn email_check_workflow_params_from_settings(connection: &Connection) -> Result<
         Ok(json!({}))
     } else {
         Ok(json!({ "emailCheck": email_check }))
+    }
+}
+
+fn cold_email_workflow_params_from_settings(connection: &Connection) -> Result<Value, String> {
+    let mut cold_email = Map::new();
+    if let Some(account) = setting_object(connection, "email.account")? {
+        cold_email.insert("account".to_string(), Value::Object(account));
+    }
+
+    if cold_email.is_empty() {
+        Ok(json!({}))
+    } else {
+        Ok(json!({ "coldEmail": cold_email }))
     }
 }
 
@@ -771,7 +788,7 @@ fn persist_cold_emails(connection: &Connection, result: &mut Value) -> Result<()
                 communication_type: "cold_email".to_string(),
                 subject: Some(cold_email.subject.clone()),
                 body: Some(cold_email.body.clone()),
-                email_id: None,
+                email_id: cold_email.email_id.clone(),
                 sent_at: Some(cold_email.sent_at.clone()),
                 read_at: None,
             },
@@ -837,6 +854,8 @@ struct SidecarColdEmail {
     contact_name: Option<String>,
     #[serde(rename = "communicationId")]
     communication_id: Option<String>,
+    #[serde(rename = "emailId")]
+    email_id: Option<String>,
     subject: String,
     body: String,
     #[serde(rename = "sentAt")]

@@ -34,6 +34,10 @@ import {
   type ColdEmailWorkerDependencies,
 } from "./communications/cold-email-worker.js";
 import {
+  createColdEmailDependenciesFromWorkflowInput,
+  type EmailSenderFactory,
+} from "./communications/cold-email-config.js";
+import {
   createEmailCheckDependenciesFromWorkflowInput,
   type EmailReaderFactory,
 } from "./communications/email-check-config.js";
@@ -212,6 +216,7 @@ export type SidecarRuntimeOptions = {
   emailCheck?: SidecarEmailCheckOptions;
   emailAdapters?: {
     createEmailReader?: EmailReaderFactory;
+    createEmailSender?: EmailSenderFactory;
   };
   coldEmail?: SidecarColdEmailOptions;
   exportSync?: SidecarExportSyncOptions;
@@ -312,12 +317,18 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   workflowEngine.register({
     id: "cold-email",
     description: "Generate cold outreach and record sent communications",
-    run: async () =>
-      runColdEmailWorker(coldEmail, {
+    run: async (input) => {
+      const configuredColdEmail = createColdEmailDependenciesFromWorkflowInput(input, {
+        fallback: coldEmail,
+        createEmailSender: options.emailAdapters?.createEmailSender,
+      });
+
+      return runColdEmailWorker(configuredColdEmail ?? coldEmail, {
         now: now(),
         eventBus,
         maxEmails: options.coldEmail?.maxEmails,
-      }),
+      });
+    },
   });
   workflowEngine.register({
     id: "export-sync",

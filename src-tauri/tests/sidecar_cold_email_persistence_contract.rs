@@ -22,7 +22,7 @@ fn persists_cold_email_workflow_outreach_into_application_history() {
     let command = shell_sidecar(&format!(
         r#"read line
 case "$line" in
-  *'"method":"workflow.run"'*'"workflowId":"cold-email"'*) printf '{{"id":"workflow-cold-email","ok":true,"result":{{"scanned":1,"generated":1,"sent":1,"failed":0,"skipped":0,"coldEmails":[{{"applicationId":"{application_id}","jobId":"{job_id}","companyName":"Northstar Labs","contactId":"{contact_id}","contactName":"Mira","communicationId":"sidecar-comm-1","subject":"Northstar Labs workflow automation intro","body":"Hi Mira,\\n\\nI build local-first workflow tools.","sentAt":"2026-05-28T10:00:00.000Z"}}]}}}}\n' ;;
+  *'"method":"workflow.run"'*'"workflowId":"cold-email"'*) printf '{{"id":"workflow-cold-email","ok":true,"result":{{"scanned":1,"generated":1,"sent":1,"failed":0,"skipped":0,"coldEmails":[{{"applicationId":"{application_id}","jobId":"{job_id}","companyName":"Northstar Labs","contactId":"{contact_id}","contactName":"Mira","communicationId":"sidecar-comm-1","emailId":"smtp-message-1","subject":"Northstar Labs workflow automation intro","body":"Hi Mira,\\n\\nI build local-first workflow tools.","sentAt":"2026-05-28T10:00:00.000Z"}}]}}}}\n' ;;
   *) printf '{{"id":null,"ok":false,"error":{{"message":"unexpected request"}}}}\n' ;;
 esac"#
     ));
@@ -47,7 +47,7 @@ esac"#
         communications[0].body.as_deref(),
         Some("Hi Mira,\n\nI build local-first workflow tools.")
     );
-    assert_eq!(communications[0].email_id, None);
+    assert_eq!(communications[0].email_id.as_deref(), Some("smtp-message-1"));
     assert_eq!(
         communications[0].sent_at.as_deref(),
         Some("2026-05-28T10:00:00.000Z")

@@ -10,6 +10,7 @@ export type ColdEmailTarget = {
   companyIndustry?: string | null;
   contactId: string | null;
   contactName: string | null;
+  contactEmail?: string | null;
   role: string | null;
   context: string | null;
 };
@@ -21,7 +22,7 @@ export type ColdEmailCommunication = {
   type: "cold_email";
   subject: string;
   body: string;
-  emailId: null;
+  emailId: string | null;
   sentAt: string;
   readAt: null;
 };
@@ -32,16 +33,29 @@ export type ColdEmailResultRecord = {
   companyName: string;
   contactId: string | null;
   contactName: string | null;
+  contactEmail?: string | null;
   communicationId: string | null;
+  emailId: string | null;
   subject: string;
   body: string;
   sentAt: string;
+};
+
+export type ColdEmailSendInput = {
+  to: string;
+  subject: string;
+  body: string;
+};
+
+export type ColdEmailSendResult = {
+  messageId: string | null;
 };
 
 export type ColdEmailWorkerDependencies = {
   loadProfile: () => Promise<ProfileForContent | null>;
   listTargets: () => Promise<ColdEmailTarget[]>;
   generateColdEmail: (profile: ProfileForContent, company: CompanyForEmail) => Promise<string>;
+  sendEmail?: (email: ColdEmailSendInput) => Promise<ColdEmailSendResult>;
   saveCommunication: (
     communication: ColdEmailCommunication,
   ) => Promise<{ communicationId: string | null }>;
@@ -97,6 +111,13 @@ export async function runColdEmailWorker(
       result.generated += 1;
       const email = emailParts(generated, companyName);
       const sentAt = options.now.toISOString();
+      const emailId = target.contactEmail && dependencies.sendEmail
+        ? (await dependencies.sendEmail({
+            to: target.contactEmail,
+            subject: email.subject,
+            body: email.body,
+          })).messageId
+        : null;
       const saved = await dependencies.saveCommunication({
         applicationId: target.applicationId,
         contactId: target.contactId,
@@ -104,7 +125,7 @@ export async function runColdEmailWorker(
         type: "cold_email",
         subject: email.subject,
         body: email.body,
-        emailId: null,
+        emailId,
         sentAt,
         readAt: null,
       });
@@ -114,7 +135,9 @@ export async function runColdEmailWorker(
         companyName,
         contactId: target.contactId,
         contactName: target.contactName,
+        ...(target.contactEmail ? { contactEmail: target.contactEmail } : {}),
         communicationId: saved.communicationId,
+        emailId,
         subject: email.subject,
         body: email.body,
         sentAt,

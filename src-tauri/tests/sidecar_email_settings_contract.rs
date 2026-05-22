@@ -139,6 +139,68 @@ fn sends_email_match_context_to_email_check_sidecar() {
     );
 }
 
+#[test]
+fn sends_email_account_settings_to_cold_email_sidecar() {
+    let connection = Connection::open_in_memory().expect("open in-memory database");
+    initialize_schema(&connection).expect("initialize schema");
+    upsert_setting(
+        &connection,
+        UpsertSetting {
+            key: "email.account".to_string(),
+            category: Some("email".to_string()),
+            value: SettingValue::Object(json!({
+                "provider": "gmail",
+                "fromName": "Asha Rao",
+                "fromEmail": "asha@gmail.example",
+                "smtpHost": "smtp.gmail.com",
+                "smtpPort": 465,
+                "smtpSecure": true,
+                "smtpUser": "asha@gmail.example",
+                "smtpPass": "app-password",
+                "imapHost": "imap.gmail.com",
+                "imapPort": 993,
+                "imapSecure": true,
+                "imapUser": "asha@gmail.example",
+                "imapPass": "app-password",
+                "signature": "Asha"
+            })),
+        },
+    )
+    .expect("save email account setting");
+    let request_path = std::env::temp_dir().join(format!(
+        "careercaveman-cold-email-request-{}.json",
+        std::process::id()
+    ));
+    let command = capture_request_sidecar(&request_path);
+
+    run_sidecar_workflow_and_persist_jobs_with_command(&command, &connection, "cold-email")
+        .expect("run configured cold email workflow");
+
+    let request: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&request_path).expect("read captured request"))
+            .expect("captured request is JSON");
+    let _ = fs::remove_file(&request_path);
+    assert_eq!(
+        request["params"]["coldEmail"]["account"],
+        json!({
+            "provider": "gmail",
+            "fromName": "Asha Rao",
+            "fromEmail": "asha@gmail.example",
+            "smtpHost": "smtp.gmail.com",
+            "smtpPort": 465,
+            "smtpSecure": true,
+            "smtpUser": "asha@gmail.example",
+            "smtpPass": "app-password",
+            "imapHost": "imap.gmail.com",
+            "imapPort": 993,
+            "imapSecure": true,
+            "imapUser": "asha@gmail.example",
+            "imapPass": "app-password",
+            "signature": "Asha"
+        })
+    );
+}
+
 fn create_application_contact_context(connection: &Connection) -> (String, String, String, String) {
     let company = save_company(
         connection,

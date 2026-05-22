@@ -74,6 +74,7 @@ describe("cold email worker", () => {
           contactId: "contact-1",
           contactName: "Mira",
           communicationId: "comm-1",
+          emailId: null,
           subject: "Northstar Labs workflow automation intro",
           body: "Hi Mira,\n\nI build local-first workflow tools.",
           sentAt: "2026-05-28T10:00:00.000Z",
@@ -112,6 +113,80 @@ describe("cold email worker", () => {
         communicationId: "comm-1",
         subject: "Northstar Labs workflow automation intro",
         sentAt: new Date("2026-05-28T10:00:00Z"),
+      },
+    ]);
+  });
+
+  it("sends generated cold outreach through SMTP when a target email is available", async () => {
+    const sentEmails: Array<{ to: string; subject: string; body: string }> = [];
+    const saved: ColdEmailCommunication[] = [];
+
+    const result = await runColdEmailWorker(
+      {
+        loadProfile: async () => profile,
+        listTargets: async () => [
+          {
+            applicationId: "app-1",
+            jobId: "job-1",
+            companyName: "Northstar Labs",
+            companyDomain: "northstar.example",
+            companyIndustry: "developer tools",
+            contactId: "contact-1",
+            contactName: "Mira",
+            contactEmail: "mira@northstar.example",
+            role: "recruiter",
+            context: "Hiring desktop automation engineers",
+          },
+        ],
+        generateColdEmail: async () =>
+          "Subject: Northstar Labs workflow automation intro\n\nHi Mira,\n\nI build local-first workflow tools.",
+        sendEmail: async (email) => {
+          sentEmails.push(email);
+          return { messageId: "smtp-message-1" };
+        },
+        saveCommunication: async (communication) => {
+          saved.push(communication);
+          return { communicationId: "comm-1" };
+        },
+      },
+      {
+        now: new Date("2026-05-28T10:00:00Z"),
+      },
+    );
+
+    expect(sentEmails).toEqual([
+      {
+        to: "mira@northstar.example",
+        subject: "Northstar Labs workflow automation intro",
+        body: "Hi Mira,\n\nI build local-first workflow tools.",
+      },
+    ]);
+    expect(saved).toEqual([
+      {
+        applicationId: "app-1",
+        contactId: "contact-1",
+        direction: "sent",
+        type: "cold_email",
+        subject: "Northstar Labs workflow automation intro",
+        body: "Hi Mira,\n\nI build local-first workflow tools.",
+        emailId: "smtp-message-1",
+        sentAt: "2026-05-28T10:00:00.000Z",
+        readAt: null,
+      },
+    ]);
+    expect(result.coldEmails).toEqual([
+      {
+        applicationId: "app-1",
+        jobId: "job-1",
+        companyName: "Northstar Labs",
+        contactId: "contact-1",
+        contactName: "Mira",
+        contactEmail: "mira@northstar.example",
+        communicationId: "comm-1",
+        emailId: "smtp-message-1",
+        subject: "Northstar Labs workflow automation intro",
+        body: "Hi Mira,\n\nI build local-first workflow tools.",
+        sentAt: "2026-05-28T10:00:00.000Z",
       },
     ]);
   });

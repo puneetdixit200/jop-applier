@@ -1210,6 +1210,7 @@ describe("sidecar runtime", () => {
           contactId: "contact-1",
           contactName: "Mira",
           communicationId: "comm-1",
+          emailId: null,
           subject: "Northstar Labs workflow automation intro",
           body: "Hi Mira,\n\nI build local-first workflow tools.",
           sentAt: "2026-05-28T10:00:00.000Z",
@@ -1227,6 +1228,121 @@ describe("sidecar runtime", () => {
         subject: "Northstar Labs workflow automation intro",
         body: "Hi Mira,\n\nI build local-first workflow tools.",
         emailId: null,
+        sentAt: "2026-05-28T10:00:00.000Z",
+        readAt: null,
+      },
+    ]);
+  });
+
+  it("runs configured cold email outreach through the SMTP adapter", async () => {
+    const sentAt = new Date("2026-05-28T10:00:00Z");
+    const senderConfigs: unknown[] = [];
+    const sentEmails: unknown[] = [];
+    const savedCommunications: Array<Record<string, unknown>> = [];
+    const runtime = createSidecarRuntime({
+      now: () => sentAt,
+      emailAdapters: {
+        createEmailSender: (config) => {
+          senderConfigs.push(config);
+          return {
+            sendEmail: async (email) => {
+              sentEmails.push(email);
+              return { messageId: "smtp-message-1" };
+            },
+          };
+        },
+      },
+      coldEmail: {
+        loadProfile: async () => ({
+          fullName: "Asha Rao",
+          headline: "React and Tauri engineer",
+          skills: ["React", "Rust", "Tauri"],
+        }),
+        listTargets: async () => [
+          {
+            applicationId: "app-1",
+            jobId: "job-1",
+            companyName: "Northstar Labs",
+            contactId: "contact-1",
+            contactName: "Mira",
+            contactEmail: "mira@northstar.example",
+            role: "recruiter",
+            context: "Hiring desktop automation engineers",
+          },
+        ],
+        generateColdEmail: async () =>
+          "Subject: Northstar Labs workflow automation intro\n\nHi Mira,\n\nI build local-first workflow tools.",
+        saveCommunication: async (communication) => {
+          savedCommunications.push(communication);
+          return { communicationId: "comm-1" };
+        },
+      },
+    });
+
+    await expect(
+      runtime.workflowEngine.run("cold-email", {
+        coldEmail: {
+          account: {
+            provider: "gmail",
+            fromName: "Asha Rao",
+            fromEmail: "asha@gmail.example",
+            smtpHost: "smtp.gmail.com",
+            smtpPort: 465,
+            smtpSecure: true,
+            smtpUser: "asha@gmail.example",
+            smtpPass: "app-password",
+            imapHost: "imap.gmail.com",
+            imapPort: 993,
+            imapSecure: true,
+            imapUser: "asha@gmail.example",
+            imapPass: "app-password",
+            signature: "Asha",
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      sent: 1,
+      coldEmails: [
+        {
+          communicationId: "comm-1",
+          emailId: "smtp-message-1",
+        },
+      ],
+    });
+    expect(senderConfigs).toEqual([
+      {
+        provider: "gmail",
+        fromName: "Asha Rao",
+        fromEmail: "asha@gmail.example",
+        smtpHost: "smtp.gmail.com",
+        smtpPort: 465,
+        smtpSecure: true,
+        smtpUser: "asha@gmail.example",
+        smtpPass: "app-password",
+        imapHost: "imap.gmail.com",
+        imapPort: 993,
+        imapSecure: true,
+        imapUser: "asha@gmail.example",
+        imapPass: "app-password",
+        signature: "Asha",
+      },
+    ]);
+    expect(sentEmails).toEqual([
+      {
+        to: "mira@northstar.example",
+        subject: "Northstar Labs workflow automation intro",
+        body: "Hi Mira,\n\nI build local-first workflow tools.",
+      },
+    ]);
+    expect(savedCommunications).toEqual([
+      {
+        applicationId: "app-1",
+        contactId: "contact-1",
+        direction: "sent",
+        type: "cold_email",
+        subject: "Northstar Labs workflow automation intro",
+        body: "Hi Mira,\n\nI build local-first workflow tools.",
+        emailId: "smtp-message-1",
         sentAt: "2026-05-28T10:00:00.000Z",
         readAt: null,
       },
