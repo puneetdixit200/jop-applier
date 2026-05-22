@@ -1,10 +1,10 @@
 import {
   createImapEmailReader,
   type EmailAccountConfig,
-  type EmailProvider,
   type FetchUnreadOptions,
   type InboundEmail,
 } from "./email-adapter.js";
+import { emailAccountConfig } from "./email-account-config.js";
 import type {
   EmailResponseMessage,
   EmailResponseType,
@@ -174,60 +174,6 @@ function emailMatchContact(value: unknown): EmailMatchContact | null {
     : null;
 }
 
-function emailAccountConfig(value: unknown): EmailAccountConfig | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  const provider = emailProvider(value.provider);
-  const smtpHost = nonEmptyString(value.smtpHost);
-  const smtpPort = positiveInteger(value.smtpPort);
-  const smtpSecure = booleanValue(value.smtpSecure);
-  const smtpUser = nonEmptyString(value.smtpUser);
-  const smtpPass = nonEmptyString(value.smtpPass);
-  const imapHost = nonEmptyString(value.imapHost);
-  const imapPort = positiveInteger(value.imapPort);
-  const imapSecure = booleanValue(value.imapSecure);
-  const imapUser = nonEmptyString(value.imapUser);
-  const imapPass = nonEmptyString(value.imapPass);
-  const fromName = nonEmptyString(value.fromName);
-  const fromEmail = nonEmptyString(value.fromEmail);
-
-  if (
-    !provider ||
-    !smtpHost ||
-    !smtpPort ||
-    smtpSecure === null ||
-    !smtpUser ||
-    !smtpPass ||
-    !imapHost ||
-    !imapPort ||
-    imapSecure === null ||
-    !imapUser ||
-    !imapPass ||
-    !fromName ||
-    !fromEmail
-  ) {
-    return null;
-  }
-
-  return {
-    provider,
-    smtpHost,
-    smtpPort,
-    smtpSecure,
-    smtpUser,
-    smtpPass,
-    imapHost,
-    imapPort,
-    imapSecure,
-    imapUser,
-    imapPass,
-    fromName,
-    fromEmail,
-    signature: nullableString(value.signature),
-  };
-}
-
 function fetchUnreadOptions(value: unknown): FetchUnreadOptions {
   if (!isRecord(value)) {
     return {};
@@ -241,10 +187,6 @@ function fetchUnreadOptions(value: unknown): FetchUnreadOptions {
     ...(limit ? { limit } : {}),
     ...(markSeen !== null ? { markSeen } : {}),
   };
-}
-
-function emailProvider(value: unknown): EmailProvider | null {
-  return value === "gmail" || value === "outlook" || value === "custom" ? value : null;
 }
 
 function nonEmptyString(value: unknown): string | null {

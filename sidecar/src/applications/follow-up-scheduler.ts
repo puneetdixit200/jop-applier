@@ -1,6 +1,7 @@
 export type FollowUpApplication = {
   id: string;
   jobId: string;
+  jobTitle?: string | null;
   companyName: string;
   status: string;
   submittedAt: string | null;
@@ -9,6 +10,9 @@ export type FollowUpApplication = {
   followUpCount: number;
   responseDate: string | null;
   responseType: string | null;
+  contactId?: string | null;
+  contactName?: string | null;
+  contactEmail?: string | null;
 };
 
 export type FollowUpScheduleOptions = {

@@ -21,6 +21,9 @@ import {
   type FollowUpWorkerDependencies,
 } from "./applications/follow-up-worker.js";
 import {
+  createFollowUpDependenciesFromWorkflowInput,
+} from "./applications/follow-up-config.js";
+import {
   BrowserManager,
   createPlaywrightBrowserAdapter,
   type BrowserSession,
@@ -342,13 +345,19 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   workflowEngine.register({
     id: "follow-up-check",
     description: "Send due follow-ups for applications awaiting a response",
-    run: async () =>
-      runFollowUpWorker(followUps, {
+    run: async (input) => {
+      const configuredFollowUps = createFollowUpDependenciesFromWorkflowInput(input, {
+        fallback: followUps,
+        createEmailSender: options.emailAdapters?.createEmailSender,
+      });
+
+      return runFollowUpWorker(configuredFollowUps ?? followUps, {
         now: now(),
         followUpDelaysDays: options.followUps?.followUpDelaysDays ?? [3, 7, 14],
         maxFollowUps: options.followUps?.maxFollowUps ?? 3,
         eventBus,
-      }),
+      });
+    },
   });
   workflowEngine.register({
     id: "cleanup",

@@ -1,5 +1,6 @@
 import type { EventBus } from "../orchestrator/event-bus.js";
 import type { CareerEventMap } from "../orchestrator/events.js";
+import { followUpEmailDraft } from "./follow-up-message.js";
 import {
   dueFollowUpApplications,
   scheduleNextFollowUp,
@@ -10,6 +11,12 @@ import {
 
 export type FollowUpSendResult = {
   communicationId: string | null;
+  emailId?: string | null;
+  subject?: string | null;
+  body?: string | null;
+  contactId?: string | null;
+  contactName?: string | null;
+  contactEmail?: string | null;
 };
 
 export type FollowUpWorkerDependencies = {
@@ -28,6 +35,24 @@ export type FollowUpWorkerResult = {
   sent: number;
   failed: number;
   ghosted: number;
+  followUps: FollowUpResultRecord[];
+};
+
+export type FollowUpResultRecord = {
+  applicationId: string;
+  jobId: string;
+  companyName: string;
+  contactId: string | null;
+  contactName: string | null;
+  contactEmail?: string | null;
+  communicationId: string | null;
+  emailId: string | null;
+  subject: string;
+  body: string;
+  sentAt: string;
+  status: "follow_up_sent" | "ghosted";
+  followUpCount: number;
+  nextFollowUp: string | null;
 };
 
 export async function runFollowUpWorker(
@@ -42,6 +67,7 @@ export async function runFollowUpWorker(
     sent: 0,
     failed: 0,
     ghosted: 0,
+    followUps: [],
   };
 
   for (const application of dueApplications) {
@@ -54,6 +80,7 @@ export async function runFollowUpWorker(
       if (update.status === "ghosted") {
         result.ghosted += 1;
       }
+      result.followUps.push(followUpRecord(application, sendResult, update, options.now));
 
       options.eventBus?.emit("follow_up.sent", {
         applicationId: application.id,
@@ -78,4 +105,31 @@ export async function runFollowUpWorker(
   }
 
   return result;
+}
+
+function followUpRecord(
+  application: FollowUpApplication,
+  sendResult: FollowUpSendResult,
+  update: FollowUpUpdate,
+  sentAt: Date,
+): FollowUpResultRecord {
+  const draft = followUpEmailDraft(application);
+  const contactEmail = sendResult.contactEmail ?? application.contactEmail ?? null;
+
+  return {
+    applicationId: application.id,
+    jobId: application.jobId,
+    companyName: application.companyName,
+    contactId: sendResult.contactId ?? application.contactId ?? null,
+    contactName: sendResult.contactName ?? application.contactName ?? null,
+    ...(contactEmail ? { contactEmail } : {}),
+    communicationId: sendResult.communicationId,
+    emailId: sendResult.emailId ?? null,
+    subject: sendResult.subject ?? draft.subject,
+    body: sendResult.body ?? draft.body,
+    sentAt: sentAt.toISOString(),
+    status: update.status,
+    followUpCount: update.followUpCount,
+    nextFollowUp: update.nextFollowUp,
+  };
 }

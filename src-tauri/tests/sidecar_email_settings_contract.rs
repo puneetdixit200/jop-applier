@@ -1,11 +1,16 @@
 use careercaveman_lib::{
-    commands::sidecar::run_sidecar_workflow_and_persist_jobs_with_command,
+    commands::sidecar::{
+        run_due_scheduled_tasks_with_command, run_sidecar_workflow_and_persist_jobs_with_command,
+    },
     db::{
         models::{
             SettingValue, UpsertApplication, UpsertCompany, UpsertContact, UpsertJob,
-            UpsertSetting,
+            UpsertScheduledTask, UpsertSetting,
         },
-        queries::{save_company, save_contact, upsert_application, upsert_job, upsert_setting},
+        queries::{
+            list_applications, list_communications, save_company, save_contact,
+            save_scheduled_task, upsert_application, upsert_job, upsert_setting,
+        },
         schema::initialize_schema,
     },
     sidecar::SidecarCommand,
@@ -104,7 +109,8 @@ fn sends_email_account_settings_to_email_check_sidecar() {
 fn sends_email_match_context_to_email_check_sidecar() {
     let connection = Connection::open_in_memory().expect("open in-memory database");
     initialize_schema(&connection).expect("initialize schema");
-    let (application_id, job_id, company_id, contact_id) = create_application_contact_context(&connection);
+    let (application_id, job_id, company_id, contact_id) =
+        create_application_contact_context(&connection);
     let request_path = std::env::temp_dir().join(format!(
         "careercaveman-email-match-request-{}.json",
         std::process::id()
@@ -201,6 +207,162 @@ fn sends_email_account_settings_to_cold_email_sidecar() {
     );
 }
 
+#[test]
+fn sends_email_account_and_follow_up_context_to_follow_up_sidecar_and_persists_result() {
+    let connection = Connection::open_in_memory().expect("open in-memory database");
+    initialize_schema(&connection).expect("initialize schema");
+    upsert_setting(
+        &connection,
+        UpsertSetting {
+            key: "email.account".to_string(),
+            category: Some("email".to_string()),
+            value: SettingValue::Object(json!({
+                "provider": "gmail",
+                "fromName": "Asha Rao",
+                "fromEmail": "asha@gmail.example",
+                "smtpHost": "smtp.gmail.com",
+                "smtpPort": 465,
+                "smtpSecure": true,
+                "smtpUser": "asha@gmail.example",
+                "smtpPass": "app-password",
+                "imapHost": "imap.gmail.com",
+                "imapPort": 993,
+                "imapSecure": true,
+                "imapUser": "asha@gmail.example",
+                "imapPass": "app-password",
+                "signature": "Asha"
+            })),
+        },
+    )
+    .expect("save email account setting");
+    let (application_id, job_id, _company_id, contact_id) =
+        create_application_contact_context(&connection);
+    save_scheduled_task(
+        &connection,
+        UpsertScheduledTask {
+            name: "Follow-up Check".to_string(),
+            task_type: "follow_up".to_string(),
+            cron_expression: Some("0 9 * * *".to_string()),
+            is_enabled: true,
+            last_run: None,
+            next_run: Some("2026-05-28T09:00:00.000Z".to_string()),
+            config: json!({
+                "cadence": { "kind": "daily", "hour": 9, "minute": 0 }
+            }),
+        },
+    )
+    .expect("save follow-up task");
+    let request_path = std::env::temp_dir().join(format!(
+        "careercaveman-follow-up-request-{}.json",
+        std::process::id()
+    ));
+    let command = capture_request_sidecar_with_result(
+        &request_path,
+        json!({
+            "id": "workflow-follow-up-check",
+            "ok": true,
+            "result": {
+                "scanned": 1,
+                "due": 1,
+                "sent": 1,
+                "failed": 0,
+                "ghosted": 0,
+                "followUps": [{
+                    "applicationId": application_id,
+                    "jobId": job_id,
+                    "companyName": "Northstar Labs",
+                    "contactId": contact_id,
+                    "contactName": "Mira Recruiter",
+                    "contactEmail": "mira@northstar.example",
+                    "communicationId": null,
+                    "emailId": "smtp-follow-up-1",
+                    "subject": "Following up on Frontend Engineer Intern at Northstar Labs",
+                    "body": "Hi Mira Recruiter,\n\nI wanted to follow up on my application for the Frontend Engineer Intern role at Northstar Labs.\n\nThank you.",
+                    "sentAt": "2026-05-28T09:00:00.000Z",
+                    "status": "follow_up_sent",
+                    "followUpCount": 1,
+                    "nextFollowUp": "2026-06-04T09:00:00.000Z"
+                }]
+            }
+        }),
+    );
+
+    let result = run_due_scheduled_tasks_with_command(
+        &command,
+        &connection,
+        "2026-05-28T09:00:00.000Z",
+    )
+    .expect("run configured scheduled follow-up workflow");
+
+    let request: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&request_path).expect("read captured request"))
+            .expect("captured request is JSON");
+    let _ = fs::remove_file(&request_path);
+    assert_eq!(
+        request["params"]["followUp"]["account"],
+        json!({
+            "provider": "gmail",
+            "fromName": "Asha Rao",
+            "fromEmail": "asha@gmail.example",
+            "smtpHost": "smtp.gmail.com",
+            "smtpPort": 465,
+            "smtpSecure": true,
+            "smtpUser": "asha@gmail.example",
+            "smtpPass": "app-password",
+            "imapHost": "imap.gmail.com",
+            "imapPort": 993,
+            "imapSecure": true,
+            "imapUser": "asha@gmail.example",
+            "imapPass": "app-password",
+            "signature": "Asha"
+        })
+    );
+    assert_eq!(
+        request["params"]["followUp"]["applications"][0],
+        json!({
+            "id": application_id,
+            "jobId": job_id,
+            "jobTitle": "Frontend Engineer Intern",
+            "companyName": "Northstar Labs",
+            "status": "submitted",
+            "submittedAt": null,
+            "nextFollowUp": null,
+            "lastFollowUp": null,
+            "followUpCount": 0,
+            "responseDate": null,
+            "responseType": null,
+            "contactId": contact_id,
+            "contactName": "Mira Recruiter",
+            "contactEmail": "mira@northstar.example"
+        })
+    );
+    assert_eq!(result.scanned, 1);
+    assert_eq!(result.due, 1);
+    assert_eq!(result.completed, 1);
+    assert_eq!(result.failed, 0);
+
+    let applications = list_applications(&connection).expect("list applications");
+    let updated = applications
+        .iter()
+        .find(|application| application.id == application_id)
+        .expect("updated application");
+    assert_eq!(updated.status, "follow_up_sent");
+    assert_eq!(updated.follow_up_count, 1);
+    assert_eq!(
+        updated.next_follow_up.as_deref(),
+        Some("2026-06-04T09:00:00.000Z")
+    );
+
+    let communications =
+        list_communications(&connection, &application_id).expect("list communications");
+    assert_eq!(communications.len(), 1);
+    assert_eq!(communications[0].communication_type, "follow_up");
+    assert_eq!(
+        communications[0].email_id.as_deref(),
+        Some("smtp-follow-up-1")
+    );
+}
+
 fn create_application_contact_context(connection: &Connection) -> (String, String, String, String) {
     let company = save_company(
         connection,
@@ -287,6 +449,27 @@ fn create_application_contact_context(connection: &Connection) -> (String, Strin
 }
 
 fn capture_request_sidecar(request_path: &Path) -> SidecarCommand {
+    capture_request_sidecar_with_result(
+        request_path,
+        json!({
+            "id": "workflow-email-check",
+            "ok": true,
+            "result": {
+                "scanned": 0,
+                "matched": 0,
+                "recorded": 0,
+                "failed": 0,
+                "skipped": 0,
+                "responses": []
+            }
+        }),
+    )
+}
+
+fn capture_request_sidecar_with_result(
+    request_path: &Path,
+    response: serde_json::Value,
+) -> SidecarCommand {
     SidecarCommand {
         program: PathBuf::from("/bin/sh"),
         args: vec![
@@ -294,8 +477,9 @@ fn capture_request_sidecar(request_path: &Path) -> SidecarCommand {
             format!(
                 r#"read line
 printf '%s' "$line" > '{}'
-printf '{{"id":"workflow-email-check","ok":true,"result":{{"scanned":0,"matched":0,"recorded":0,"failed":0,"skipped":0,"responses":[]}}}}\n'"#,
-                request_path.display()
+printf '%s\n' '{}'"#,
+                request_path.display(),
+                response
             ),
         ],
     }

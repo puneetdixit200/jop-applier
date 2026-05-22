@@ -429,6 +429,116 @@ describe("sidecar runtime", () => {
     ]);
   });
 
+  it("runs configured follow-up workflow through the SMTP adapter", async () => {
+    const sentAt = new Date("2026-05-28T09:00:00Z");
+    const senderConfigs: unknown[] = [];
+    const sentEmails: unknown[] = [];
+    const runtime = createSidecarRuntime({
+      now: () => sentAt,
+      emailAdapters: {
+        createEmailSender: (config) => {
+          senderConfigs.push(config);
+          return {
+            sendEmail: async (email) => {
+              sentEmails.push(email);
+              return { messageId: "smtp-follow-up-1" };
+            },
+          };
+        },
+      },
+    });
+
+    await expect(
+      runtime.workflowEngine.run("follow-up-check", {
+        followUp: {
+          account: {
+            provider: "gmail",
+            fromName: "Asha Rao",
+            fromEmail: "asha@gmail.example",
+            smtpHost: "smtp.gmail.com",
+            smtpPort: 465,
+            smtpSecure: true,
+            smtpUser: "asha@gmail.example",
+            smtpPass: "app-password",
+            imapHost: "imap.gmail.com",
+            imapPort: 993,
+            imapSecure: true,
+            imapUser: "asha@gmail.example",
+            imapPass: "app-password",
+            signature: "Asha",
+          },
+          applications: [
+            {
+              id: "app-1",
+              jobId: "job-1",
+              jobTitle: "Frontend Engineer Intern",
+              companyName: "Northstar Labs",
+              status: "submitted",
+              submittedAt: "2026-05-20T10:00:00Z",
+              nextFollowUp: "2026-05-28T08:00:00Z",
+              lastFollowUp: null,
+              followUpCount: 0,
+              responseDate: null,
+              responseType: null,
+              contactId: "contact-1",
+              contactName: "Mira Recruiter",
+              contactEmail: "mira@northstar.example",
+            },
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({
+      scanned: 1,
+      due: 1,
+      sent: 1,
+      failed: 0,
+      ghosted: 0,
+      followUps: [
+        {
+          applicationId: "app-1",
+          jobId: "job-1",
+          companyName: "Northstar Labs",
+          contactId: "contact-1",
+          contactName: "Mira Recruiter",
+          contactEmail: "mira@northstar.example",
+          communicationId: null,
+          emailId: "smtp-follow-up-1",
+          subject: "Following up on Frontend Engineer Intern at Northstar Labs",
+          body: "Hi Mira Recruiter,\n\nI wanted to follow up on my application for the Frontend Engineer Intern role at Northstar Labs.\n\nThank you.",
+          sentAt: "2026-05-28T09:00:00.000Z",
+          status: "follow_up_sent",
+          followUpCount: 1,
+          nextFollowUp: "2026-06-04T09:00:00.000Z",
+        },
+      ],
+    });
+    expect(senderConfigs).toEqual([
+      {
+        provider: "gmail",
+        fromName: "Asha Rao",
+        fromEmail: "asha@gmail.example",
+        smtpHost: "smtp.gmail.com",
+        smtpPort: 465,
+        smtpSecure: true,
+        smtpUser: "asha@gmail.example",
+        smtpPass: "app-password",
+        imapHost: "imap.gmail.com",
+        imapPort: 993,
+        imapSecure: true,
+        imapUser: "asha@gmail.example",
+        imapPass: "app-password",
+        signature: "Asha",
+      },
+    ]);
+    expect(sentEmails).toEqual([
+      {
+        to: "mira@northstar.example",
+        subject: "Following up on Frontend Engineer Intern at Northstar Labs",
+        body: "Hi Mira Recruiter,\n\nI wanted to follow up on my application for the Frontend Engineer Intern role at Northstar Labs.\n\nThank you.",
+      },
+    ]);
+  });
+
   it("runs due application processing scheduled tasks through the application workflow", async () => {
     const checkedAt = new Date("2026-05-28T09:30:00Z");
     const applicationUpdates: Array<{ applicationId: string; update: Record<string, unknown> }> = [];

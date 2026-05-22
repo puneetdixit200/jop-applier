@@ -58,6 +58,38 @@ describe("follow-up worker", () => {
       sent: 2,
       failed: 0,
       ghosted: 1,
+      followUps: [
+        {
+          applicationId: "due-first",
+          jobId: "job-1",
+          companyName: "Northstar Labs",
+          contactId: null,
+          contactName: null,
+          communicationId: "comm-due-first",
+          emailId: null,
+          subject: "Following up on Northstar Labs",
+          body: "Hi Northstar Labs,\n\nI wanted to follow up on my application at Northstar Labs.\n\nThank you.",
+          sentAt: "2026-05-27T09:00:00.000Z",
+          status: "follow_up_sent",
+          followUpCount: 1,
+          nextFollowUp: "2026-06-03T09:00:00.000Z",
+        },
+        {
+          applicationId: "due-final",
+          jobId: "job-1",
+          companyName: "Northstar Labs",
+          contactId: null,
+          contactName: null,
+          communicationId: "comm-due-final",
+          emailId: null,
+          subject: "Following up on Northstar Labs",
+          body: "Hi Northstar Labs,\n\nI wanted to follow up on my application at Northstar Labs.\n\nThank you.",
+          sentAt: "2026-05-27T09:00:00.000Z",
+          status: "ghosted",
+          followUpCount: 3,
+          nextFollowUp: null,
+        },
+      ],
     });
     expect(sent).toEqual(["due-first", "due-final"]);
     expect(updates).toEqual([

@@ -72,6 +72,9 @@ pub fn run_sidecar_workflow_and_persist_jobs_with_command(
     if workflow_id == "cold-email" {
         persist_cold_emails(connection, &mut result)?;
     }
+    if workflow_id == "follow-up-check" {
+        persist_follow_ups(connection, &mut result)?;
+    }
     persist_sidecar_notifications(connection, &mut result)?;
 
     Ok(result)
@@ -161,7 +164,7 @@ pub fn run_due_scheduled_tasks_with_command(
     };
 
     for task in due_tasks {
-        let task_notifications = if task.task_type == "follow_up" {
+        let task_notifications = if should_run_native_follow_up(connection, &task.task_type)? {
             match run_due_follow_up_task(connection, now) {
                 Ok(notifications) => notifications,
                 Err(_) => {
@@ -241,6 +244,10 @@ fn run_due_follow_up_task(
     }
 
     Ok(notifications)
+}
+
+fn should_run_native_follow_up(connection: &Connection, task_type: &str) -> Result<bool, String> {
+    Ok(task_type == "follow_up" && setting_object(connection, "email.account")?.is_none())
 }
 
 fn is_follow_up_due(application: &Application, now: OffsetDateTime) -> bool {
@@ -334,6 +341,42 @@ fn follow_up_notifications(
     communication_id: &str,
     created_at: &str,
 ) -> Result<Vec<Value>, String> {
+    let notifications =
+        follow_up_notification_values(application, update, communication_id, created_at);
+
+    for notification in notifications
+        .iter()
+        .filter(|notification| notification["channel"] == json!("in_app"))
+    {
+        queries::save_notification(
+            connection,
+            UpsertNotification {
+                notification_type: "follow_up.reminder".to_string(),
+                title: notification["title"]
+                    .as_str()
+                    .unwrap_or("Follow-up sent")
+                    .to_string(),
+                body: notification["body"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string(),
+                priority: "medium".to_string(),
+                channel: "in_app".to_string(),
+                metadata: notification["metadata"].clone(),
+            },
+        )
+        .map_err(|error| error.to_string())?;
+    }
+
+    Ok(notifications)
+}
+
+fn follow_up_notification_values(
+    application: &Application,
+    update: &ApplicationFollowUpUpdate,
+    communication_id: &str,
+    created_at: &str,
+) -> Vec<Value> {
     let title = if update.status == "ghosted" {
         "Application marked ghosted"
     } else {
@@ -361,7 +404,7 @@ fn follow_up_notifications(
     let mut notifications = Vec::new();
 
     for channel in ["os", "in_app"] {
-        let notification = json!({
+        notifications.push(json!({
             "type": "follow_up.reminder",
             "title": title,
             "body": body,
@@ -369,25 +412,10 @@ fn follow_up_notifications(
             "channel": channel,
             "createdAt": created_at,
             "metadata": metadata.clone(),
-        });
-        if channel == "in_app" {
-            queries::save_notification(
-                connection,
-                UpsertNotification {
-                    notification_type: "follow_up.reminder".to_string(),
-                    title: title.to_string(),
-                    body: body.clone(),
-                    priority: "medium".to_string(),
-                    channel: channel.to_string(),
-                    metadata: metadata.clone(),
-                },
-            )
-            .map_err(|error| error.to_string())?;
-        }
-        notifications.push(notification);
+        }));
     }
 
-    Ok(notifications)
+    notifications
 }
 
 fn workflow_notifications(result: &Value) -> Vec<Value> {
@@ -454,6 +482,10 @@ fn workflow_params_from_settings(
 
     if workflow_id == "cold-email" {
         return cold_email_workflow_params_from_settings(connection);
+    }
+
+    if workflow_id == "follow-up-check" {
+        return follow_up_workflow_params_from_settings(connection);
     }
 
     Ok(json!({}))
@@ -525,6 +557,89 @@ fn cold_email_workflow_params_from_settings(connection: &Connection) -> Result<V
     } else {
         Ok(json!({ "coldEmail": cold_email }))
     }
+}
+
+fn follow_up_workflow_params_from_settings(connection: &Connection) -> Result<Value, String> {
+    let mut follow_up = Map::new();
+    if let Some(account) = setting_object(connection, "email.account")? {
+        follow_up.insert("account".to_string(), Value::Object(account));
+    }
+    if let Some(applications) = follow_up_applications_from_database(connection)? {
+        follow_up.insert("applications".to_string(), Value::Array(applications));
+    }
+
+    if follow_up.is_empty() {
+        Ok(json!({}))
+    } else {
+        Ok(json!({ "followUp": follow_up }))
+    }
+}
+
+fn follow_up_applications_from_database(
+    connection: &Connection,
+) -> Result<Option<Vec<Value>>, String> {
+    let applications = queries::list_applications(connection).map_err(|error| error.to_string())?;
+    if applications.is_empty() {
+        return Ok(None);
+    }
+
+    let companies = queries::list_companies(connection).map_err(|error| error.to_string())?;
+    let company_names_by_id = companies
+        .into_iter()
+        .map(|company| (company.id, company.name))
+        .collect::<HashMap<_, _>>();
+    let contacts = queries::list_contacts(connection).map_err(|error| error.to_string())?;
+    let contacts_by_company = contacts
+        .into_iter()
+        .filter_map(|contact| {
+            let email = contact.email.clone()?;
+            let company_name = contact
+                .company_id
+                .as_deref()
+                .and_then(|company_id| company_names_by_id.get(company_id))?
+                .clone();
+
+            Some((
+                normalized_company_name(&company_name),
+                json!({
+                    "contactId": contact.id,
+                    "contactName": contact.name,
+                    "contactEmail": email,
+                }),
+            ))
+        })
+        .collect::<HashMap<_, _>>();
+
+    let values = applications
+        .into_iter()
+        .map(|application| {
+            let contact =
+                contacts_by_company.get(&normalized_company_name(&application.company_name));
+
+            json!({
+                "id": application.id,
+                "jobId": application.job_id,
+                "jobTitle": application.job_title,
+                "companyName": application.company_name,
+                "status": application.status,
+                "submittedAt": application.submitted_at,
+                "nextFollowUp": application.next_follow_up,
+                "lastFollowUp": application.last_follow_up,
+                "followUpCount": application.follow_up_count,
+                "responseDate": application.response_date,
+                "responseType": application.response_type,
+                "contactId": contact.and_then(|value| value.get("contactId")).cloned(),
+                "contactName": contact.and_then(|value| value.get("contactName")).cloned(),
+                "contactEmail": contact.and_then(|value| value.get("contactEmail")).cloned(),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    Ok(Some(values))
+}
+
+fn normalized_company_name(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
 }
 
 fn email_match_context_from_database(connection: &Connection) -> Result<Option<Value>, String> {
@@ -808,6 +923,77 @@ fn persist_cold_emails(connection: &Connection, result: &mut Value) -> Result<()
     Ok(())
 }
 
+fn persist_follow_ups(connection: &Connection, result: &mut Value) -> Result<(), String> {
+    let Some(follow_ups_value) = result.get("followUps").cloned() else {
+        return Ok(());
+    };
+    let follow_ups: Vec<SidecarFollowUp> =
+        serde_json::from_value(follow_ups_value).map_err(|error| error.to_string())?;
+    let mut stored = 0;
+    let mut persisted_follow_ups = Vec::new();
+    let mut notifications = result
+        .get("notifications")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    for mut follow_up in follow_ups {
+        let update = ApplicationFollowUpUpdate {
+            status: follow_up.status.clone(),
+            follow_up_count: follow_up.follow_up_count,
+            last_follow_up: follow_up.sent_at.clone(),
+            next_follow_up: follow_up.next_follow_up.clone(),
+        };
+        let application = queries::update_application_follow_up_state(
+            connection,
+            &follow_up.application_id,
+            update.clone(),
+        )
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| {
+            format!(
+                "follow-up application not found: {}",
+                follow_up.application_id
+            )
+        })?;
+        let communication = queries::save_communication(
+            connection,
+            UpsertCommunication {
+                application_id: Some(follow_up.application_id.clone()),
+                contact_id: follow_up.contact_id.clone(),
+                direction: "sent".to_string(),
+                communication_type: "follow_up".to_string(),
+                subject: Some(follow_up.subject.clone()),
+                body: Some(follow_up.body.clone()),
+                email_id: follow_up.email_id.clone(),
+                sent_at: Some(follow_up.sent_at.clone()),
+                read_at: None,
+            },
+        )
+        .map_err(|error| error.to_string())?;
+        follow_up.communication_id = Some(communication.id.clone());
+        notifications.extend(follow_up_notification_values(
+            &application,
+            &update,
+            &communication.id,
+            &follow_up.sent_at,
+        ));
+        persisted_follow_ups
+            .push(serde_json::to_value(follow_up).map_err(|error| error.to_string())?);
+        stored += 1;
+    }
+
+    if let Some(payload) = result.as_object_mut() {
+        payload.insert("storedFollowUps".to_string(), json!(stored));
+        payload.insert("followUps".to_string(), Value::Array(persisted_follow_ups));
+        if !notifications.is_empty() {
+            payload.insert("notifications".to_string(), Value::Array(notifications));
+        }
+    }
+
+    Ok(())
+}
+
 #[derive(Clone, Debug, Deserialize)]
 struct SidecarNotificationDelivery {
     #[serde(rename = "type")]
@@ -860,6 +1046,35 @@ struct SidecarColdEmail {
     body: String,
     #[serde(rename = "sentAt")]
     sent_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct SidecarFollowUp {
+    #[serde(rename = "applicationId")]
+    application_id: String,
+    #[serde(rename = "jobId")]
+    job_id: String,
+    #[serde(rename = "companyName")]
+    company_name: String,
+    #[serde(rename = "contactId")]
+    contact_id: Option<String>,
+    #[serde(rename = "contactName")]
+    contact_name: Option<String>,
+    #[serde(rename = "contactEmail")]
+    contact_email: Option<String>,
+    #[serde(rename = "communicationId")]
+    communication_id: Option<String>,
+    #[serde(rename = "emailId")]
+    email_id: Option<String>,
+    subject: String,
+    body: String,
+    #[serde(rename = "sentAt")]
+    sent_at: String,
+    status: String,
+    #[serde(rename = "followUpCount")]
+    follow_up_count: i64,
+    #[serde(rename = "nextFollowUp")]
+    next_follow_up: Option<String>,
 }
 
 fn workflow_id_for_task_type(task_type: &str) -> Option<&'static str> {
