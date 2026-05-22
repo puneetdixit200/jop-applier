@@ -759,6 +759,26 @@ button:disabled {
   color: #909b95;
 }
 
+.contact-editor {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.contact-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.contact-editor-grid label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: #35423b;
+  font-weight: 700;
+}
+
 .application-editor {
   margin-top: 18px;
   padding-top: 16px;
@@ -942,6 +962,10 @@ legend {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .contact-editor-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .application-editor-grid {
     grid-template-columns: 1fr;
   }
@@ -998,6 +1022,10 @@ legend {
   }
 
   .contact-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .contact-editor-grid {
     grid-template-columns: 1fr;
   }
 }

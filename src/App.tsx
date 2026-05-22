@@ -9,6 +9,7 @@ import {
   CheckCheck,
   FileText,
   Play,
+  Plus,
   Search,
   Settings,
   ShieldCheck,
@@ -33,6 +34,7 @@ import {
   runApplicationReviewDecision,
   runSidecarWorkflow,
   saveApplication,
+  saveContact,
   saveScheduledTask,
   saveSetting,
   saveUserProfile,
@@ -51,6 +53,12 @@ import {
   applicationEditToUpsert,
   type ApplicationEditDraft,
 } from "./lib/application-editor";
+import {
+  contactDraftToUpsert,
+  emptyContactDraft,
+  isContactDraftSaveable,
+  type ContactEditorDraft,
+} from "./lib/contact-editor";
 import {
   buildApplicationActivity,
   type ApplicationActivity,
@@ -373,6 +381,7 @@ export function App() {
   const [persistedApplications, setPersistedApplications] = useState<Application[]>([]);
   const [previewApplicationRecords, setPreviewApplicationRecords] = useState<Application[]>(previewApplications);
   const [persistedContacts, setPersistedContacts] = useState<Contact[]>([]);
+  const [contactDraft, setContactDraft] = useState<ContactEditorDraft>(() => emptyContactDraft());
   const [persistedNotifications, setPersistedNotifications] = useState<AppNotification[]>([]);
   const [previewNotificationRecords, setPreviewNotificationRecords] = useState<AppNotification[]>(previewNotifications);
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
@@ -388,6 +397,7 @@ export function App() {
   const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
   const [isRunningSchedules, setIsRunningSchedules] = useState(false);
   const [runningReviewActionId, setRunningReviewActionId] = useState<string | null>(null);
+  const [isSavingContact, setIsSavingContact] = useState(false);
   const [draggedApplicationId, setDraggedApplicationId] = useState<string | null>(null);
   const [isNotificationInboxOpen, setIsNotificationInboxOpen] = useState(false);
   const [scheduleSummaries, setScheduleSummaries] = useState<ScheduledTaskSummary[]>(() =>
@@ -651,6 +661,40 @@ export function App() {
     }
   }
 
+  async function saveRecruiterContact() {
+    if (!isContactDraftSaveable(contactDraft)) {
+      setStorageStatus("Contact name required");
+      return;
+    }
+
+    const contact = contactDraftToUpsert(contactDraft);
+    if (!isDesktopRuntime()) {
+      setPersistedContacts((current) => [
+        {
+          ...contact,
+          id: `preview-contact-${Date.now()}`,
+          created_at: new Date().toISOString(),
+        },
+        ...current,
+      ]);
+      setContactDraft(emptyContactDraft());
+      setStorageStatus("Browser preview");
+      return;
+    }
+
+    setIsSavingContact(true);
+    try {
+      const saved = await saveContact(contact);
+      setPersistedContacts((current) => [saved, ...current]);
+      setContactDraft(emptyContactDraft());
+      setStorageStatus("SQLite ready");
+    } catch {
+      setStorageStatus("Storage unavailable");
+    } finally {
+      setIsSavingContact(false);
+    }
+  }
+
   async function handleApplicationReviewAction(action: ApplicationTrackerReviewAction) {
     if (!selectedApplicationRecord) {
       return;
@@ -835,14 +879,18 @@ export function App() {
             tracker={applicationTracker}
             activity={applicationActivity}
             contactCrm={contactCrm}
+            contactDraft={contactDraft}
             selectedApplicationRecord={selectedApplicationRecord}
             applicationDraft={applicationDraft}
             selectedApplicationId={selectedApplicationId}
             onApplicationDraftChange={setApplicationDraft}
+            onContactDraftChange={setContactDraft}
+            onSaveContact={saveRecruiterContact}
             onSaveApplicationEdits={saveSelectedApplicationEdits}
             onSelectApplication={setSelectedApplicationId}
             onReviewAction={handleApplicationReviewAction}
             runningReviewActionId={runningReviewActionId}
+            isSavingContact={isSavingContact}
             draggedApplicationId={draggedApplicationId}
             onApplicationDragStart={setDraggedApplicationId}
             onApplicationDragEnd={() => setDraggedApplicationId(null)}
@@ -1067,14 +1115,18 @@ function Applications({
   tracker,
   activity,
   contactCrm,
+  contactDraft,
   selectedApplicationRecord,
   applicationDraft,
   selectedApplicationId,
   onApplicationDraftChange,
+  onContactDraftChange,
+  onSaveContact,
   onSaveApplicationEdits,
   onSelectApplication,
   onReviewAction,
   runningReviewActionId,
+  isSavingContact,
   draggedApplicationId,
   onApplicationDragStart,
   onApplicationDragEnd,
@@ -1083,14 +1135,18 @@ function Applications({
   tracker: ApplicationTracker;
   activity: ApplicationActivity;
   contactCrm: ContactCrm;
+  contactDraft: ContactEditorDraft;
   selectedApplicationRecord: Application | null;
   applicationDraft: ApplicationEditDraft;
   selectedApplicationId: string | null;
   onApplicationDraftChange: (draft: ApplicationEditDraft) => void;
+  onContactDraftChange: (draft: ContactEditorDraft) => void;
+  onSaveContact: () => void;
   onSaveApplicationEdits: () => void;
   onSelectApplication: (applicationId: string) => void;
   onReviewAction: (action: ApplicationTrackerReviewAction) => void;
   runningReviewActionId: string | null;
+  isSavingContact: boolean;
   draggedApplicationId: string | null;
   onApplicationDragStart: (applicationId: string) => void;
   onApplicationDragEnd: () => void;
@@ -1099,6 +1155,8 @@ function Applications({
   const selectedApplication = tracker.rows.find((application) => application.id === selectedApplicationId);
   const updateDraft = <Key extends keyof ApplicationEditDraft>(key: Key, value: ApplicationEditDraft[Key]) =>
     onApplicationDraftChange({ ...applicationDraft, [key]: value });
+  const updateContactDraft = <Key extends keyof ContactEditorDraft>(key: Key, value: ContactEditorDraft[Key]) =>
+    onContactDraftChange({ ...contactDraft, [key]: value });
 
   return (
     <section className="panel full">
@@ -1231,6 +1289,76 @@ function Applications({
             </article>
           )}
         </div>
+        <form
+          className="contact-editor"
+          aria-label="Contact editor"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSaveContact();
+          }}
+        >
+          <div className="contact-editor-grid">
+            <label>
+              Name
+              <input
+                value={contactDraft.name}
+                onChange={(event) => updateContactDraft("name", event.target.value)}
+              />
+            </label>
+            <label>
+              Role
+              <select
+                value={contactDraft.role}
+                onChange={(event) => updateContactDraft("role", event.target.value)}
+              >
+                <option value="recruiter">Recruiter</option>
+                <option value="hiring_manager">Hiring manager</option>
+                <option value="referral">Referral</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label>
+              Email
+              <input
+                type="email"
+                value={contactDraft.email}
+                onChange={(event) => updateContactDraft("email", event.target.value)}
+              />
+            </label>
+            <label>
+              Phone
+              <input
+                value={contactDraft.phone}
+                onChange={(event) => updateContactDraft("phone", event.target.value)}
+              />
+            </label>
+            <label>
+              LinkedIn
+              <input
+                type="url"
+                value={contactDraft.linkedinUrl}
+                onChange={(event) => updateContactDraft("linkedinUrl", event.target.value)}
+              />
+            </label>
+            <label>
+              Notes
+              <input
+                value={contactDraft.notes}
+                onChange={(event) => updateContactDraft("notes", event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="form-actions">
+            <button
+              className="secondary-action"
+              type="submit"
+              disabled={!isContactDraftSaveable(contactDraft) || isSavingContact}
+            >
+              <Plus size={16} aria-hidden="true" />
+              <span>{isSavingContact ? "Saving" : "Save Contact"}</span>
+            </button>
+          </div>
+        </form>
       </section>
       <section className="application-editor" aria-label="Application notes and tags">
         <div className="activity-heading">
