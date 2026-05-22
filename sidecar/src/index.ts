@@ -34,6 +34,10 @@ import {
   type ColdEmailWorkerDependencies,
 } from "./communications/cold-email-worker.js";
 import {
+  createEmailCheckDependenciesFromWorkflowInput,
+  type EmailReaderFactory,
+} from "./communications/email-check-config.js";
+import {
   runEmailResponseWorker,
   type EmailResponseWorkerDependencies,
 } from "./communications/email-response-worker.js";
@@ -206,6 +210,9 @@ export type SidecarRuntimeOptions = {
   applicationDocuments?: SidecarApplicationDocumentOptions;
   analytics?: SidecarAnalyticsOptions;
   emailCheck?: SidecarEmailCheckOptions;
+  emailAdapters?: {
+    createEmailReader?: EmailReaderFactory;
+  };
   coldEmail?: SidecarColdEmailOptions;
   exportSync?: SidecarExportSyncOptions;
   cleanup?: SidecarCleanupOptions;
@@ -289,12 +296,18 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   workflowEngine.register({
     id: "email-check",
     description: "Check inbound email responses and update application records",
-    run: async () =>
-      runEmailResponseWorker(emailCheck, {
+    run: async (input) => {
+      const configuredEmailCheck = createEmailCheckDependenciesFromWorkflowInput(input, {
+        fallback: emailCheck,
+        createEmailReader: options.emailAdapters?.createEmailReader,
+      });
+
+      return runEmailResponseWorker(configuredEmailCheck ?? emailCheck, {
         now: now(),
         eventBus,
         maxResponses: options.emailCheck?.maxResponses,
-      }),
+      });
+    },
   });
   workflowEngine.register({
     id: "cold-email",

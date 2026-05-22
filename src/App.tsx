@@ -89,6 +89,15 @@ import {
   type DiscoverySettings,
 } from "./lib/discovery-settings";
 import {
+  defaultEmailSettings,
+  emailSettingsForProvider,
+  emailSettingsFromStoredValues,
+  emailSettingsToStoredValues,
+  isEmailSettingsConfigured,
+  type EmailProvider,
+  type EmailSettings,
+} from "./lib/email-settings";
+import {
   loadRuntimeControlStatus,
   type RuntimeControlDependencies,
   type RuntimeControlStatus,
@@ -129,6 +138,7 @@ type AutomationSettings = {
   cacheResponses: boolean;
   maxDailyApplications: number;
   discovery: DiscoverySettings;
+  email: EmailSettings;
 };
 
 const routes: Array<{ id: RouteId; label: string; icon: typeof BarChart3 }> = [
@@ -376,6 +386,7 @@ export function App() {
     cacheResponses: true,
     maxDailyApplications: 12,
     discovery: defaultDiscoverySettings,
+    email: defaultEmailSettings,
   });
   const [persistedJobs, setPersistedJobs] = useState<JobSummary[]>([]);
   const [persistedApplications, setPersistedApplications] = useState<Application[]>([]);
@@ -471,6 +482,8 @@ export function App() {
         storedLimit,
         storedSearchQueries,
         storedFeedSources,
+        storedEmailAccount,
+        storedEmailCheck,
         storedScheduledTasks,
         storedJobs,
         storedApplications,
@@ -484,6 +497,8 @@ export function App() {
         getSetting("application.maxDailyApplications"),
         getSetting("discovery.searchQueries"),
         getSetting("discovery.feedSources"),
+        getSetting("email.account"),
+        getSetting("email.check"),
         loadOrSeedScheduledTasks({ listScheduledTasks, saveScheduledTask }),
         listJobs(),
         listApplications(),
@@ -517,6 +532,11 @@ export function App() {
           storedSearchQueries?.value,
           storedFeedSources?.value,
           current.discovery,
+        ),
+        email: emailSettingsFromStoredValues(
+          storedEmailAccount?.value,
+          storedEmailCheck?.value,
+          current.email,
         ),
       }));
       setStorageStatus("SQLite ready");
@@ -1562,6 +1582,16 @@ function SettingsPanel({
       ...settings,
       discovery: { ...settings.discovery, [key]: value },
     });
+  const updateEmail = <Key extends keyof EmailSettings>(key: Key, value: EmailSettings[Key]) =>
+    onSettingsChange({
+      ...settings,
+      email: { ...settings.email, [key]: value },
+    });
+  const updateEmailProvider = (provider: EmailProvider) =>
+    onSettingsChange({
+      ...settings,
+      email: emailSettingsForProvider(settings.email, provider),
+    });
 
   async function persistSettings() {
     if (!isDesktopRuntime()) {
@@ -1570,6 +1600,7 @@ function SettingsPanel({
     }
 
     const discoveryValues = discoverySettingsToStoredValues(settings.discovery);
+    const emailValues = emailSettingsToStoredValues(settings.email);
     setIsSaving(true);
     try {
       await Promise.all([
@@ -1590,6 +1621,16 @@ function SettingsPanel({
           key: "discovery.feedSources",
           value: discoveryValues.feedSources,
           category: "discovery",
+        }),
+        saveSetting({
+          key: "email.account",
+          value: emailValues.account,
+          category: "email",
+        }),
+        saveSetting({
+          key: "email.check",
+          value: emailValues.check,
+          category: "email",
         }),
       ]);
       onStatusChange("SQLite ready");
@@ -1676,6 +1717,139 @@ function SettingsPanel({
             />
           </label>
         </div>
+      </fieldset>
+      <fieldset className="settings-section">
+        <legend>Email account</legend>
+        <div className="segmented-control">
+          {(["gmail", "outlook", "custom"] as EmailProvider[]).map((option) => (
+            <button
+              key={option}
+              className={settings.email.provider === option ? "selected" : ""}
+              type="button"
+              onClick={() => updateEmailProvider(option)}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+        <div className="settings-grid">
+          <label>
+            From name
+            <input
+              value={settings.email.fromName}
+              onChange={(event) => updateEmail("fromName", event.target.value)}
+            />
+          </label>
+          <label>
+            From email
+            <input
+              type="email"
+              value={settings.email.fromEmail}
+              onChange={(event) => updateEmail("fromEmail", event.target.value)}
+            />
+          </label>
+          <label>
+            Login username
+            <input
+              value={settings.email.username}
+              onChange={(event) => updateEmail("username", event.target.value)}
+            />
+          </label>
+          <label>
+            App password
+            <input
+              type="password"
+              value={settings.email.appPassword}
+              onChange={(event) => updateEmail("appPassword", event.target.value)}
+            />
+          </label>
+          <label>
+            Mailbox
+            <input
+              value={settings.email.mailbox}
+              onChange={(event) => updateEmail("mailbox", event.target.value)}
+            />
+          </label>
+          <label>
+            Max responses
+            <input
+              type="number"
+              min="1"
+              max="100"
+              value={settings.email.maxResponses}
+              onChange={(event) => updateEmail("maxResponses", Number(event.target.value))}
+            />
+          </label>
+        </div>
+        <div className="settings-grid">
+          <label>
+            SMTP host
+            <input
+              value={settings.email.smtpHost}
+              onChange={(event) => updateEmail("smtpHost", event.target.value)}
+            />
+          </label>
+          <label>
+            SMTP port
+            <input
+              type="number"
+              min="1"
+              value={settings.email.smtpPort}
+              onChange={(event) => updateEmail("smtpPort", Number(event.target.value))}
+            />
+          </label>
+          <label className="toggle-row settings-toggle">
+            <input
+              type="checkbox"
+              checked={settings.email.smtpSecure}
+              onChange={(event) => updateEmail("smtpSecure", event.target.checked)}
+            />
+            <span>SMTP secure</span>
+          </label>
+          <label>
+            IMAP host
+            <input
+              value={settings.email.imapHost}
+              onChange={(event) => updateEmail("imapHost", event.target.value)}
+            />
+          </label>
+          <label>
+            IMAP port
+            <input
+              type="number"
+              min="1"
+              value={settings.email.imapPort}
+              onChange={(event) => updateEmail("imapPort", Number(event.target.value))}
+            />
+          </label>
+          <label className="toggle-row settings-toggle">
+            <input
+              type="checkbox"
+              checked={settings.email.imapSecure}
+              onChange={(event) => updateEmail("imapSecure", event.target.checked)}
+            />
+            <span>IMAP secure</span>
+          </label>
+        </div>
+        <label>
+          Signature
+          <textarea
+            value={settings.email.signature}
+            onChange={(event) => updateEmail("signature", event.target.value)}
+            rows={3}
+          />
+        </label>
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={settings.email.markSeen}
+            onChange={(event) => updateEmail("markSeen", event.target.checked)}
+          />
+          <span>Mark checked messages as read</span>
+        </label>
+        <p className="settings-status">
+          {isEmailSettingsConfigured(settings.email) ? "Email workflows enabled" : "Email workflows need account details"}
+        </p>
       </fieldset>
       <label className="toggle-row">
         <input

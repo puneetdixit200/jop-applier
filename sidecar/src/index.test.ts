@@ -1075,6 +1075,94 @@ describe("sidecar runtime", () => {
     ]);
   });
 
+  it("runs configured email check input through the IMAP adapter", async () => {
+    const checkedAt = new Date("2026-05-28T09:45:00Z");
+    const readerConfigs: unknown[] = [];
+    const fetchOptions: unknown[] = [];
+    const runtime = createSidecarRuntime({
+      now: () => checkedAt,
+      emailAdapters: {
+        createEmailReader: (config) => {
+          readerConfigs.push(config);
+          return {
+            fetchUnread: async (options) => {
+              fetchOptions.push(options);
+              return [
+                {
+                  id: "<reply-1@northstar.example>",
+                  uid: 101,
+                  from: "Mira <mira@northstar.example>",
+                  subject: "Interview availability",
+                  body: "Can you share availability this week?",
+                  receivedAt: "2026-05-28T09:40:00.000Z",
+                },
+              ];
+            },
+          };
+        },
+      },
+    });
+
+    await expect(
+      runtime.workflowEngine.run("email-check", {
+        emailCheck: {
+          account: {
+            provider: "gmail",
+            fromName: "Asha Rao",
+            fromEmail: "asha@gmail.example",
+            smtpHost: "smtp.gmail.com",
+            smtpPort: 465,
+            smtpSecure: true,
+            smtpUser: "asha@gmail.example",
+            smtpPass: "app-password",
+            imapHost: "imap.gmail.com",
+            imapPort: 993,
+            imapSecure: true,
+            imapUser: "asha@gmail.example",
+            imapPass: "app-password",
+            signature: "Asha",
+          },
+          fetch: {
+            mailbox: "Replies",
+            limit: 25,
+            markSeen: true,
+          },
+        },
+      }),
+    ).resolves.toEqual({
+      scanned: 1,
+      matched: 0,
+      recorded: 0,
+      failed: 0,
+      skipped: 1,
+    });
+    expect(readerConfigs).toEqual([
+      {
+        provider: "gmail",
+        fromName: "Asha Rao",
+        fromEmail: "asha@gmail.example",
+        smtpHost: "smtp.gmail.com",
+        smtpPort: 465,
+        smtpSecure: true,
+        smtpUser: "asha@gmail.example",
+        smtpPass: "app-password",
+        imapHost: "imap.gmail.com",
+        imapPort: 993,
+        imapSecure: true,
+        imapUser: "asha@gmail.example",
+        imapPass: "app-password",
+        signature: "Asha",
+      },
+    ]);
+    expect(fetchOptions).toEqual([
+      {
+        mailbox: "Replies",
+        limit: 25,
+        markSeen: true,
+      },
+    ]);
+  });
+
   it("runs cold email outreach through profile, target, AI, and communication dependencies", async () => {
     const sentAt = new Date("2026-05-28T10:00:00Z");
     const savedCommunications: Array<Record<string, unknown>> = [];

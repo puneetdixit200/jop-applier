@@ -443,10 +443,18 @@ fn workflow_params_from_settings(
     connection: &Connection,
     workflow_id: &str,
 ) -> Result<Value, String> {
-    if workflow_id != "job-discovery" {
-        return Ok(json!({}));
+    if workflow_id == "job-discovery" {
+        return discovery_workflow_params_from_settings(connection);
     }
 
+    if workflow_id == "email-check" {
+        return email_check_workflow_params_from_settings(connection);
+    }
+
+    Ok(json!({}))
+}
+
+fn discovery_workflow_params_from_settings(connection: &Connection) -> Result<Value, String> {
     let mut discovery = Map::new();
     if let Some(search_queries) = discovery_setting_array(connection, "discovery.searchQueries")? {
         discovery.insert("searchQueries".to_string(), Value::Array(search_queries));
@@ -459,6 +467,42 @@ fn workflow_params_from_settings(
         Ok(json!({}))
     } else {
         Ok(json!({ "discovery": discovery }))
+    }
+}
+
+fn email_check_workflow_params_from_settings(connection: &Connection) -> Result<Value, String> {
+    let mut email_check = Map::new();
+    if let Some(account) = setting_object(connection, "email.account")? {
+        email_check.insert("account".to_string(), Value::Object(account));
+    }
+    if let Some(check) = setting_object(connection, "email.check")? {
+        let mut fetch = Map::new();
+        if let Some(mailbox) = check
+            .get("mailbox")
+            .and_then(Value::as_str)
+            .filter(|mailbox| !mailbox.trim().is_empty())
+        {
+            fetch.insert("mailbox".to_string(), json!(mailbox));
+        }
+        if let Some(mark_seen) = check.get("markSeen").and_then(Value::as_bool) {
+            fetch.insert("markSeen".to_string(), json!(mark_seen));
+        }
+        if let Some(max_responses) = check
+            .get("maxResponses")
+            .and_then(Value::as_i64)
+            .filter(|max_responses| *max_responses > 0)
+        {
+            fetch.insert("limit".to_string(), json!(max_responses));
+        }
+        if !fetch.is_empty() {
+            email_check.insert("fetch".to_string(), Value::Object(fetch));
+        }
+    }
+
+    if email_check.is_empty() {
+        Ok(json!({}))
+    } else {
+        Ok(json!({ "emailCheck": email_check }))
     }
 }
 
@@ -477,6 +521,21 @@ fn discovery_setting_array(
             Some(values) if !values.is_empty() => Ok(Some(values.to_vec())),
             _ => Ok(None),
         },
+        _ => Ok(None),
+    }
+}
+
+fn setting_object(
+    connection: &Connection,
+    key: &str,
+) -> Result<Option<Map<String, Value>>, String> {
+    let Some(setting) = queries::get_setting(connection, key).map_err(|error| error.to_string())?
+    else {
+        return Ok(None);
+    };
+
+    match setting.value {
+        SettingValue::Object(Value::Object(value)) if !value.is_empty() => Ok(Some(value)),
         _ => Ok(None),
     }
 }

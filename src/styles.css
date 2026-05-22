@@ -882,6 +882,20 @@ legend {
   font-weight: 700;
 }
 
+.settings-section > label:not(.toggle-row) {
+  display: grid;
+  gap: 7px;
+  color: #35423b;
+  font-weight: 700;
+}
+
+.settings-status {
+  margin: 0;
+  color: #4c5b53;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
 .toggle-row {
   display: flex;
   gap: 10px;
