@@ -77,6 +77,67 @@ describe("application form filler strategies", () => {
     ]);
     expect(uploadedFiles).toEqual([{ selector: "#resume", path: "/docs/deepak-resume.pdf" }]);
   });
+
+  it("selects LinkedIn Easy Apply and fills custom screening questions from natural labels", async () => {
+    const filledText: Array<{ selector: string; value: string }> = [];
+    const selectedOptions: Array<{ selector: string; value: string }> = [];
+    const checkedFields: Array<{ selector: string; checked: boolean }> = [];
+    const uploadedFiles: Array<{ selector: string; path: string }> = [];
+    const page = formPage(
+      "https://www.linkedin.com/jobs/view/1234567890",
+      [
+        field("#phone", "Mobile phone number", "input", true),
+        field("#resume", "Resume", "file", true),
+        field("#authorized", "Are you legally authorized to work in India?", "select", true),
+        field("#relocate", "Willing to relocate?", "checkbox", true),
+        field(
+          "#sponsorship",
+          "Do you now or in the future require sponsorship?",
+          "select",
+          true,
+        ),
+      ],
+      {
+        fillText: async (selector, value) => {
+          filledText.push({ selector, value });
+        },
+        selectOption: async (selector, value) => {
+          selectedOptions.push({ selector, value });
+        },
+        setChecked: async (selector, checked) => {
+          checkedFields.push({ selector, checked });
+        },
+        setFile: async (selector, path) => {
+          uploadedFiles.push({ selector, path });
+        },
+      },
+    );
+
+    const result = await fillApplicationFormWithStrategy(
+      page,
+      applicationForm({
+        answers: {
+          "Are you legally authorized to work in India?": "Yes",
+          "Willing to relocate?": "true",
+          "Do you now or in the future require sponsorship?": "No",
+        },
+      }),
+    );
+
+    expect(result).toEqual({
+      platform: "linkedin",
+      submissionUrl: "https://www.linkedin.com/jobs/view/1234567890",
+      mappedFields: 5,
+      requiredMissing: [],
+    });
+    expect(filledText).toEqual([{ selector: "#phone", value: "+91-555-0101" }]);
+    expect(uploadedFiles).toEqual([{ selector: "#resume", path: "/docs/deepak-resume.pdf" }]);
+    expect(selectedOptions).toEqual([
+      { selector: "#authorized", value: "Yes" },
+      { selector: "#sponsorship", value: "No" },
+    ]);
+    expect(checkedFields).toEqual([{ selector: "#relocate", checked: true }]);
+  });
 });
 
 function applicationForm(overrides: Partial<ApplicationFormInput> = {}): ApplicationFormInput {

@@ -60,6 +60,7 @@ export type ApplicationFormFillResult = {
 
 export function createDefaultFormFillerStrategies(): FormFillerStrategy[] {
   return [
+    createCommonAtsStrategy("linkedin", (url) => url.includes("linkedin.com/jobs")),
     createCommonAtsStrategy("greenhouse", (url) => url.includes("greenhouse.io")),
     createCommonAtsStrategy("lever", (url) => url.includes("jobs.lever.co")),
     createCommonAtsStrategy("generic", () => true),
@@ -118,9 +119,9 @@ function mapCommonField(
 ): FormFieldMapping[] {
   const label = normalizeLabel(field.label);
   const names = splitName(input.profile.fullName);
-  const customAnswer = input.answers?.[label];
+  const customAnswer = customAnswerForField(field, input.answers);
 
-  if (customAnswer) {
+  if (customAnswer !== undefined) {
     return [mappingFor(field, customAnswer)];
   }
   if (field.fieldType === "file" && label.includes("resume") && input.documents.resumePath) {
@@ -193,6 +194,36 @@ function mappingFor(field: DetectedFormField, value: string | boolean): FormFiel
     value,
     confidence: 0.95,
   };
+}
+
+function customAnswerForField(
+  field: DetectedFormField,
+  answers: Record<string, string> | undefined,
+): string | boolean | undefined {
+  if (!answers) {
+    return undefined;
+  }
+
+  const label = normalizeLabel(field.label);
+  const answer = Object.entries(answers).find(([key]) => normalizeLabel(key) === label)?.[1]?.trim();
+  if (!answer) {
+    return undefined;
+  }
+
+  if (field.fieldType === "checkbox" || field.fieldType === "radio") {
+    return booleanAnswer(answer);
+  }
+
+  return answer;
+}
+
+function booleanAnswer(answer: string): boolean {
+  const normalized = normalizeLabel(answer);
+  if (["false", "no", "off", "unchecked", "0"].includes(normalized)) {
+    return false;
+  }
+
+  return true;
 }
 
 function splitName(fullName: string): { firstName: string; lastName: string } {
