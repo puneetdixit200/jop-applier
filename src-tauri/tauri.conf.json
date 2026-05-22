@@ -24,8 +24,26 @@
     }
   },
   "bundle": {
-    "active": false,
-    "icon": [],
-    "targets": "all"
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/icon.png"
+    ],
+    "targets": [
+      "dmg",
+      "msi",
+      "nsis"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFCOTk2MDQ2N0ZEQ0ZBN0EKUldSNit0eC9SbUNaR3dvc3RNWFJ3N3ErK2ZpRmJmYnJNdWJxaW1PNmtTUXhJWXFSYWJPaExzU00K",
+      "endpoints": [
+        "https://github.com/puneetdixit200/jop-applier/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
