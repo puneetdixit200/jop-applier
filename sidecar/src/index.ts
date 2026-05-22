@@ -81,6 +81,10 @@ import {
   type NotificationDelivery,
   type NotificationManagerOptions,
 } from "./notifications/notification-manager.js";
+import {
+  createDiscordNotificationAdapter,
+  createTelegramNotificationAdapter,
+} from "./notifications/webhook-adapters.js";
 import { DEFAULT_WORKFLOWS_BY_TASK_TYPE } from "./orchestrator/default-schedules.js";
 import { EventBus } from "./orchestrator/event-bus.js";
 import type { CareerEventMap } from "./orchestrator/events.js";
@@ -268,7 +272,7 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   bindNotificationManager(
     eventBus,
     new NotificationManager(
-      createRuntimeNotificationOptions(options.notifications, notificationOutbox, now),
+      createRuntimeNotificationOptions(options.notifications, notificationOutbox, now, env),
     ),
   );
 
@@ -447,8 +451,12 @@ function createRuntimeNotificationOptions(
   options: NotificationManagerOptions | undefined,
   outbox: NotificationDelivery[],
   now: () => Date,
+  env: NodeJS.ProcessEnv,
 ): NotificationManagerOptions {
-  const adapters = (options?.adapters ?? []).map((adapter) =>
+  const adapters = [
+    ...runtimeNotificationAdaptersFromEnv(env, options?.adapters ?? []),
+    ...(options?.adapters ?? []),
+  ].map((adapter) =>
     isRecordedRuntimeNotificationChannel(adapter.channel)
       ? recordingNotificationAdapter(adapter.channel, adapter, outbox)
       : adapter,
@@ -465,6 +473,41 @@ function createRuntimeNotificationOptions(
     disabledChannels: options?.disabledChannels,
     now: options?.now ?? now,
   };
+}
+
+function runtimeNotificationAdaptersFromEnv(
+  env: NodeJS.ProcessEnv,
+  configuredAdapters: NotificationAdapter[],
+): NotificationAdapter[] {
+  const adapters: NotificationAdapter[] = [];
+  const telegramBotToken = env.TELEGRAM_BOT_TOKEN ?? env.CAREERCAVEMAN_TELEGRAM_BOT_TOKEN;
+  const telegramChatId = env.TELEGRAM_CHAT_ID ?? env.CAREERCAVEMAN_TELEGRAM_CHAT_ID;
+  if (
+    telegramBotToken &&
+    telegramChatId &&
+    !configuredAdapters.some((adapter) => adapter.channel === "telegram")
+  ) {
+    adapters.push(
+      createTelegramNotificationAdapter({
+        botToken: telegramBotToken,
+        chatId: telegramChatId,
+      }),
+    );
+  }
+
+  const discordWebhookUrl = env.DISCORD_WEBHOOK_URL ?? env.CAREERCAVEMAN_DISCORD_WEBHOOK_URL;
+  if (
+    discordWebhookUrl &&
+    !configuredAdapters.some((adapter) => adapter.channel === "discord")
+  ) {
+    adapters.push(
+      createDiscordNotificationAdapter({
+        webhookUrl: discordWebhookUrl,
+      }),
+    );
+  }
+
+  return adapters;
 }
 
 const recordedRuntimeNotificationChannels = ["os", "in_app"] satisfies NotificationChannel[];

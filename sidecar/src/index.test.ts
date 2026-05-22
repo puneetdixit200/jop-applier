@@ -875,6 +875,48 @@ describe("sidecar runtime", () => {
     ]);
   });
 
+  it("adds Telegram notification delivery from runtime environment settings", async () => {
+    const checkedAt = new Date("2026-05-29T09:30:00Z");
+    const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      requests.push({ url: String(url), init });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+    const runtime = createSidecarRuntime({
+      env: {
+        ...process.env,
+        TELEGRAM_BOT_TOKEN: "telegram-token",
+        TELEGRAM_CHAT_ID: "chat-1",
+      },
+      now: () => checkedAt,
+    });
+
+    try {
+      runtime.eventBus.emit("response.received", {
+        applicationId: "app-1",
+        jobId: "job-1",
+        companyName: "Northstar Labs",
+        communicationId: "comm-1",
+        responseType: "positive",
+        subject: "Interview availability",
+        receivedAt: checkedAt,
+      });
+      await flushNotifications();
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0].url).toBe(
+        "https://api.telegram.org/bottelegram-token/sendMessage",
+      );
+      expect(JSON.parse(String(requests[0].init?.body))).toMatchObject({
+        chat_id: "chat-1",
+        text: expect.stringContaining("Response received"),
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("wires document generation into due application processing tasks", async () => {
     const checkedAt = new Date("2026-05-28T10:30:00Z");
     const outputDir = await mkdtemp(join(tmpdir(), "careercaveman-runtime-docs-"));
@@ -1998,4 +2040,10 @@ function recordingNotificationAdapter(
       deliveries.push(delivery);
     },
   };
+}
+
+async function flushNotifications(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }
