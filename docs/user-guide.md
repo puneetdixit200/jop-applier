@@ -22,6 +22,8 @@ Browser session snapshots are encrypted separately when `BROWSER_SESSION_KEY` or
 
 The dashboard can run due scheduled tasks or start discovery manually. The default schedules cover discovery, application processing, follow-ups, email checks, analytics refreshes, export sync, session health, and cleanup. Failed tasks are recorded and surfaced through notifications instead of stopping unrelated workflows.
 
+Optional email notifications use SMTP settings from environment variables such as `CAREERCAVEMAN_NOTIFICATION_EMAIL_TO`, `CAREERCAVEMAN_SMTP_HOST`, `CAREERCAVEMAN_SMTP_USER`, `CAREERCAVEMAN_SMTP_PASS`, and `CAREERCAVEMAN_EMAIL_FROM`.
+
 ## Connectors
 
 Built-in discovery sources include LinkedIn, Indeed, Internshala, Naukri, Wellfound, Glassdoor, JSON feeds, company career pages, Greenhouse, Lever, Workday, BambooHR, and iCIMS. Portal discovery is opt-in from Settings.

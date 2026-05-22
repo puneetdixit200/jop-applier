@@ -55,6 +55,7 @@ import {
   runEmailResponseWorker,
   type EmailResponseWorkerDependencies,
 } from "./communications/email-response-worker.js";
+import type { EmailAccountConfig, EmailProvider } from "./communications/email-adapter.js";
 import {
   runJobDiscoveryWorkflow,
   type JobDiscoveryWorkflowDependencies,
@@ -103,6 +104,7 @@ import {
   type NotificationDelivery,
   type NotificationManagerOptions,
 } from "./notifications/notification-manager.js";
+import { createEmailNotificationAdapter } from "./notifications/email-notification-adapter.js";
 import {
   createDiscordNotificationAdapter,
   createTelegramNotificationAdapter,
@@ -573,7 +575,54 @@ function runtimeNotificationAdaptersFromEnv(
     );
   }
 
+  const emailConfig = emailNotificationConfigFromEnv(env);
+  if (
+    emailConfig &&
+    !configuredAdapters.some((adapter) => adapter.channel === "email")
+  ) {
+    adapters.push(createEmailNotificationAdapter(emailConfig));
+  }
+
   return adapters;
+}
+
+function emailNotificationConfigFromEnv(env: NodeJS.ProcessEnv) {
+  const to = splitEnvList(
+    env.NOTIFICATION_EMAIL_TO ?? env.CAREERCAVEMAN_NOTIFICATION_EMAIL_TO,
+  );
+  const smtpHost = env.SMTP_HOST ?? env.CAREERCAVEMAN_SMTP_HOST;
+  const smtpUser = env.SMTP_USER ?? env.CAREERCAVEMAN_SMTP_USER;
+  const smtpPass = env.SMTP_PASS ?? env.CAREERCAVEMAN_SMTP_PASS;
+  const fromEmail =
+    env.EMAIL_FROM ?? env.FROM_EMAIL ?? env.CAREERCAVEMAN_EMAIL_FROM;
+
+  if (to.length === 0 || !smtpHost || !smtpUser || !smtpPass || !fromEmail) {
+    return null;
+  }
+
+  const smtpPort = numberEnv(env.SMTP_PORT ?? env.CAREERCAVEMAN_SMTP_PORT, 587);
+  const smtpSecure = booleanEnv(env.SMTP_SECURE ?? env.CAREERCAVEMAN_SMTP_SECURE);
+  const account: EmailAccountConfig = {
+    provider: emailProviderEnv(env.EMAIL_PROVIDER ?? env.CAREERCAVEMAN_EMAIL_PROVIDER),
+    smtpHost,
+    smtpPort,
+    smtpSecure,
+    smtpUser,
+    smtpPass,
+    imapHost: env.IMAP_HOST ?? env.CAREERCAVEMAN_IMAP_HOST ?? "",
+    imapPort: numberEnv(env.IMAP_PORT ?? env.CAREERCAVEMAN_IMAP_PORT, 993),
+    imapSecure: booleanEnv(env.IMAP_SECURE ?? env.CAREERCAVEMAN_IMAP_SECURE ?? "true"),
+    imapUser: env.IMAP_USER ?? env.CAREERCAVEMAN_IMAP_USER ?? smtpUser,
+    imapPass: env.IMAP_PASS ?? env.CAREERCAVEMAN_IMAP_PASS ?? smtpPass,
+    fromName:
+      env.EMAIL_FROM_NAME ?? env.FROM_NAME ?? env.CAREERCAVEMAN_EMAIL_FROM_NAME ?? "CareerCaveman",
+    fromEmail,
+  };
+
+  return {
+    account,
+    to,
+  };
 }
 
 const recordedRuntimeNotificationChannels = ["os", "in_app"] satisfies NotificationChannel[];
@@ -1018,6 +1067,27 @@ function browserSessionStoreFromEnv(env: NodeJS.ProcessEnv, sessionRoot: string)
 
 function booleanEnv(value: string | undefined): boolean {
   return value === "1" || value?.toLowerCase() === "true";
+}
+
+function numberEnv(value: string | undefined, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function splitEnvList(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function emailProviderEnv(value: string | undefined): EmailProvider {
+  return value === "gmail" || value === "outlook" || value === "custom"
+    ? value
+    : "custom";
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
