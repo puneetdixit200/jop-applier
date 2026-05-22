@@ -253,6 +253,13 @@ export type SecureSecretRef = {
   uri: string;
 };
 
+export type DatabaseEncryptionStatus = {
+  available: boolean;
+  enabled: boolean;
+  databasePath: string;
+  keySource: string | null;
+};
+
 export type SidecarProvider = {
   provider: string;
   model: string;
@@ -295,6 +302,17 @@ export async function getSecret(key: string) {
 
 export async function deleteSecret(key: string) {
   return invoke<boolean>("delete_secret_command", { key });
+}
+
+export async function getDatabaseEncryptionStatus() {
+  return invoke<DatabaseEncryptionStatus>("get_database_encryption_status_command");
+}
+
+export async function configureDatabaseEncryption(enabled: boolean, passphrase?: string) {
+  return invoke<DatabaseEncryptionStatus>("configure_database_encryption_command", {
+    enabled,
+    passphrase,
+  });
 }
 
 export async function listCompanies() {

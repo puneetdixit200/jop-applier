@@ -18,6 +18,8 @@ import {
   XCircle,
 } from "lucide-react";
 import {
+  configureDatabaseEncryption,
+  getDatabaseEncryptionStatus,
   getSidecarStatus,
   getSetting,
   getUserProfile,
@@ -44,6 +46,7 @@ import {
   type ApplicationEvent,
   type Contact,
   type Communication,
+  type DatabaseEncryptionStatus,
   type Document,
   type Notification as AppNotification,
   type UpsertUserProfile,
@@ -1691,6 +1694,10 @@ function SettingsPanel({
   onStatusChange: (status: string) => void;
 }) {
   const [isSaving, setIsSaving] = useState(false);
+  const [databaseEncryptionStatus, setDatabaseEncryptionStatus] =
+    useState<DatabaseEncryptionStatus | null>(null);
+  const [databasePassphrase, setDatabasePassphrase] = useState("");
+  const [isUpdatingDatabaseEncryption, setIsUpdatingDatabaseEncryption] = useState(false);
   const update = <Key extends keyof AutomationSettings>(key: Key, value: AutomationSettings[Key]) =>
     onSettingsChange({ ...settings, [key]: value });
   const updateDiscovery = <Key extends keyof DiscoverySettings>(key: Key, value: DiscoverySettings[Key]) =>
@@ -1708,6 +1715,55 @@ function SettingsPanel({
       ...settings,
       email: emailSettingsForProvider(settings.email, provider),
     });
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDatabaseEncryptionStatus() {
+      if (!isDesktopRuntime()) {
+        return;
+      }
+
+      try {
+        const status = await getDatabaseEncryptionStatus();
+        if (isMounted) {
+          setDatabaseEncryptionStatus(status);
+        }
+      } catch {
+        if (isMounted) {
+          setDatabaseEncryptionStatus(null);
+        }
+      }
+    }
+
+    void loadDatabaseEncryptionStatus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  async function updateDatabaseEncryption(enabled: boolean) {
+    if (!isDesktopRuntime()) {
+      onStatusChange("Browser preview");
+      return;
+    }
+
+    setIsUpdatingDatabaseEncryption(true);
+    try {
+      const status = await configureDatabaseEncryption(
+        enabled,
+        enabled ? databasePassphrase : undefined,
+      );
+      setDatabaseEncryptionStatus(status);
+      setDatabasePassphrase("");
+      onStatusChange(status.enabled ? "SQLite encrypted" : "SQLite ready");
+    } catch {
+      onStatusChange("Database encryption unavailable");
+    } finally {
+      setIsUpdatingDatabaseEncryption(false);
+    }
+  }
 
   async function persistSettings() {
     if (!isDesktopRuntime()) {
@@ -2093,6 +2149,58 @@ function SettingsPanel({
         />
         <span>Store AI responses in local cache</span>
       </label>
+      <fieldset className="settings-section">
+        <legend>Database privacy</legend>
+        <div className="settings-grid">
+          <label>
+            Encryption key
+            <input
+              type="password"
+              value={databasePassphrase}
+              disabled={databaseEncryptionStatus?.enabled || isUpdatingDatabaseEncryption}
+              onChange={(event) => setDatabasePassphrase(event.target.value)}
+            />
+          </label>
+          <label>
+            Status
+            <input
+              value={
+                databaseEncryptionStatus?.enabled
+                  ? "Encrypted"
+                  : databaseEncryptionStatus?.available
+                    ? "Plain SQLite"
+                    : "SQLCipher unavailable"
+              }
+              readOnly
+            />
+          </label>
+        </div>
+        <div className="form-actions">
+          {databaseEncryptionStatus?.enabled ? (
+            <button
+              className="secondary-action"
+              type="button"
+              onClick={() => void updateDatabaseEncryption(false)}
+              disabled={isUpdatingDatabaseEncryption}
+            >
+              Disable Encryption
+            </button>
+          ) : (
+            <button
+              className="secondary-action"
+              type="button"
+              onClick={() => void updateDatabaseEncryption(true)}
+              disabled={
+                isUpdatingDatabaseEncryption ||
+                !databaseEncryptionStatus?.available ||
+                databasePassphrase.trim().length === 0
+              }
+            >
+              Enable Encryption
+            </button>
+          )}
+        </div>
+      </fieldset>
       <label className="range-row">
         Daily application limit
         <input

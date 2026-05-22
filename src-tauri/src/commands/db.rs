@@ -1,12 +1,13 @@
 use crate::{
     db::{
+        encryption::{self, DatabaseEncryptionStatus},
         models::{
             AiCacheEntry, Application, ApplicationDocumentContext, ApplicationEvent,
             ApplicationWorkflowStateUpdate, Communication, Company, Contact, Document, Job,
-            Notification, ScheduledTask, ScheduledTaskRunUpdate, Setting, UpsertAiCacheEntry,
-            UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument,
-            UpsertJob, UpsertNotification, UpsertScheduledTask, UpsertSetting, UpsertUserProfile,
-            SettingValue, UserProfile,
+            Notification, ScheduledTask, ScheduledTaskRunUpdate, Setting, SettingValue,
+            UpsertAiCacheEntry, UpsertApplication, UpsertCommunication, UpsertCompany,
+            UpsertContact, UpsertDocument, UpsertJob, UpsertNotification, UpsertScheduledTask,
+            UpsertSetting, UpsertUserProfile, UserProfile,
         },
         queries, schema,
     },
@@ -70,6 +71,51 @@ pub fn save_setting_command(
     queries::upsert_setting(&connection, setting).map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+pub fn get_database_encryption_status_command(
+    state: State<'_, AppState>,
+) -> Result<DatabaseEncryptionStatus, String> {
+    let connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+    encryption::database_encryption_status(&connection, &state.database_path)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn configure_database_encryption_command(
+    state: State<'_, AppState>,
+    enabled: bool,
+    passphrase: Option<String>,
+) -> Result<DatabaseEncryptionStatus, String> {
+    let mut connection = state
+        .connection
+        .lock()
+        .map_err(|_| "database connection lock poisoned".to_string())?;
+
+    if enabled {
+        let passphrase =
+            passphrase.ok_or_else(|| "database encryption key is required".to_string())?;
+        encryption::save_database_key(&passphrase).map_err(|error| error.to_string())?;
+        if let Err(error) = encryption::enable_database_encryption(
+            &mut connection,
+            &state.database_path,
+            &passphrase,
+        ) {
+            let _ = encryption::delete_database_key();
+            return Err(error.to_string());
+        }
+    } else {
+        encryption::disable_database_encryption(&mut connection, &state.database_path)
+            .map_err(|error| error.to_string())?;
+        encryption::delete_database_key().map_err(|error| error.to_string())?;
+    }
+
+    encryption::database_encryption_status(&connection, &state.database_path)
+        .map_err(|error| error.to_string())
+}
+
 pub fn protect_setting_secrets(setting: UpsertSetting) -> Result<UpsertSetting, String> {
     match setting.key.as_str() {
         "email.account" => protect_object_setting_fields(
@@ -85,7 +131,10 @@ pub fn protect_setting_secrets(setting: UpsertSetting) -> Result<UpsertSetting, 
                 ("notionApiKey", "export.notion.apiKey"),
                 ("googleSheetsAccessToken", "export.googleSheets.accessToken"),
                 ("googleSheetsApiKey", "export.googleSheets.apiKey"),
-                ("googleSheetsCredentialsJson", "export.googleSheets.credentialsJson"),
+                (
+                    "googleSheetsCredentialsJson",
+                    "export.googleSheets.credentialsJson",
+                ),
                 ("airtableApiKey", "export.airtable.apiKey"),
             ],
         ),
@@ -110,13 +159,20 @@ fn protect_object_setting_fields(
         if secure_store::secret_ref_key(value).is_some() {
             continue;
         }
-        let Some(secret) = value.as_str().map(str::trim).filter(|secret| !secret.is_empty()) else {
+        let Some(secret) = value
+            .as_str()
+            .map(str::trim)
+            .filter(|secret| !secret.is_empty())
+        else {
             continue;
         };
 
-        let reference = secure_store::save_secret(secret_key, secret)
-            .map_err(|error| error.to_string())?;
-        object.insert((*field).to_string(), secure_store::secret_ref_value(&reference));
+        let reference =
+            secure_store::save_secret(secret_key, secret).map_err(|error| error.to_string())?;
+        object.insert(
+            (*field).to_string(),
+            secure_store::secret_ref_value(&reference),
+        );
     }
 
     setting.value = SettingValue::Object(Value::Object(object));

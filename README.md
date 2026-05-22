@@ -8,6 +8,8 @@ This repository starts with the Phase 1 foundation from `/Users/deepakkudi23/Doc
 - SQLite schema and migration entry point in Rust
 - Node sidecar core with an event bus, workflow engine, and AI provider abstraction
 - Focused unit tests for the sidecar and Rust schema contract
+- Optional SQLCipher database encryption with the key stored in the OS keychain
+- Tauri bundle/updater configuration for signed release artifacts
 
 ## Commands
 
@@ -26,3 +28,6 @@ Generated local data is intentionally ignored by git:
 - `src-tauri/target/`
 - `data/`
 
+## User Guide
+
+See [docs/user-guide.md](docs/user-guide.md) for first-run setup, privacy settings, automation workflows, and release packaging notes.

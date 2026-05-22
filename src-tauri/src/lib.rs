@@ -1,5 +1,5 @@
 use rusqlite::Connection;
-use std::sync::Mutex;
+use std::{path::PathBuf, sync::Mutex};
 use tauri::Manager;
 
 pub mod commands;
@@ -9,6 +9,7 @@ pub mod sidecar;
 
 pub struct AppState {
     pub connection: Mutex<Connection>,
+    pub database_path: PathBuf,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -24,12 +25,11 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)
                 .map_err(|error| format!("create app data dir: {error}"))?;
             let database_path = data_dir.join("careercaveman.db");
-            let connection = Connection::open(database_path)
+            let connection = db::encryption::open_application_database(&database_path)
                 .map_err(|error| format!("open application database: {error}"))?;
-            db::schema::initialize_schema(&connection)
-                .map_err(|error| format!("initialize database schema: {error}"))?;
             app.manage(AppState {
                 connection: Mutex::new(connection),
+                database_path,
             });
             Ok(())
         })
@@ -39,6 +39,8 @@ pub fn run() {
             commands::db::save_user_profile_command,
             commands::db::get_setting_command,
             commands::db::save_setting_command,
+            commands::db::get_database_encryption_status_command,
+            commands::db::configure_database_encryption_command,
             commands::db::list_companies_command,
             commands::db::save_company_command,
             commands::db::list_jobs_command,
