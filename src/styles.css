@@ -730,6 +730,46 @@ button:disabled {
   outline: 2px solid #9bd3ad;
 }
 
+.table-row.company-response-row {
+  grid-template-columns: minmax(0, 1.1fr) auto minmax(0, 1.4fr) auto;
+}
+
+.response-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.response-pill.green {
+  color: #1d5d3c;
+  background: #def5e6;
+}
+
+.response-pill.blue {
+  color: #245078;
+  background: #e3effb;
+}
+
+.response-pill.amber {
+  color: #7a520d;
+  background: #fbefcf;
+}
+
+.response-pill.violet {
+  color: #59448a;
+  background: #eee8fb;
+}
+
+.response-pill.red {
+  color: #8a2d35;
+  background: #f9e1e3;
+}
+
 .outreach-review-card {
   display: grid;
   gap: 16px;
@@ -1163,6 +1203,7 @@ legend {
   }
 
   .table-row.outreach-row,
+  .table-row.company-response-row,
   .outreach-email-meta {
     grid-template-columns: 1fr;
   }

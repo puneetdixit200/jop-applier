@@ -82,6 +82,24 @@ export type OutreachAnalyticsSummary = {
   bounceRate: number;
 };
 
+export type OutreachDailyVolumeRow = {
+  dateLabel: string;
+  count: number;
+  widthPercent: number;
+};
+
+export type OutreachCompanyAnalyticsRow = {
+  companyName: string;
+  responseLabel: string;
+  responseTone: "green" | "blue" | "amber" | "violet" | "red";
+  sent: number;
+  opened: number;
+  replied: number;
+  bounced: number;
+  queued: number;
+  pending: number;
+};
+
 export function buildProspectingDashboard(
   input: { companies: FundedCompany[]; contacts: ProspectContact[] },
   filters: ProspectingDashboardFilters = {},
@@ -246,6 +264,52 @@ export function buildOutreachAnalytics(emails: OutreachEmail[]): OutreachAnalyti
   };
 }
 
+export function buildOutreachDailyVolume(emails: OutreachEmail[]): OutreachDailyVolumeRow[] {
+  const counts = countBy(
+    emails.filter((email) => ["sent", "opened", "replied", "bounced"].includes(email.status)),
+    (email) => dayKey(email.sent_at ?? email.scheduled_at),
+  );
+  counts.delete("");
+
+  const maxCount = Math.max(1, ...counts.values());
+  return Array.from(counts.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .slice(-7)
+    .map(([date, count]) => ({
+      dateLabel: dayLabel(date),
+      count,
+      widthPercent: Math.round((count / maxCount) * 100),
+    }));
+}
+
+export function buildOutreachCompanyAnalytics(input: {
+  companies: FundedCompany[];
+  contacts: ProspectContact[];
+  emails: OutreachEmail[];
+}): OutreachCompanyAnalyticsRow[] {
+  const contactsById = new Map(input.contacts.map((contact) => [contact.id, contact]));
+  const companiesById = new Map(input.companies.map((company) => [company.id, company]));
+  const rowsByCompany = new Map<string, OutreachCompanyAnalyticsRow>();
+
+  for (const email of input.emails) {
+    const contact = contactsById.get(email.contact_id);
+    const company = contact ? companiesById.get(contact.company_id) : undefined;
+    const companyName = company?.name ?? "Unknown company";
+    const row = rowsByCompany.get(companyName) ?? emptyCompanyAnalyticsRow(companyName);
+    incrementCompanyAnalyticsRow(row, email.status);
+    rowsByCompany.set(companyName, row);
+  }
+
+  return Array.from(rowsByCompany.values())
+    .map((row) => ({
+      ...row,
+      ...responseLabelForCompany(row),
+    }))
+    .sort((left, right) => companyResponseScore(right) - companyResponseScore(left)
+      || left.companyName.localeCompare(right.companyName))
+    .slice(0, 5);
+}
+
 function fundingLabel(company: FundedCompany) {
   const stage = company.funding_stage ? titleCase(company.funding_stage) : "Funding";
   const amount = company.funding_amount !== null ? money(company.funding_amount, company.funding_currency) : null;
@@ -292,6 +356,75 @@ function prospectContactRank(role: string) {
   return prospectContactRolePriority.get(role) ?? 99;
 }
 
+function emptyCompanyAnalyticsRow(companyName: string): OutreachCompanyAnalyticsRow {
+  return {
+    companyName,
+    responseLabel: "No activity",
+    responseTone: "violet",
+    sent: 0,
+    opened: 0,
+    replied: 0,
+    bounced: 0,
+    queued: 0,
+    pending: 0,
+  };
+}
+
+function incrementCompanyAnalyticsRow(row: OutreachCompanyAnalyticsRow, status: string) {
+  if (["sent", "opened", "replied", "bounced"].includes(status)) {
+    row.sent += 1;
+  }
+  if (status === "opened") {
+    row.opened += 1;
+  }
+  if (status === "replied") {
+    row.replied += 1;
+  }
+  if (status === "bounced") {
+    row.bounced += 1;
+  }
+  if (status === "queued") {
+    row.queued += 1;
+  }
+  if (status === "pending") {
+    row.pending += 1;
+  }
+}
+
+function responseLabelForCompany(row: OutreachCompanyAnalyticsRow): Pick<
+  OutreachCompanyAnalyticsRow,
+  "responseLabel" | "responseTone"
+> {
+  if (row.replied > 0) {
+    return { responseLabel: "Replied", responseTone: "green" };
+  }
+  if (row.bounced > 0) {
+    return { responseLabel: "Bounced", responseTone: "red" };
+  }
+  if (row.opened > 0) {
+    return { responseLabel: "Opened, no reply", responseTone: "amber" };
+  }
+  if (row.sent > 0) {
+    return { responseLabel: "Sent, no open", responseTone: "blue" };
+  }
+  if (row.queued > 0) {
+    return { responseLabel: "Queued", responseTone: "violet" };
+  }
+  if (row.pending > 0) {
+    return { responseLabel: "Review pending", responseTone: "violet" };
+  }
+  return { responseLabel: "No activity", responseTone: "violet" };
+}
+
+function companyResponseScore(row: OutreachCompanyAnalyticsRow) {
+  return row.replied * 100
+    + row.opened * 45
+    + row.sent * 20
+    + row.queued * 10
+    + row.pending * 5
+    - row.bounced * 25;
+}
+
 function countBy<T>(items: T[], keyFor: (item: T) => string) {
   const counts = new Map<string, number>();
   for (const item of items) {
@@ -304,6 +437,19 @@ function countBy<T>(items: T[], keyFor: (item: T) => string) {
 function sortableTime(value: string | null) {
   const time = value ? new Date(value).getTime() : Number.POSITIVE_INFINITY;
   return Number.isFinite(time) ? time : Number.POSITIVE_INFINITY;
+}
+
+function dayKey(value: string | null) {
+  if (!value) {
+    return "";
+  }
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? new Date(time).toISOString().slice(0, 10) : "";
+}
+
+function dayLabel(value: string) {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+    .format(new Date(`${value}T00:00:00.000Z`));
 }
 
 function htmlToPreview(value: string) {

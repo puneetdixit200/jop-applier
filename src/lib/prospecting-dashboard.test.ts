@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   applyOutreachReviewDecision,
+  buildOutreachCompanyAnalytics,
+  buildOutreachDailyVolume,
   buildOutreachReviewPanel,
   buildProspectingCompanyDetail,
   buildOutreachAnalytics,
@@ -69,6 +71,79 @@ describe("prospecting dashboard helpers", () => {
       replyRate: 25,
       bounceRate: 25,
     });
+  });
+
+  it("summarizes outreach analytics by sent day and company response", () => {
+    const companies = [
+      company({ id: "setu", name: "Setu" }),
+      company({ id: "zolve", name: "Zolve" }),
+      company({ id: "groww", name: "Groww" }),
+    ];
+    const contacts = [
+      contact({ id: "setu-priya", company_id: "setu" }),
+      contact({ id: "zolve-divya", company_id: "zolve" }),
+      contact({ id: "groww-asha", company_id: "groww" }),
+    ];
+    const emails = [
+      email({ id: "setu-replied", contact_id: "setu-priya", status: "replied", sent_at: "2026-05-21T04:30:00.000Z" }),
+      email({ id: "setu-opened", contact_id: "setu-priya", status: "opened", sent_at: "2026-05-22T04:30:00.000Z" }),
+      email({ id: "zolve-sent", contact_id: "zolve-divya", status: "sent", sent_at: "2026-05-22T05:30:00.000Z" }),
+      email({ id: "groww-queued", contact_id: "groww-asha", status: "queued", scheduled_at: "2026-05-23T04:30:00.000Z" }),
+      email({ id: "missing-contact", contact_id: "missing", status: "bounced", sent_at: "2026-05-23T04:30:00.000Z" }),
+    ];
+
+    expect(buildOutreachDailyVolume(emails)).toEqual([
+      { dateLabel: "May 21", count: 1, widthPercent: 50 },
+      { dateLabel: "May 22", count: 2, widthPercent: 100 },
+      { dateLabel: "May 23", count: 1, widthPercent: 50 },
+    ]);
+
+    expect(buildOutreachCompanyAnalytics({ companies, contacts, emails })).toEqual([
+      {
+        companyName: "Setu",
+        responseLabel: "Replied",
+        responseTone: "green",
+        sent: 2,
+        opened: 1,
+        replied: 1,
+        bounced: 0,
+        queued: 0,
+        pending: 0,
+      },
+      {
+        companyName: "Zolve",
+        responseLabel: "Sent, no open",
+        responseTone: "blue",
+        sent: 1,
+        opened: 0,
+        replied: 0,
+        bounced: 0,
+        queued: 0,
+        pending: 0,
+      },
+      {
+        companyName: "Groww",
+        responseLabel: "Queued",
+        responseTone: "violet",
+        sent: 0,
+        opened: 0,
+        replied: 0,
+        bounced: 0,
+        queued: 1,
+        pending: 0,
+      },
+      {
+        companyName: "Unknown company",
+        responseLabel: "Bounced",
+        responseTone: "red",
+        sent: 1,
+        opened: 0,
+        replied: 0,
+        bounced: 1,
+        queued: 0,
+        pending: 0,
+      },
+    ]);
   });
 
   it("builds a selected review panel and applies review decisions", () => {

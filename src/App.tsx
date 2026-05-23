@@ -134,10 +134,14 @@ import {
 import {
   applyOutreachReviewDecision,
   buildOutreachAnalytics,
+  buildOutreachCompanyAnalytics,
+  buildOutreachDailyVolume,
   buildOutreachReviewPanel,
   buildOutreachReviewQueue,
   buildProspectingCompanyDetail,
   buildProspectingDashboard,
+  type OutreachCompanyAnalyticsRow,
+  type OutreachDailyVolumeRow,
   type OutreachReviewDecision,
   type OutreachReviewPanel,
   type OutreachAnalyticsSummary,
@@ -622,6 +626,19 @@ export function App() {
   const outreachAnalytics = useMemo(
     () => buildOutreachAnalytics(visibleOutreachEmails),
     [visibleOutreachEmails],
+  );
+  const outreachDailyVolume = useMemo(
+    () => buildOutreachDailyVolume(visibleOutreachEmails),
+    [visibleOutreachEmails],
+  );
+  const outreachCompanyAnalytics = useMemo(
+    () =>
+      buildOutreachCompanyAnalytics({
+        companies: visibleFundedCompanies,
+        contacts: visibleProspectContacts,
+        emails: visibleOutreachEmails,
+      }),
+    [visibleFundedCompanies, visibleProspectContacts, visibleOutreachEmails],
   );
   const onboardingStatus = useMemo(
     () => buildOnboardingStatus(profile, settings),
@@ -1241,6 +1258,8 @@ export function App() {
         {route === "outreach" && (
           <Outreach
             analytics={outreachAnalytics}
+            dailyVolume={outreachDailyVolume}
+            companyAnalytics={outreachCompanyAnalytics}
             reviewQueue={outreachReviewQueue}
             reviewPanel={outreachReviewPanel}
             selectedEmailId={selectedOutreachEmailId}
@@ -1813,6 +1832,8 @@ function Prospecting({
 
 function Outreach({
   analytics,
+  dailyVolume,
+  companyAnalytics,
   reviewQueue,
   reviewPanel,
   selectedEmailId,
@@ -1822,6 +1843,8 @@ function Outreach({
   onSaveDraft,
 }: {
   analytics: OutreachAnalyticsSummary;
+  dailyVolume: OutreachDailyVolumeRow[];
+  companyAnalytics: OutreachCompanyAnalyticsRow[];
   reviewQueue: OutreachReviewQueueItem[];
   reviewPanel: OutreachReviewPanel | null;
   selectedEmailId: string | null;
@@ -1860,6 +1883,69 @@ function Outreach({
             <strong>{metric.value}</strong>
           </article>
         ))}
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Outreach analytics</p>
+            <h3>Sent per day</h3>
+          </div>
+          <BarChart3 size={19} aria-hidden="true" />
+        </div>
+        <div className="analytics-bars">
+          {dailyVolume.length > 0 ? (
+            dailyVolume.map((row) => (
+              <div className="analytics-bar-row" key={row.dateLabel}>
+                <span>{row.dateLabel}</span>
+                <div aria-hidden="true">
+                  <b style={{ width: `${row.widthPercent}%` }} />
+                </div>
+                <strong>{row.count}</strong>
+              </div>
+            ))
+          ) : (
+            <div className="table-row">
+              <span>No sent outreach yet.</span>
+              <span>Approved emails will appear here after sending.</span>
+              <span>-</span>
+              <strong>0</strong>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Top companies</p>
+            <h3>By response</h3>
+          </div>
+          <BriefcaseBusiness size={19} aria-hidden="true" />
+        </div>
+        <div className="table-list">
+          {companyAnalytics.length > 0 ? (
+            companyAnalytics.map((row) => (
+              <div className="table-row company-response-row" key={row.companyName}>
+                <span>{row.companyName}</span>
+                <span className={`response-pill ${row.responseTone}`}>{row.responseLabel}</span>
+                <span>{row.sent} sent · {row.opened} opened · {row.replied} replied</span>
+                <strong>
+                  {row.bounced > 0
+                    ? `${row.bounced} bounced`
+                    : `${row.queued + row.pending} queued/review`}
+                </strong>
+              </div>
+            ))
+          ) : (
+            <div className="table-row">
+              <span>No company outreach yet.</span>
+              <span>Campaign activity will appear here.</span>
+              <span>-</span>
+              <strong>0</strong>
+            </div>
+          )}
+        </div>
       </section>
 
       <section className="panel wide">
