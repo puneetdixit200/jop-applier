@@ -145,6 +145,7 @@ import {
   buildOutreachDailyVolume,
   buildOutreachReviewPanel,
   buildOutreachReviewQueue,
+  buildProspectingFilterOptions,
   buildProspectingCompanyDetail,
   buildProspectingDashboard,
   type OutreachCompanyAnalyticsRow,
@@ -153,6 +154,8 @@ import {
   type OutreachReviewPanel,
   type OutreachAnalyticsSummary,
   type OutreachReviewQueueItem,
+  type ProspectingDashboardFilters,
+  type ProspectingFilterOptions,
   type ProspectingCompanyDetail,
   type ProspectingDashboard,
 } from "./lib/prospecting-dashboard";
@@ -190,6 +193,13 @@ type OutreachReviewDraft = {
 };
 
 type OutreachReviewRunningAction = OutreachReviewDecision | "save" | null;
+
+type ProspectingFilterState = {
+  region: string;
+  fundingStage: string;
+  status: string;
+  minScore: number;
+};
 
 const routes: Array<{ id: RouteId; label: string; icon: typeof BarChart3 }> = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
@@ -551,6 +561,12 @@ export function App() {
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
   const [selectedProspectingCompanyId, setSelectedProspectingCompanyId] = useState<string | null>(null);
   const [selectedOutreachEmailId, setSelectedOutreachEmailId] = useState<string | null>(null);
+  const [prospectingFilters, setProspectingFilters] = useState<ProspectingFilterState>({
+    region: "all",
+    fundingStage: "all",
+    status: "all",
+    minScore: 0,
+  });
   const [applicationDraft, setApplicationDraft] = useState<ApplicationEditDraft>(() =>
     applicationEditDraft(previewApplications[0]),
   );
@@ -602,13 +618,17 @@ export function App() {
     persistedProspectContacts.length > 0 ? persistedProspectContacts : previewProspectContacts;
   const visibleOutreachEmails =
     persistedOutreachEmails.length > 0 ? persistedOutreachEmails : previewOutreachEmailRecords;
+  const prospectingFilterOptions = useMemo(
+    () => buildProspectingFilterOptions(visibleFundedCompanies),
+    [visibleFundedCompanies],
+  );
   const prospectingDashboard = useMemo(
     () =>
       buildProspectingDashboard(
         { companies: visibleFundedCompanies, contacts: visibleProspectContacts },
-        { minScore: 0 },
+        prospectingDashboardFilters(prospectingFilters),
       ),
-    [visibleFundedCompanies, visibleProspectContacts],
+    [prospectingFilters, visibleFundedCompanies, visibleProspectContacts],
   );
   const prospectingCompanyDetail = useMemo(
     () =>
@@ -1329,8 +1349,11 @@ export function App() {
             dashboard={prospectingDashboard}
             companies={visibleFundedCompanies}
             detail={prospectingCompanyDetail}
+            filters={prospectingFilters}
+            filterOptions={prospectingFilterOptions}
             selectedCompanyId={selectedProspectingCompanyId}
             onSelectCompany={setSelectedProspectingCompanyId}
+            onFiltersChange={setProspectingFilters}
             onRunScan={() => {
               void startProspectingScan();
             }}
@@ -1790,8 +1813,11 @@ function Prospecting({
   dashboard,
   companies,
   detail,
+  filters,
+  filterOptions,
   selectedCompanyId,
   onSelectCompany,
+  onFiltersChange,
   onRunScan,
   onOpenSettings,
   onStartOutreach,
@@ -1801,14 +1827,22 @@ function Prospecting({
   dashboard: ProspectingDashboard;
   companies: FundedCompany[];
   detail: ProspectingCompanyDetail | null;
+  filters: ProspectingFilterState;
+  filterOptions: ProspectingFilterOptions;
   selectedCompanyId: string | null;
   onSelectCompany: (companyId: string) => void;
+  onFiltersChange: (filters: ProspectingFilterState) => void;
   onRunScan: () => void;
   onOpenSettings: () => void;
   onStartOutreach: () => void;
   isRunningScan: boolean;
   isStartingOutreach: boolean;
 }) {
+  const updateFilter = <Key extends keyof ProspectingFilterState>(
+    key: Key,
+    value: ProspectingFilterState[Key],
+  ) => onFiltersChange({ ...filters, [key]: value });
+
   return (
     <div className="dashboard-grid">
       <section className="metric-grid" aria-label="Prospecting metrics">
@@ -1843,6 +1877,48 @@ function Prospecting({
           </div>
         </div>
         <div className="table-list">
+          <div className="prospecting-filter-row" aria-label="Prospecting filters">
+            <label>
+              Region
+              <select value={filters.region} onChange={(event) => updateFilter("region", event.target.value)}>
+                <option value="all">All</option>
+                {filterOptions.regions.map((option) => (
+                  <option value={option.value} key={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Stage
+              <select
+                value={filters.fundingStage}
+                onChange={(event) => updateFilter("fundingStage", event.target.value)}
+              >
+                <option value="all">All</option>
+                {filterOptions.fundingStages.map((option) => (
+                  <option value={option.value} key={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Status
+              <select value={filters.status} onChange={(event) => updateFilter("status", event.target.value)}>
+                <option value="all">All</option>
+                {filterOptions.statuses.map((option) => (
+                  <option value={option.value} key={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Score
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={filters.minScore}
+                onChange={(event) => updateFilter("minScore", Number(event.target.value))}
+              />
+            </label>
+          </div>
           {dashboard.rows.map((row) => {
             const company = companies.find((item) => item.id === row.id);
             return (
@@ -3257,6 +3333,15 @@ function splitList(value: string) {
 function nullableText(value: string) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function prospectingDashboardFilters(filters: ProspectingFilterState): ProspectingDashboardFilters {
+  return {
+    region: filters.region === "all" ? undefined : filters.region,
+    fundingStage: filters.fundingStage === "all" ? undefined : filters.fundingStage,
+    status: filters.status === "all" ? undefined : filters.status,
+    minScore: filters.minScore,
+  };
 }
 
 function bodyTextToHtml(value: string) {

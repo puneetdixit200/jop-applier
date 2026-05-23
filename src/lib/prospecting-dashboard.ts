@@ -2,8 +2,20 @@ import type { FundedCompany, OutreachEmail, ProspectContact } from "./tauri-api"
 
 export type ProspectingDashboardFilters = {
   region?: string;
+  fundingStage?: string;
   status?: string;
   minScore?: number;
+};
+
+export type ProspectingFilterOption = {
+  value: string;
+  label: string;
+};
+
+export type ProspectingFilterOptions = {
+  regions: ProspectingFilterOption[];
+  fundingStages: ProspectingFilterOption[];
+  statuses: ProspectingFilterOption[];
 };
 
 export type ProspectingDashboardRow = {
@@ -107,6 +119,7 @@ export function buildProspectingDashboard(
   const contactsByCompany = countBy(input.contacts, (contact) => contact.company_id);
   const rows = input.companies
     .filter((company) => filters.region === undefined || company.region === filters.region)
+    .filter((company) => filters.fundingStage === undefined || company.funding_stage === filters.fundingStage)
     .filter((company) => filters.status === undefined || company.status === filters.status)
     .filter((company) => (company.relevance_score ?? 0) >= (filters.minScore ?? 0))
     .sort((left, right) => (right.relevance_score ?? 0) - (left.relevance_score ?? 0))
@@ -131,6 +144,14 @@ export function buildProspectingDashboard(
       contacts: input.contacts.length,
       averageScore,
     },
+  };
+}
+
+export function buildProspectingFilterOptions(companies: FundedCompany[]): ProspectingFilterOptions {
+  return {
+    regions: optionsFromValues(companies.map((company) => company.region)),
+    fundingStages: optionsFromValues(companies.map((company) => company.funding_stage)),
+    statuses: optionsFromValues(companies.map((company) => company.status)),
   };
 }
 
@@ -354,6 +375,12 @@ function compareProspectContacts(left: ProspectContact, right: ProspectContact) 
 
 function prospectContactRank(role: string) {
   return prospectContactRolePriority.get(role) ?? 99;
+}
+
+function optionsFromValues(values: Array<string | null>) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))))
+    .sort((left, right) => titleCase(left).localeCompare(titleCase(right)))
+    .map((value) => ({ value, label: titleCase(value) }));
 }
 
 function emptyCompanyAnalyticsRow(companyName: string): OutreachCompanyAnalyticsRow {

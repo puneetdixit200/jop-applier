@@ -51,6 +51,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -719,6 +720,25 @@ button:disabled {
   outline: 2px solid #9bd3ad;
 }
 
+.prospecting-filter-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e1e8e3;
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.prospecting-filter-row label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: #35423b;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
 .table-row.outreach-row {
   width: 100%;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.85fr) minmax(0, 1.3fr) auto minmax(0, 1.15fr);
@@ -1060,6 +1080,7 @@ button:disabled {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   border: 1px solid #cfd9d3;
@@ -1209,6 +1230,10 @@ legend {
     grid-template-columns: 1fr;
   }
 
+  .prospecting-filter-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .table-row.outreach-row,
   .table-row.company-response-row,
   .outreach-email-meta {
@@ -1297,6 +1322,10 @@ legend {
 
   .segmented-control {
     width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .prospecting-filter-row {
     grid-template-columns: 1fr;
   }
 

@@ -4,6 +4,7 @@ import {
   buildOutreachCompanyAnalytics,
   buildOutreachDailyVolume,
   buildOutreachReviewPanel,
+  buildProspectingFilterOptions,
   buildProspectingCompanyDetail,
   buildOutreachAnalytics,
   buildOutreachReviewQueue,
@@ -16,9 +17,9 @@ describe("prospecting dashboard helpers", () => {
     const dashboard = buildProspectingDashboard(
       {
         companies: [
-          company({ id: "zolve", name: "Zolve", relevance_score: 82, region: "india", status: "queued" }),
-          company({ id: "groww", name: "Groww", relevance_score: 58, region: "india", status: "draft" }),
-          company({ id: "setu", name: "Setu", relevance_score: 91, region: "india", status: "review" }),
+          company({ id: "zolve", name: "Zolve", funding_stage: "series_b", relevance_score: 82, region: "india", status: "queued" }),
+          company({ id: "groww", name: "Groww", funding_stage: "series_e", relevance_score: 58, region: "india", status: "draft" }),
+          company({ id: "setu", name: "Setu", funding_stage: "series_a", relevance_score: 91, region: "india", status: "review" }),
         ],
         contacts: [
           contact({ id: "c1", company_id: "setu" }),
@@ -26,17 +27,39 @@ describe("prospecting dashboard helpers", () => {
           contact({ id: "c3", company_id: "zolve" }),
         ],
       },
-      { region: "india", minScore: 70 },
+      { region: "india", fundingStage: "series_a", minScore: 70 },
     );
 
     expect(dashboard.rows.map((row) => [row.companyName, row.score, row.contacts, row.statusLabel])).toEqual([
       ["Setu", 91, 2, "Review"],
-      ["Zolve", 82, 1, "Queued"],
     ]);
     expect(dashboard.summary).toEqual({
-      companies: 2,
+      companies: 1,
       contacts: 3,
-      averageScore: 87,
+      averageScore: 91,
+    });
+  });
+
+  it("builds prospecting filter option labels from company data", () => {
+    expect(
+      buildProspectingFilterOptions([
+        company({ region: "india", funding_stage: "series_a", status: "review" }),
+        company({ region: "india", funding_stage: "seed", status: "draft" }),
+        company({ region: "global", funding_stage: null, status: "review" }),
+      ]),
+    ).toEqual({
+      regions: [
+        { value: "global", label: "Global" },
+        { value: "india", label: "India" },
+      ],
+      fundingStages: [
+        { value: "seed", label: "Seed" },
+        { value: "series_a", label: "Series A" },
+      ],
+      statuses: [
+        { value: "draft", label: "Draft" },
+        { value: "review", label: "Review" },
+      ],
     });
   });
 
