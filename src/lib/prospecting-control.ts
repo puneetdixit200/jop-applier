@@ -52,6 +52,11 @@ export type ManualProspectingCompanyDraft = {
   displayName: string;
 };
 
+export type FindMoreProspectContactsDraft = {
+  companyId: string;
+  contacts: Omit<UpsertProspectContact, "company_id">[];
+};
+
 const defaultSequence = [
   { step: 1, delayDays: 0 },
   { step: 2, delayDays: 3 },
@@ -182,6 +187,30 @@ export function buildManualProspectingCompanyDraft(
   };
 }
 
+export function buildFindMoreProspectContactsDraft(
+  detail: ProspectingCompanyDetail | null,
+): FindMoreProspectContactsDraft | null {
+  const domain = detail ? normalizeDomain(detail.domainLabel) : "";
+  if (!detail || !isUsableEmailDomain(domain)) {
+    return null;
+  }
+
+  const existingEmails = new Set(detail.contacts.map((contact) => contact.email.toLowerCase()));
+  const contacts = [
+    prospectContactPattern(detail.companyName, domain, "Talent Team", "talent", "talent_acquisition", 0.55),
+    prospectContactPattern(detail.companyName, domain, "Recruiting Team", "careers", "recruiter", 0.5),
+    prospectContactPattern(detail.companyName, domain, "Founder Team", "founders", "founder", 0.45),
+    prospectContactPattern(detail.companyName, domain, "Engineering Team", "engineering", "engineering_manager", 0.42),
+  ].filter((contact) => !existingEmails.has(contact.email));
+
+  return contacts.length > 0
+    ? {
+        companyId: detail.id,
+        contacts: contacts.slice(0, 3),
+      }
+    : null;
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -229,4 +258,28 @@ function splitList(value: string) {
 function textOrNull(value: string) {
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function isUsableEmailDomain(value: string) {
+  return value.includes(".") && !/\s/.test(value);
+}
+
+function prospectContactPattern(
+  companyName: string,
+  domain: string,
+  label: string,
+  localPart: string,
+  role: string,
+  confidence: number,
+): Omit<UpsertProspectContact, "company_id"> {
+  return {
+    full_name: `${companyName} ${label}`,
+    email: `${localPart}@${domain}`,
+    email_confidence: confidence,
+    email_status: "unknown",
+    role,
+    linkedin_url: null,
+    source: "pattern_guess",
+    opted_out: false,
+  };
 }

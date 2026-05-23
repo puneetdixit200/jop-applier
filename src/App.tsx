@@ -101,6 +101,7 @@ import {
   type JobSummary,
 } from "./lib/discovery-control";
 import {
+  buildFindMoreProspectContactsDraft,
   buildManualProspectingCompanyDraft,
   buildProspectingOutreachDraft,
   runProspectingScanControl,
@@ -606,6 +607,7 @@ export function App() {
   const [isStartingProspectingOutreach, setIsStartingProspectingOutreach] = useState(false);
   const [isManualProspectingFormOpen, setIsManualProspectingFormOpen] = useState(false);
   const [isAddingManualProspectingCompany, setIsAddingManualProspectingCompany] = useState(false);
+  const [isFindingMoreProspectContacts, setIsFindingMoreProspectContacts] = useState(false);
   const [isRunningSchedules, setIsRunningSchedules] = useState(false);
   const [runningReviewActionId, setRunningReviewActionId] = useState<string | null>(null);
   const [runningOutreachReviewAction, setRunningOutreachReviewAction] =
@@ -1033,6 +1035,54 @@ export function App() {
       setStorageStatus("Storage unavailable");
     } finally {
       setIsAddingManualProspectingCompany(false);
+    }
+  }
+
+  async function findMoreContactsForSelectedCompany() {
+    const draft = buildFindMoreProspectContactsDraft(prospectingCompanyDetail);
+    if (!draft) {
+      setWorkflowStatus("prospecting company domain required for contact enrichment");
+      return;
+    }
+
+    setIsFindingMoreProspectContacts(true);
+    try {
+      if (!isDesktopRuntime() || persistedFundedCompanies.length === 0) {
+        const now = new Date().toISOString();
+        const contacts = draft.contacts.map((contact, index) => ({
+          ...contact,
+          id: `preview-pattern-contact-${Date.now()}-${index}`,
+          company_id: draft.companyId,
+          created_at: now,
+        }));
+        setPreviewProspectContactRecords((current) => [
+          ...contacts,
+          ...current.filter((item) => !contacts.some((contact) => contact.email === item.email)),
+        ]);
+        setWorkflowStatus(`found ${contacts.length} pattern contacts`);
+        setStorageStatus("Browser preview");
+        return;
+      }
+
+      const savedContacts = await Promise.all(
+        draft.contacts.map((contact) =>
+          saveProspectContact({
+            ...contact,
+            company_id: draft.companyId,
+          }),
+        ),
+      );
+      setPersistedProspectContacts((current) => [
+        ...savedContacts,
+        ...current.filter((item) => !savedContacts.some((contact) => contact.id === item.id)),
+      ]);
+      setWorkflowStatus(`found ${savedContacts.length} pattern contacts`);
+      setStorageStatus("SQLite ready");
+    } catch {
+      setWorkflowStatus("contact enrichment failed");
+      setStorageStatus("Storage unavailable");
+    } finally {
+      setIsFindingMoreProspectContacts(false);
     }
   }
 
@@ -1467,9 +1517,13 @@ export function App() {
             onStartOutreach={() => {
               void startSelectedCompanyOutreach();
             }}
+            onFindMoreContacts={() => {
+              void findMoreContactsForSelectedCompany();
+            }}
             isRunningScan={isRunningProspectingScan}
             isStartingOutreach={isStartingProspectingOutreach}
             isAddingManualCompany={isAddingManualProspectingCompany}
+            isFindingMoreContacts={isFindingMoreProspectContacts}
           />
         )}
         {route === "outreach" && (
@@ -1933,9 +1987,11 @@ function Prospecting({
   onRunScan,
   onOpenSettings,
   onStartOutreach,
+  onFindMoreContacts,
   isRunningScan,
   isStartingOutreach,
   isAddingManualCompany,
+  isFindingMoreContacts,
 }: {
   dashboard: ProspectingDashboard;
   companies: FundedCompany[];
@@ -1953,9 +2009,11 @@ function Prospecting({
   onRunScan: () => void;
   onOpenSettings: () => void;
   onStartOutreach: () => void;
+  onFindMoreContacts: () => void;
   isRunningScan: boolean;
   isStartingOutreach: boolean;
   isAddingManualCompany: boolean;
+  isFindingMoreContacts: boolean;
 }) {
   const updateFilter = <Key extends keyof ProspectingFilterState>(
     key: Key,
@@ -2243,8 +2301,19 @@ function Prospecting({
 
             <section className="activity-section" aria-label="Prospecting contacts">
               <div className="activity-heading compact">
-                <h4>Contacts</h4>
-                <strong>{detail.contacts.length}</strong>
+                <div>
+                  <h4>Contacts</h4>
+                  <strong>{detail.contacts.length}</strong>
+                </div>
+                <button
+                  className="secondary-action compact"
+                  type="button"
+                  onClick={onFindMoreContacts}
+                  disabled={isFindingMoreContacts}
+                >
+                  <Search size={16} aria-hidden="true" />
+                  {isFindingMoreContacts ? "Finding" : "Find More Contacts"}
+                </button>
               </div>
               <div className="contact-grid">
                 {detail.contacts.length > 0 ? (

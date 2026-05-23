@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildFindMoreProspectContactsDraft,
   buildManualProspectingCompanyDraft,
   buildProspectingOutreachDraft,
   runProspectingScanControl,
@@ -194,6 +195,66 @@ describe("prospecting control", () => {
     };
 
     expect(buildManualProspectingCompanyDraft(draft, "2026-05-23T04:30:00.000Z")).toBeNull();
+  });
+
+  it("builds pattern-guessed contacts while skipping existing prospect emails", () => {
+    expect(buildFindMoreProspectContactsDraft(companyDetail)).toEqual({
+      companyId: "setu",
+      contacts: [
+        {
+          full_name: "Setu Talent Team",
+          email: "talent@setu.co",
+          email_confidence: 0.55,
+          email_status: "unknown",
+          role: "talent_acquisition",
+          linkedin_url: null,
+          source: "pattern_guess",
+          opted_out: false,
+        },
+        {
+          full_name: "Setu Recruiting Team",
+          email: "careers@setu.co",
+          email_confidence: 0.5,
+          email_status: "unknown",
+          role: "recruiter",
+          linkedin_url: null,
+          source: "pattern_guess",
+          opted_out: false,
+        },
+        {
+          full_name: "Setu Founder Team",
+          email: "founders@setu.co",
+          email_confidence: 0.45,
+          email_status: "unknown",
+          role: "founder",
+          linkedin_url: null,
+          source: "pattern_guess",
+          opted_out: false,
+        },
+      ],
+    });
+
+    expect(
+      buildFindMoreProspectContactsDraft({
+        ...companyDetail,
+        contacts: [
+          ...companyDetail.contacts,
+          {
+            id: "setu-talent",
+            name: "Talent",
+            email: "talent@setu.co",
+            roleLabel: "Talent Acquisition",
+            confidenceLabel: "55%",
+            statusLabel: "Unknown",
+            sourceLabel: "pattern_guess",
+          },
+        ],
+      })?.contacts.map((contact) => contact.email),
+    ).toEqual(["careers@setu.co", "founders@setu.co", "engineering@setu.co"]);
+  });
+
+  it("does not build pattern-guessed contacts without a company domain", () => {
+    expect(buildFindMoreProspectContactsDraft({ ...companyDetail, domainLabel: "No domain" })).toBeNull();
   });
 });
 
