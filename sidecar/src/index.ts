@@ -133,6 +133,21 @@ import {
   type ProspectingScanDependencies,
 } from "./prospecting/prospecting-manager.js";
 import {
+  createProspectingDependenciesFromWorkflowInput,
+} from "./prospecting/prospecting-workflow-config.js";
+import {
+  runOutreachFollowUpWorker,
+  type OutreachFollowUpDependencies,
+} from "./prospecting/outreach/outreach-follow-up-worker.js";
+import {
+  runOutreachSendWorker,
+  type OutreachSendDependencies,
+} from "./prospecting/outreach/outreach-send-worker.js";
+import {
+  createOutreachFollowUpDependenciesFromWorkflowInput,
+  createOutreachSendDependenciesFromWorkflowInput,
+} from "./prospecting/outreach/outreach-workflow-config.js";
+import {
   createApplicationDocumentGenerators,
   type ApplicationDocumentGeneratorDependencies,
 } from "./resume/application-document-generator.js";
@@ -271,6 +286,15 @@ export type SidecarProspectingOptions = ProspectingScanDependencies & {
   minRelevanceScore?: number;
 };
 
+export type SidecarOutreachSendOptions = OutreachSendDependencies & {
+  maxEmails?: number;
+  recipientTimezoneOffsetMinutes?: number;
+};
+
+export type SidecarOutreachFollowUpOptions = OutreachFollowUpDependencies & {
+  reviewBeforeSend?: boolean;
+};
+
 export type SidecarRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
@@ -292,6 +316,8 @@ export type SidecarRuntimeOptions = {
   exportSync?: SidecarExportSyncOptions;
   cleanup?: SidecarCleanupOptions;
   prospecting?: SidecarProspectingOptions;
+  outreachSend?: SidecarOutreachSendOptions;
+  outreachFollowUp?: SidecarOutreachFollowUpOptions;
   followUps?: SidecarFollowUpOptions;
   notifications?: NotificationManagerOptions;
   plugins?: Plugin[];
@@ -345,6 +371,8 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   const exportSync = options.exportSync ?? createEmptyExportSyncWorkerDependencies();
   const cleanup = options.cleanup ?? createEmptyCleanupWorkerDependencies();
   const prospecting = options.prospecting ?? createEmptyProspectingDependencies();
+  const outreachSend = options.outreachSend ?? createEmptyOutreachSendDependencies();
+  const outreachFollowUp = options.outreachFollowUp ?? createEmptyOutreachFollowUpDependencies();
   const followUps = options.followUps ?? createEmptyFollowUpDependencies();
   const scheduledTaskPersistence = options.scheduledTasks ?? createEmptyScheduledTaskPersistence();
   const notificationOutbox: NotificationDelivery[] = [];
@@ -450,35 +478,55 @@ export function createSidecarRuntime(options: SidecarRuntimeOptions = {}) {
   workflowEngine.register({
     id: "prospecting-scan",
     description: "Scan recently funded companies and persist prospecting records",
-    run: async () =>
-      runProspectingScan(prospecting, {
-        profile: options.prospecting?.profile ?? {
+    run: async (input) => {
+      const configuredProspecting = createProspectingDependenciesFromWorkflowInput(input, {
+        aiEngine,
+      });
+      const prospectingDependencies = configuredProspecting?.dependencies ?? prospecting;
+
+      return runProspectingScan(prospectingDependencies, {
+        profile: configuredProspecting?.profile ?? options.prospecting?.profile ?? {
           targetRole: "Software Engineer",
           skills: [],
           summary: "",
         },
-        minRelevanceScore: options.prospecting?.minRelevanceScore,
+        minRelevanceScore: configuredProspecting?.minRelevanceScore ?? options.prospecting?.minRelevanceScore,
         eventBus,
-      }),
+      });
+    },
   });
   workflowEngine.register({
     id: "outreach-send",
     description: "Send queued outreach campaign emails within compliance limits",
-    run: async () => ({
-      scanned: 0,
-      sent: 0,
-      skipped: 0,
-      failed: 0,
-    }),
+    run: async (input) => {
+      const configuredOutreachSend = createOutreachSendDependenciesFromWorkflowInput(input, {
+        fallback: outreachSend,
+        createEmailSender: options.emailAdapters?.createEmailSender,
+      });
+
+      return runOutreachSendWorker(configuredOutreachSend ?? outreachSend, {
+        now: now(),
+        eventBus,
+        maxEmails: options.outreachSend?.maxEmails,
+        recipientTimezoneOffsetMinutes: options.outreachSend?.recipientTimezoneOffsetMinutes,
+      });
+    },
   });
   workflowEngine.register({
     id: "outreach-follow-up",
     description: "Queue due follow-up emails for active outreach campaigns",
-    run: async () => ({
-      scanned: 0,
-      queued: 0,
-      skipped: 0,
-    }),
+    run: async (input) => {
+      const configuredOutreachFollowUp = createOutreachFollowUpDependenciesFromWorkflowInput(input, {
+        fallback: outreachFollowUp,
+        createEmailSender: options.emailAdapters?.createEmailSender,
+      });
+
+      return runOutreachFollowUpWorker(configuredOutreachFollowUp ?? outreachFollowUp, {
+        now: now(),
+        eventBus,
+        reviewBeforeSend: options.outreachFollowUp?.reviewBeforeSend,
+      });
+    },
   });
   workflowEngine.register({
     id: "export-sync",
@@ -1096,6 +1144,18 @@ function createEmptyAnalyticsRefreshWorkerDependencies(): AnalyticsRefreshWorker
   return {
     loadInputs: async () => ({ applications: [], jobs: [] }),
     saveSnapshot: async () => undefined,
+  };
+}
+
+function createEmptyOutreachSendDependencies(): OutreachSendDependencies {
+  return {
+    listQueuedEmails: async () => [],
+  };
+}
+
+function createEmptyOutreachFollowUpDependencies(): OutreachFollowUpDependencies {
+  return {
+    listThreads: async () => [],
   };
 }
 

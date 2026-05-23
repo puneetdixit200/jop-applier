@@ -128,7 +128,7 @@ export function buildProspectingOutreachDraft(
       contact_id: contact.id,
       sequence_step: 1,
       subject: `Congrats on ${detail.fundingLabel}`,
-      body_html: `${body.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("")}${renderUnsubscribeFooter(contact.email)}`,
+      body_html: `${body.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("")}${renderOutreachUnsubscribeFooter(contact.email)}`,
       status: "pending",
       scheduled_at: scheduledAt,
       sent_at: null,
@@ -136,6 +136,17 @@ export function buildProspectingOutreachDraft(
     },
     contactLabel: `${contact.name} <${contact.email}>`,
   };
+}
+
+export function bodyTextToOutreachHtml(value: string, contactEmail: string) {
+  const bodyWithoutFooter = value
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .filter((paragraph) => !/\bunsubscribe\b/i.test(paragraph))
+    .join("\n\n");
+
+  return `${bodyTextToHtml(bodyWithoutFooter)}${renderOutreachUnsubscribeFooter(contactEmail)}`;
 }
 
 export function buildManualProspectingCompanyDraft(
@@ -220,9 +231,22 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
-function renderUnsubscribeFooter(email: string) {
-  const token = encodeURIComponent(`optout:${email.toLowerCase()}:unsubscribe_link`);
-  return `<p style="font-size:12px;color:#5f6975">If this is not relevant, you can <a href="careercaveman://unsubscribe?token=${token}">unsubscribe</a>.</p>`;
+export function renderOutreachUnsubscribeFooter(email: string) {
+  const token = base64UrlEncode(email.trim().toLowerCase());
+  return `<p style="font-size:12px;color:#5f6975">If this is not relevant, you can <a href="http://127.0.0.1:17654/unsubscribe?token=${token}">unsubscribe</a>.</p>`;
+}
+
+function bodyTextToHtml(value: string) {
+  return value
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`)
+    .join("");
+}
+
+function base64UrlEncode(value: string) {
+  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 function normalizeDomain(value: string) {

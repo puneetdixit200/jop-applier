@@ -9,6 +9,8 @@
     "build:frontend": "tsc -p tsconfig.app.json && vite build",
     "build:sidecar": "tsc -p sidecar/tsconfig.json",
     "build:tauri-check": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "build:mac": "npm run build:sidecar && npm run build:frontend && tauri build --bundles dmg",
+    "build:linux": "npm run build:sidecar && npm run build:frontend && tauri build --bundles appimage,deb",
     "test": "npm run test:frontend && npm run test:sidecar && npm run test:rust",
     "test:frontend": "vitest run src/lib",
     "test:sidecar": "vitest run sidecar/src",

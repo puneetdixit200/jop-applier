@@ -42,6 +42,17 @@ type EmailMatchContext = {
   contacts: EmailMatchContact[];
 };
 
+type OutreachReplyContextEmail = {
+  id: string;
+  messageId: string;
+  contactId: string;
+  campaignId: string;
+};
+
+type OutreachReplyContext = {
+  emails: OutreachReplyContextEmail[];
+};
+
 export function createEmailCheckDependenciesFromWorkflowInput(
   input: unknown,
   options: ConfiguredEmailCheckOptions,
@@ -59,6 +70,7 @@ export function createEmailCheckDependenciesFromWorkflowInput(
   const createEmailReader = options.createEmailReader ?? ((config) => createImapEmailReader(config));
   const fetchOptions = fetchUnreadOptions(emailCheck.fetch);
   const matchContext = emailMatchContext(emailCheck.matchContext);
+  const outreachContext = outreachReplyContext(emailCheck.outreachContext);
 
   return {
     ...options.fallback,
@@ -66,6 +78,21 @@ export function createEmailCheckDependenciesFromWorkflowInput(
       const reader = createEmailReader(account);
       const messages = await reader.fetchUnread(fetchOptions);
       return messages.map((message) => emailResponseMessageFromInbound(message, matchContext));
+    },
+    recordOutreachReply: async (message) => {
+      const matched = matchOutreachReply(message, outreachContext);
+      if (!matched) {
+        return null;
+      }
+      return {
+        emailId: matched.id,
+        contactId: matched.contactId,
+        campaignId: matched.campaignId,
+        messageId: message.id,
+        from: message.from,
+        subject: message.subject,
+        receivedAt: message.receivedAt,
+      };
     },
   };
 }
@@ -87,7 +114,20 @@ function emailResponseMessageFromInbound(
     body: message.body,
     receivedAt: message.receivedAt ?? new Date(0).toISOString(),
     responseType: classifyResponse(message),
+    ...(message.inReplyTo ? { inReplyTo: message.inReplyTo } : {}),
+    ...(message.references && message.references.length > 0 ? { references: message.references } : {}),
   };
+}
+
+function matchOutreachReply(message: { inReplyTo?: string | null; references?: string[] }, context: OutreachReplyContext) {
+  const candidates = new Set([
+    ...(message.inReplyTo ? [message.inReplyTo] : []),
+    ...(message.references ?? []),
+  ].map(normalizedMessageId));
+  if (candidates.size === 0) {
+    return null;
+  }
+  return context.emails.find((email) => candidates.has(normalizedMessageId(email.messageId))) ?? null;
 }
 
 function matchInboundEmail(message: InboundEmail, context: EmailMatchContext) {
@@ -139,6 +179,28 @@ function emailMatchContext(value: unknown): EmailMatchContext {
       ? value.contacts.flatMap((item) => emailMatchContact(item) ?? [])
       : [],
   };
+}
+
+function outreachReplyContext(value: unknown): OutreachReplyContext {
+  if (!isRecord(value) || !Array.isArray(value.emails)) {
+    return { emails: [] };
+  }
+  return {
+    emails: value.emails.flatMap((item) => outreachReplyContextEmail(item) ?? []),
+  };
+}
+
+function outreachReplyContextEmail(value: unknown): OutreachReplyContextEmail | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = nonEmptyString(value.id);
+  const messageId = nonEmptyString(value.messageId);
+  const contactId = nonEmptyString(value.contactId);
+  const campaignId = nonEmptyString(value.campaignId);
+  return id && messageId && contactId && campaignId
+    ? { id, messageId, contactId, campaignId }
+    : null;
 }
 
 function emailMatchApplication(value: unknown): EmailMatchApplication | null {
@@ -218,6 +280,10 @@ function normalizedEmail(value: string | null): string | null {
 
 function normalizedText(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function normalizedMessageId(value: string): string {
+  return value.trim().replace(/^<|>$/g, "").toLowerCase();
 }
 
 function positiveInteger(value: unknown): number | null {

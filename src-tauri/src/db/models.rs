@@ -541,6 +541,14 @@ pub struct OutreachEmailReviewUpdate {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OutreachEmailDeliveryUpdate {
+    pub id: String,
+    pub status: String,
+    pub sent_at: Option<String>,
+    pub message_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EmailOptOut {
     pub email: String,
     pub opted_out_at: String,

@@ -2,9 +2,11 @@ use crate::{
     db::{
         models::{
             Application, ApplicationFollowUpUpdate, ApplicationResponseUpdate,
-            ApplicationWorkflowStateUpdate, ScheduledTask, ScheduledTaskRunUpdate, SettingValue,
-            UpsertCommunication, UpsertFundedCompany, UpsertJob, UpsertNotification,
-            UpsertProspectContact, UpsertSetting,
+            ApplicationWorkflowStateUpdate, FundedCompany, OutreachCampaign,
+            OutreachEmail, OutreachEmailDeliveryUpdate, ProspectContact, ScheduledTask,
+            ScheduledTaskRunUpdate, SettingValue, UpsertCommunication, UpsertFundedCompany,
+            UpsertJob, UpsertNotification, UpsertOutreachEmail, UpsertProspectContact,
+            UpsertSetting,
         },
         queries,
     },
@@ -79,6 +81,12 @@ pub fn run_sidecar_workflow_and_persist_jobs_with_command(
     }
     if workflow_id == "follow-up-check" {
         persist_follow_ups(connection, &mut result)?;
+    }
+    if workflow_id == "outreach-send" {
+        persist_outreach_send_updates(connection, &mut result)?;
+    }
+    if workflow_id == "outreach-follow-up" {
+        persist_outreach_follow_up_drafts(connection, &mut result)?;
     }
     if workflow_id == "analytics-refresh" {
         persist_analytics_snapshot(connection, &mut result)?;
@@ -487,6 +495,10 @@ fn workflow_params_from_settings(
         return discovery_workflow_params_from_settings(connection);
     }
 
+    if workflow_id == "prospecting-scan" {
+        return prospecting_scan_workflow_params_from_settings(connection);
+    }
+
     if workflow_id == "email-check" {
         return email_check_workflow_params_from_settings(connection);
     }
@@ -497,6 +509,14 @@ fn workflow_params_from_settings(
 
     if workflow_id == "follow-up-check" {
         return follow_up_workflow_params_from_settings(connection);
+    }
+
+    if workflow_id == "outreach-send" {
+        return outreach_send_workflow_params_from_database(connection);
+    }
+
+    if workflow_id == "outreach-follow-up" {
+        return outreach_follow_up_workflow_params_from_database(connection);
     }
 
     if workflow_id == "analytics-refresh" {
@@ -552,6 +572,62 @@ fn discovery_workflow_params_from_settings(connection: &Connection) -> Result<Va
     }
 }
 
+fn prospecting_scan_workflow_params_from_settings(connection: &Connection) -> Result<Value, String> {
+    let mut prospecting_scan = Map::new();
+    if let Some(profile) = queries::get_user_profile(connection).map_err(|error| error.to_string())? {
+        prospecting_scan.insert(
+            "profile".to_string(),
+            json!({
+                "targetRole": profile
+                    .target_roles
+                    .first()
+                    .cloned()
+                    .unwrap_or(profile.headline),
+                "skills": profile.skills,
+                "summary": profile.summary.unwrap_or_default(),
+            }),
+        );
+    }
+
+    let config = setting_object(connection, "prospecting.config")?;
+    if let Some(config) = config.as_ref() {
+        if let Some(min_relevance_score) = config.get("minRelevanceScore").and_then(Value::as_f64) {
+            prospecting_scan.insert("minRelevanceScore".to_string(), json!(min_relevance_score));
+        }
+        if let Some(sources) = config.get("sources").and_then(Value::as_object) {
+            prospecting_scan.insert("sources".to_string(), Value::Object(sources.clone()));
+        }
+        if let Some(enrichment) = config.get("enrichment").and_then(Value::as_object) {
+            prospecting_scan.insert("enrichment".to_string(), Value::Object(enrichment.clone()));
+        }
+    }
+
+    if !prospecting_scan.contains_key("sources") {
+        prospecting_scan.insert(
+            "sources".to_string(),
+            json!({
+                "inc42": true,
+                "yourstory": true,
+                "techcrunch": true,
+                "entrackr": false,
+                "vccircle": false,
+            }),
+        );
+    }
+    if !prospecting_scan.contains_key("enrichment") {
+        prospecting_scan.insert(
+            "enrichment".to_string(),
+            json!({
+                "includeWebsite": true,
+                "includeLinkedIn": false,
+                "maxContacts": 3,
+            }),
+        );
+    }
+
+    Ok(json!({ "prospectingScan": prospecting_scan }))
+}
+
 fn email_check_workflow_params_from_settings(connection: &Connection) -> Result<Value, String> {
     let mut email_check = Map::new();
     if let Some(account) = setting_object(connection, "email.account")? {
@@ -582,6 +658,9 @@ fn email_check_workflow_params_from_settings(connection: &Connection) -> Result<
     }
     if let Some(match_context) = email_match_context_from_database(connection)? {
         email_check.insert("matchContext".to_string(), match_context);
+    }
+    if let Some(outreach_context) = outreach_reply_context_from_database(connection)? {
+        email_check.insert("outreachContext".to_string(), outreach_context);
     }
 
     if email_check.is_empty() {
@@ -681,6 +760,223 @@ fn follow_up_applications_from_database(
         .collect::<Vec<_>>();
 
     Ok(Some(values))
+}
+
+fn outreach_send_workflow_params_from_database(connection: &Connection) -> Result<Value, String> {
+    let mut outreach_send = Map::new();
+    if let Some(account) = setting_object(connection, "email.account")? {
+        outreach_send.insert("account".to_string(), Value::Object(account));
+    }
+
+    let emails = outreach_send_targets_from_database(connection)?;
+    if !emails.is_empty() {
+        outreach_send.insert("emails".to_string(), Value::Array(emails));
+    }
+
+    if outreach_send.is_empty() {
+        Ok(json!({}))
+    } else {
+        Ok(json!({ "outreachSend": outreach_send }))
+    }
+}
+
+fn outreach_follow_up_workflow_params_from_database(connection: &Connection) -> Result<Value, String> {
+    let threads = outreach_follow_up_threads_from_database(connection)?;
+    if threads.is_empty() {
+        Ok(json!({}))
+    } else {
+        Ok(json!({ "outreachFollowUp": { "threads": threads } }))
+    }
+}
+
+fn outreach_send_targets_from_database(connection: &Connection) -> Result<Vec<Value>, String> {
+    let queued = queries::list_outreach_emails(connection, Some("queued"))
+        .map_err(|error| error.to_string())?;
+    if queued.is_empty() {
+        return Ok(Vec::new());
+    }
+    let context = OutreachContext::load(connection)?;
+    let sent_count_today = outreach_sent_count_today(&context.emails);
+    let bounce_count_last_7_days = context
+        .emails
+        .iter()
+        .filter(|email| email.status == "bounced")
+        .count();
+    let mut targets = Vec::new();
+
+    for email in queued {
+        let Some(contact) = context.contacts_by_id.get(&email.contact_id) else {
+            continue;
+        };
+        let Some(campaign) = context.campaigns_by_id.get(&email.campaign_id) else {
+            continue;
+        };
+        let Some(company) = context.companies_by_id.get(&contact.company_id) else {
+            continue;
+        };
+        targets.push(json!({
+            "id": email.id,
+            "campaignId": email.campaign_id,
+            "contactId": contact.id,
+            "contactEmail": contact.email,
+            "contactName": contact.full_name,
+            "companyId": company.id,
+            "companyName": company.name,
+            "subject": email.subject,
+            "bodyHtml": email.body_html,
+            "sequenceStep": email.sequence_step,
+            "scheduledAt": email.scheduled_at,
+            "maxEmailsPerDay": campaign.max_emails_per_day,
+            "optedOut": contact.opted_out,
+            "sentCountToday": sent_count_today,
+            "companyContactedCount": context.company_contacted_count(&company.id),
+            "recentContactedAt": context.recent_contacted_at(&contact.id),
+            "bounceCountLast7Days": bounce_count_last_7_days,
+        }));
+    }
+
+    Ok(targets)
+}
+
+fn outreach_follow_up_threads_from_database(connection: &Connection) -> Result<Vec<Value>, String> {
+    let context = OutreachContext::load(connection)?;
+    if context.emails.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let unsubscribe_base_url = setting_string(connection, "outreach.unsubscribeBaseUrl")?
+        .unwrap_or_else(|| "http://127.0.0.1:17654/unsubscribe".to_string());
+    let mut grouped: HashMap<(String, String), Vec<Value>> = HashMap::new();
+    for email in &context.emails {
+        grouped
+            .entry((email.campaign_id.clone(), email.contact_id.clone()))
+            .or_default()
+            .push(json!({
+                "id": email.id,
+                "campaignId": email.campaign_id,
+                "contactId": email.contact_id,
+                "sequenceStep": email.sequence_step,
+                "subject": email.subject,
+                "bodyHtml": email.body_html,
+                "status": email.status,
+                "scheduledAt": email.scheduled_at,
+                "sentAt": email.sent_at,
+            }));
+    }
+
+    let mut threads = Vec::new();
+    for ((campaign_id, contact_id), emails) in grouped {
+        let Some(contact) = context.contacts_by_id.get(&contact_id) else {
+            continue;
+        };
+        let Some(campaign) = context.campaigns_by_id.get(&campaign_id) else {
+            continue;
+        };
+        let Some(company) = context.companies_by_id.get(&campaign.company_id) else {
+            continue;
+        };
+        threads.push(json!({
+            "campaignId": campaign_id,
+            "contactId": contact_id,
+            "contactName": contact.full_name,
+            "contactEmail": contact.email,
+            "optedOut": contact.opted_out,
+            "companyId": company.id,
+            "companyName": company.name,
+            "fundingLabel": funding_label(company.funding_stage.as_deref(), company.funding_amount),
+            "companySummary": company.ai_summary,
+            "unsubscribeBaseUrl": unsubscribe_base_url,
+            "emails": emails,
+        }));
+    }
+
+    Ok(threads)
+}
+
+struct OutreachContext {
+    companies_by_id: HashMap<String, FundedCompany>,
+    campaigns_by_id: HashMap<String, OutreachCampaign>,
+    contacts_by_id: HashMap<String, ProspectContact>,
+    emails: Vec<OutreachEmail>,
+}
+
+impl OutreachContext {
+    fn load(connection: &Connection) -> Result<Self, String> {
+        let companies = queries::list_funded_companies(connection)
+            .map_err(|error| error.to_string())?;
+        let mut contacts_by_id = HashMap::new();
+        for company in &companies {
+            for contact in queries::list_prospect_contacts(connection, &company.id)
+                .map_err(|error| error.to_string())?
+            {
+                contacts_by_id.insert(contact.id.clone(), contact);
+            }
+        }
+        let campaigns = queries::list_outreach_campaigns(connection)
+            .map_err(|error| error.to_string())?;
+        let emails = queries::list_outreach_emails(connection, None)
+            .map_err(|error| error.to_string())?;
+
+        Ok(Self {
+            companies_by_id: companies
+                .into_iter()
+                .map(|company| (company.id.clone(), company))
+                .collect(),
+            campaigns_by_id: campaigns
+                .into_iter()
+                .map(|campaign| (campaign.id.clone(), campaign))
+                .collect(),
+            contacts_by_id,
+            emails,
+        })
+    }
+
+    fn company_contacted_count(&self, company_id: &str) -> usize {
+        self.emails
+            .iter()
+            .filter(|email| ["sent", "opened", "replied", "bounced"].contains(&email.status.as_str()))
+            .filter_map(|email| self.contacts_by_id.get(&email.contact_id))
+            .filter(|contact| contact.company_id == company_id)
+            .map(|contact| contact.email.as_str())
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+    }
+
+    fn recent_contacted_at(&self, contact_id: &str) -> Option<String> {
+        self.emails
+            .iter()
+            .filter(|email| email.contact_id == contact_id)
+            .filter(|email| ["sent", "opened", "replied", "bounced"].contains(&email.status.as_str()))
+            .filter_map(|email| email.sent_at.as_ref())
+            .max()
+            .cloned()
+    }
+}
+
+fn outreach_sent_count_today(emails: &[OutreachEmail]) -> usize {
+    let today = OffsetDateTime::now_utc().date().to_string();
+    emails
+        .iter()
+        .filter(|email| ["sent", "opened", "replied", "bounced"].contains(&email.status.as_str()))
+        .filter_map(|email| email.sent_at.as_ref())
+        .filter(|sent_at| sent_at.starts_with(&today))
+        .count()
+}
+
+fn funding_label(stage: Option<&str>, amount: Option<f64>) -> String {
+    let stage = stage.unwrap_or("funding").replace('_', " ");
+    let amount = amount
+        .map(|amount| {
+            if amount >= 1_000_000.0 {
+                format!("${:.0}M", amount / 1_000_000.0)
+            } else {
+                format!("${amount:.0}")
+            }
+        });
+    match amount {
+        Some(amount) => format!("{stage} - {amount}"),
+        None => stage,
+    }
 }
 
 fn normalized_company_name(value: &str) -> String {
@@ -967,6 +1263,28 @@ fn email_match_context_from_database(connection: &Connection) -> Result<Option<V
     }
 }
 
+fn outreach_reply_context_from_database(connection: &Connection) -> Result<Option<Value>, String> {
+    let emails = queries::list_outreach_emails(connection, Some("sent"))
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .filter_map(|email| {
+            let message_id = email.message_id?;
+            Some(json!({
+                "id": email.id,
+                "messageId": message_id,
+                "contactId": email.contact_id,
+                "campaignId": email.campaign_id,
+            }))
+        })
+        .collect::<Vec<_>>();
+
+    if emails.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(json!({ "emails": emails })))
+    }
+}
+
 fn discovery_setting_array(
     connection: &Connection,
     key: &str,
@@ -1003,6 +1321,19 @@ fn setting_object(
                 _ => Ok(None),
             }
         }
+        _ => Ok(None),
+    }
+}
+
+fn setting_string(connection: &Connection, key: &str) -> Result<Option<String>, String> {
+    let Some(setting) = queries::get_setting(connection, key).map_err(|error| error.to_string())?
+    else {
+        return Ok(None);
+    };
+
+    match setting.value {
+        SettingValue::String(value) if !value.trim().is_empty() => Ok(Some(value)),
+        SettingValue::Object(value) => Ok(value.as_str().map(ToOwned::to_owned)),
         _ => Ok(None),
     }
 }
@@ -1189,6 +1520,7 @@ fn persist_sidecar_notifications(
 }
 
 fn persist_email_responses(connection: &Connection, result: &mut Value) -> Result<(), String> {
+    persist_outreach_replies(connection, result)?;
     let Some(responses_value) = result.get("responses").cloned() else {
         return Ok(());
     };
@@ -1245,6 +1577,27 @@ fn persist_email_responses(connection: &Connection, result: &mut Value) -> Resul
         if !notifications.is_empty() {
             payload.insert("notifications".to_string(), Value::Array(notifications));
         }
+    }
+
+    Ok(())
+}
+
+fn persist_outreach_replies(connection: &Connection, result: &mut Value) -> Result<(), String> {
+    let Some(replies_value) = result.get("outreachReplies").cloned() else {
+        return Ok(());
+    };
+    let replies: Vec<SidecarOutreachReply> =
+        serde_json::from_value(replies_value).map_err(|error| error.to_string())?;
+    let mut stored = 0;
+
+    for reply in replies {
+        queries::mark_outreach_email_replied(connection, &reply.email_id, &reply.received_at)
+            .map_err(|error| error.to_string())?;
+        stored += 1;
+    }
+
+    if let Some(payload) = result.as_object_mut() {
+        payload.insert("storedOutreachReplies".to_string(), json!(stored));
     }
 
     Ok(())
@@ -1399,6 +1752,55 @@ fn persist_follow_ups(connection: &Connection, result: &mut Value) -> Result<(),
     Ok(())
 }
 
+fn persist_outreach_send_updates(connection: &Connection, result: &mut Value) -> Result<(), String> {
+    let Some(updates_value) = result.get("updates").cloned() else {
+        return Ok(());
+    };
+    let updates: Vec<SidecarOutreachSendUpdate> =
+        serde_json::from_value(updates_value).map_err(|error| error.to_string())?;
+    let mut stored = 0;
+
+    for update in updates {
+        queries::update_outreach_email_delivery(
+            connection,
+            OutreachEmailDeliveryUpdate {
+                id: update.id,
+                status: update.status,
+                sent_at: update.sent_at,
+                message_id: update.message_id,
+            },
+        )
+        .map_err(|error| error.to_string())?;
+        stored += 1;
+    }
+
+    if let Some(payload) = result.as_object_mut() {
+        payload.insert("storedOutreachUpdates".to_string(), json!(stored));
+    }
+
+    Ok(())
+}
+
+fn persist_outreach_follow_up_drafts(connection: &Connection, result: &mut Value) -> Result<(), String> {
+    let Some(drafts_value) = result.get("drafts").cloned() else {
+        return Ok(());
+    };
+    let drafts: Vec<UpsertOutreachEmail> =
+        serde_json::from_value(drafts_value).map_err(|error| error.to_string())?;
+    let mut stored = 0;
+
+    for draft in drafts {
+        queries::save_outreach_email(connection, draft).map_err(|error| error.to_string())?;
+        stored += 1;
+    }
+
+    if let Some(payload) = result.as_object_mut() {
+        payload.insert("storedOutreachFollowUps".to_string(), json!(stored));
+    }
+
+    Ok(())
+}
+
 fn persist_analytics_snapshot(connection: &Connection, result: &mut Value) -> Result<(), String> {
     let Some(snapshot) = result.get("snapshot").cloned() else {
         return Ok(());
@@ -1492,6 +1894,20 @@ struct SidecarEmailResponse {
     response_type: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+struct SidecarOutreachReply {
+    #[serde(rename = "emailId")]
+    email_id: String,
+    #[serde(rename = "contactId")]
+    _contact_id: String,
+    #[serde(rename = "campaignId")]
+    _campaign_id: String,
+    #[serde(rename = "messageId")]
+    _message_id: String,
+    #[serde(rename = "receivedAt")]
+    received_at: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct SidecarColdEmail {
     #[serde(rename = "applicationId")]
@@ -1543,6 +1959,16 @@ struct SidecarFollowUp {
     next_follow_up: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+struct SidecarOutreachSendUpdate {
+    id: String,
+    status: String,
+    #[serde(default, rename = "sentAt", alias = "sent_at")]
+    sent_at: Option<String>,
+    #[serde(default, rename = "messageId", alias = "message_id")]
+    message_id: Option<String>,
+}
+
 fn workflow_id_for_task_type(task_type: &str) -> Option<&'static str> {
     match task_type {
         "discovery" => Some("job-discovery"),
@@ -1553,6 +1979,8 @@ fn workflow_id_for_task_type(task_type: &str) -> Option<&'static str> {
         "weekly_analytics_report" => Some("analytics-refresh"),
         "export" => Some("export-sync"),
         "prospecting_scan" => Some("prospecting-scan"),
+        "outreach_send" => Some("outreach-send"),
+        "outreach_follow_up" => Some("outreach-follow-up"),
         "session_health" => Some("session-health"),
         "cleanup" => Some("cleanup"),
         _ => None,

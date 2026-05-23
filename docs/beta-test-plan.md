@@ -18,6 +18,7 @@ Use this checklist before publishing a beta release candidate.
 - Run job discovery for one opt-in portal and one ATS source.
 - Review a matched job, generate documents, and move an application through the tracker.
 - Trigger due schedules and confirm notifications appear in the app.
+- Click a test outreach unsubscribe link while the app is running and confirm the contact is opted out and queued follow-ups are cancelled.
 - Export application data to CSV and verify the output file opens.
 - Quit and relaunch the app, then confirm stored settings, tracker data, and encrypted sessions recover.
 

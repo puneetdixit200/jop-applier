@@ -1,17 +1,19 @@
 use rusqlite::{params, Connection};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde_json::json;
 use thiserror::Error;
 
 use super::models::{
     AiCacheEntry, Application, ApplicationDocumentContext, ApplicationEvent,
     ApplicationFollowUpUpdate, ApplicationResponseUpdate, ApplicationWorkflowStateUpdate,
     Communication, Company, Contact, Document, EmailOptOut, FundedCompany, Job, Notification,
-    OutreachCampaign, OutreachEmail, OutreachEmailReviewUpdate, ProspectContact, ScheduledTask,
-    ScheduledTaskRunUpdate, Setting, SettingValue, UpsertAiCacheEntry, UpsertApplication,
-    UpsertCommunication, UpsertCompany, UpsertContact, UpsertDocument, UpsertEmailOptOut,
-    UpsertFundedCompany, UpsertJob, UpsertNotification, UpsertOutreachCampaign, UpsertOutreachEmail,
-    UpsertProspectContact, UpsertScheduledTask, UpsertSetting, UpsertUserProfile, UserProfile,
+    OutreachCampaign, OutreachEmail, OutreachEmailDeliveryUpdate, OutreachEmailReviewUpdate,
+    ProspectContact, ScheduledTask, ScheduledTaskRunUpdate, Setting, SettingValue,
+    UpsertAiCacheEntry, UpsertApplication, UpsertCommunication, UpsertCompany, UpsertContact,
+    UpsertDocument, UpsertEmailOptOut, UpsertFundedCompany, UpsertJob, UpsertNotification,
+    UpsertOutreachCampaign, UpsertOutreachEmail, UpsertProspectContact, UpsertScheduledTask,
+    UpsertSetting, UpsertUserProfile, UserProfile,
 };
 
 #[derive(Debug, Error)]
@@ -979,6 +981,18 @@ pub fn save_outreach_campaign(
         .ok_or(QueryError::MissingOutreachCampaignAfterSave)
 }
 
+pub fn list_outreach_campaigns(connection: &Connection) -> QueryResult<Vec<OutreachCampaign>> {
+    let mut statement = connection.prepare(
+        "SELECT id, company_id, campaign_type, status, sequence_json, auto_approve,
+                max_emails_per_day, created_at, updated_at
+         FROM outreach_campaigns
+         ORDER BY created_at DESC",
+    )?;
+    let rows = statement.query_map([], outreach_campaign_from_row)?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(QueryError::from)
+}
+
 pub fn list_outreach_emails(
     connection: &Connection,
     status: Option<&str>,
@@ -1049,6 +1063,64 @@ pub fn update_outreach_email_review(
     )?;
 
     get_outreach_email(connection, &id)
+}
+
+pub fn update_outreach_email_delivery(
+    connection: &Connection,
+    email: OutreachEmailDeliveryUpdate,
+) -> QueryResult<Option<OutreachEmail>> {
+    let id = email.id;
+    connection.execute(
+        "UPDATE outreach_emails
+         SET status = ?2,
+             sent_at = COALESCE(?3, sent_at),
+             message_id = COALESCE(?4, message_id)
+         WHERE id = ?1
+           AND status IN ('queued', 'failed')",
+        params![&id, &email.status, &email.sent_at, &email.message_id],
+    )?;
+
+    get_outreach_email(connection, &id)
+}
+
+pub fn mark_outreach_email_replied(
+    connection: &Connection,
+    email_id: &str,
+    replied_at: &str,
+) -> QueryResult<Option<OutreachEmail>> {
+    connection.execute(
+        "UPDATE outreach_emails
+         SET status = 'replied'
+         WHERE id = ?1
+           AND status IN ('sent', 'opened')",
+        [email_id],
+    )?;
+    let email = get_outreach_email(connection, email_id)?;
+    if let Some(email) = email.as_ref() {
+        connection.execute(
+            "UPDATE outreach_emails
+             SET status = 'cancelled'
+             WHERE campaign_id = ?1
+               AND contact_id = ?2
+               AND status IN ('pending', 'queued')",
+            params![&email.campaign_id, &email.contact_id],
+        )?;
+        connection.execute(
+            "INSERT INTO notifications (type, title, body, priority, channel, metadata, created_at)
+             VALUES ('outreach.reply_detected', 'Outreach reply detected', ?1, 'high', 'in_app', ?2, ?3)",
+            params![
+                format!("{} replied to outreach.", email.contact_id),
+                json!({
+                    "emailId": email.id,
+                    "campaignId": email.campaign_id,
+                    "contactId": email.contact_id,
+                })
+                .to_string(),
+                replied_at,
+            ],
+        )?;
+    }
+    Ok(email)
 }
 
 pub fn record_email_opt_out(

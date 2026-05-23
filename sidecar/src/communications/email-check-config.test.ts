@@ -183,4 +183,68 @@ describe("email check config", () => {
       },
     ]);
   });
+
+  it("matches inbound replies to outreach message ids", async () => {
+    const createEmailReader: EmailReaderFactory = () => ({
+      fetchUnread: async () => [
+        {
+          id: "<reply-outreach@setu.example>",
+          uid: 103,
+          from: "Priya <priya@setu.co>",
+          subject: "Re: Congrats on Series A",
+          body: "Open to chat next week.",
+          receivedAt: "2026-05-29T10:00:00.000Z",
+          inReplyTo: "<smtp-outreach-1@careercaveman>",
+        },
+      ],
+    });
+
+    const dependencies = createEmailCheckDependenciesFromWorkflowInput(
+      {
+        emailCheck: {
+          account: {
+            provider: "gmail",
+            fromName: "Asha Rao",
+            fromEmail: "asha@gmail.example",
+            smtpHost: "smtp.gmail.com",
+            smtpPort: 465,
+            smtpSecure: true,
+            smtpUser: "asha@gmail.example",
+            smtpPass: "app-password",
+            imapHost: "imap.gmail.com",
+            imapPort: 993,
+            imapSecure: true,
+            imapUser: "asha@gmail.example",
+            imapPass: "app-password",
+            signature: null,
+          },
+          outreachContext: {
+            emails: [
+              {
+                id: "outreach-email-1",
+                messageId: "smtp-outreach-1@careercaveman",
+                contactId: "contact-1",
+                campaignId: "campaign-1",
+              },
+            ],
+          },
+        },
+      },
+      {
+        fallback,
+        createEmailReader,
+      },
+    );
+
+    const [message] = await dependencies!.fetchResponses();
+    await expect(dependencies?.recordOutreachReply?.(message)).resolves.toEqual({
+      emailId: "outreach-email-1",
+      contactId: "contact-1",
+      campaignId: "campaign-1",
+      messageId: "<reply-outreach@setu.example>",
+      from: "Priya <priya@setu.co>",
+      subject: "Re: Congrats on Series A",
+      receivedAt: "2026-05-29T10:00:00.000Z",
+    });
+  });
 });

@@ -13,10 +13,12 @@
     "windows": [
       {
         "title": "CareerCaveman",
-        "width": 1280,
-        "height": 820,
-        "minWidth": 960,
-        "minHeight": 680
+        "width": 1180,
+        "height": 780,
+        "minWidth": 860,
+        "minHeight": 620,
+        "center": true,
+        "resizable": true
       }
     ],
     "security": {

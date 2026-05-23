@@ -14,6 +14,18 @@ export type EmailResponseMessage = {
   body: string | null;
   receivedAt: string;
   responseType: EmailResponseType;
+  inReplyTo?: string | null;
+  references?: string[];
+};
+
+export type OutreachReplyUpdate = {
+  emailId: string;
+  contactId: string;
+  campaignId: string;
+  messageId: string;
+  from: string;
+  subject: string | null;
+  receivedAt: string;
 };
 
 export type EmailResponseCommunication = {
@@ -45,6 +57,7 @@ export type EmailResponseWorkerDependencies = {
     update: EmailResponseApplicationUpdate,
   ) => Promise<void>;
   markResponseProcessed: (messageId: string) => Promise<void>;
+  recordOutreachReply?: (message: EmailResponseMessage) => Promise<OutreachReplyUpdate | null>;
 };
 
 export type EmailResponseWorkerOptions = {
@@ -59,6 +72,8 @@ export type EmailResponseWorkerResult = {
   recorded: number;
   failed: number;
   skipped: number;
+  responses?: EmailResponseMessage[];
+  outreachReplies?: OutreachReplyUpdate[];
 };
 
 export async function runEmailResponseWorker(
@@ -74,9 +89,27 @@ export async function runEmailResponseWorker(
     failed: 0,
     skipped: responses.length - limitedResponses.length,
   };
+  if (limitedResponses.length > 0) {
+    result.responses = limitedResponses;
+  }
 
   for (const response of limitedResponses) {
     if (response.applicationId === null) {
+      const outreachReply = await dependencies.recordOutreachReply?.(response);
+      if (outreachReply) {
+        result.matched += 1;
+        result.recorded += 1;
+        (result.outreachReplies ??= []).push(outreachReply);
+        await dependencies.markResponseProcessed(response.id);
+        options.eventBus?.emit("outreach.reply_detected", {
+          emailId: outreachReply.emailId,
+          contactId: outreachReply.contactId,
+          campaignId: outreachReply.campaignId,
+          subject: outreachReply.subject,
+          receivedAt: new Date(outreachReply.receivedAt),
+        });
+        continue;
+      }
       result.skipped += 1;
       continue;
     }

@@ -66,6 +66,40 @@ export type CareerEventMap = {
     reason: string;
     failedAt: Date;
   };
+  "outreach.email_sent": {
+    emailId: string;
+    campaignId: string;
+    contactId: string;
+    companyId: string;
+    companyName: string;
+    subject: string;
+    sentAt: Date;
+  };
+  "outreach.email_failed": {
+    emailId: string;
+    campaignId: string;
+    contactId: string;
+    companyId: string;
+    companyName: string;
+    subject: string;
+    reason: string;
+    failedAt: Date;
+  };
+  "outreach.follow_up_queued": {
+    campaignId: string;
+    contactId: string;
+    companyId: string;
+    companyName: string;
+    sequenceStep: 2 | 3;
+    queuedAt: Date;
+  };
+  "outreach.reply_detected": {
+    emailId: string;
+    contactId: string;
+    campaignId: string;
+    subject: string | null;
+    receivedAt: Date;
+  };
   "follow_up.failed": {
     applicationId: string;
     jobId: string;

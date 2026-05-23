@@ -6,6 +6,7 @@ pub mod commands;
 pub mod db;
 pub mod secure_store;
 pub mod sidecar;
+pub mod unsubscribe_server;
 
 pub struct AppState {
     pub connection: Mutex<Connection>,
@@ -29,8 +30,9 @@ pub fn run() {
                 .map_err(|error| format!("open application database: {error}"))?;
             app.manage(AppState {
                 connection: Mutex::new(connection),
-                database_path,
+                database_path: database_path.clone(),
             });
+            unsubscribe_server::start_unsubscribe_server(database_path);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -101,6 +101,7 @@ import {
   type JobSummary,
 } from "./lib/discovery-control";
 import {
+  bodyTextToOutreachHtml,
   buildFindMoreProspectContactsDraft,
   buildManualProspectingCompanyDraft,
   buildProspectingOutreachDraft,
@@ -123,6 +124,12 @@ import {
   type EmailProvider,
   type EmailSettings,
 } from "./lib/email-settings";
+import {
+  defaultProspectingSettings,
+  prospectingSettingsFromStoredValue,
+  prospectingSettingsToStoredValue,
+  type ProspectingSettings,
+} from "./lib/prospecting-settings";
 import {
   loadRuntimeControlStatus,
   type RuntimeControlDependencies,
@@ -189,6 +196,7 @@ type AutomationSettings = {
   cacheResponses: boolean;
   maxDailyApplications: number;
   discovery: DiscoverySettings;
+  prospecting: ProspectingSettings;
   email: EmailSettings;
 };
 
@@ -564,6 +572,7 @@ export function App() {
     cacheResponses: true,
     maxDailyApplications: 12,
     discovery: defaultDiscoverySettings,
+    prospecting: defaultProspectingSettings,
     email: defaultEmailSettings,
   });
   const [persistedJobs, setPersistedJobs] = useState<JobSummary[]>([]);
@@ -772,6 +781,7 @@ export function App() {
         storedFeedSources,
         storedAtsSources,
         storedCareerPageSources,
+        storedProspectingConfig,
         storedEmailAccount,
         storedEmailCheck,
         storedScheduledTasks,
@@ -793,6 +803,7 @@ export function App() {
         getSetting("discovery.feedSources"),
         getSetting("discovery.atsSources"),
         getSetting("discovery.careerPageSources"),
+        getSetting("prospecting.config"),
         getSetting("email.account"),
         getSetting("email.check"),
         loadOrSeedScheduledTasks({ listScheduledTasks, saveScheduledTask }),
@@ -845,6 +856,10 @@ export function App() {
           storedCareerPageSources?.value,
           storedPortalSources?.value,
           current.discovery,
+        ),
+        prospecting: prospectingSettingsFromStoredValue(
+          storedProspectingConfig?.value,
+          current.prospecting,
         ),
         email: emailSettingsFromStoredValues(
           storedEmailAccount?.value,
@@ -1238,10 +1253,11 @@ export function App() {
       return;
     }
 
+    const contactEmail = emailAddressFromContactLabel(outreachReviewPanel.contactLabel);
     const updatedEmail = {
       ...email,
       subject,
-      body_html: bodyTextToHtml(bodyText),
+      body_html: contactEmail ? bodyTextToOutreachHtml(bodyText, contactEmail) : bodyTextToHtml(bodyText),
     };
 
     setRunningOutreachReviewAction("save");
@@ -3101,6 +3117,11 @@ function SettingsPanel({
       ...settings,
       discovery: { ...settings.discovery, [key]: value },
     });
+  const updateProspecting = <Key extends keyof ProspectingSettings>(key: Key, value: ProspectingSettings[Key]) =>
+    onSettingsChange({
+      ...settings,
+      prospecting: { ...settings.prospecting, [key]: value },
+    });
   const updateEmail = <Key extends keyof EmailSettings>(key: Key, value: EmailSettings[Key]) =>
     onSettingsChange({
       ...settings,
@@ -3168,6 +3189,7 @@ function SettingsPanel({
     }
 
     const discoveryValues = discoverySettingsToStoredValues(settings.discovery);
+    const prospectingValue = prospectingSettingsToStoredValue(settings.prospecting);
     const emailValues = emailSettingsToStoredValues(settings.email);
     setIsSaving(true);
     try {
@@ -3204,6 +3226,11 @@ function SettingsPanel({
           key: "discovery.careerPageSources",
           value: discoveryValues.careerPageSources,
           category: "discovery",
+        }),
+        saveSetting({
+          key: "prospecting.config",
+          value: prospectingValue,
+          category: "prospecting",
         }),
         saveSetting({
           key: "email.account",
@@ -3394,6 +3421,108 @@ function SettingsPanel({
               value={settings.discovery.careerPageCompany}
               onChange={(event) => updateDiscovery("careerPageCompany", event.target.value)}
             />
+          </label>
+        </div>
+      </fieldset>
+      <fieldset className="settings-section">
+        <legend>Prospecting sources</legend>
+        <div className="settings-grid">
+          {([
+            ["sourceInc42", "Inc42"],
+            ["sourceYourStory", "YourStory"],
+            ["sourceTechCrunch", "TechCrunch"],
+            ["sourceEntrackr", "Entrackr"],
+            ["sourceVcCircle", "VCCircle"],
+          ] as const).map(([key, label]) => (
+            <label className="toggle-row settings-toggle" key={key}>
+              <input
+                type="checkbox"
+                checked={settings.prospecting[key]}
+                onChange={(event) => updateProspecting(key, event.target.checked)}
+              />
+              <span>{label}</span>
+            </label>
+          ))}
+          <label>
+            Crunchbase API key
+            <input
+              type="password"
+              value={settings.prospecting.crunchbaseApiKey}
+              onChange={(event) => updateProspecting("crunchbaseApiKey", event.target.value)}
+            />
+          </label>
+          <label>
+            Tracxn API key
+            <input
+              type="password"
+              value={settings.prospecting.tracxnApiKey}
+              onChange={(event) => updateProspecting("tracxnApiKey", event.target.value)}
+            />
+          </label>
+          <label>
+            Minimum relevance
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={settings.prospecting.minRelevanceScore}
+              onChange={(event) => updateProspecting("minRelevanceScore", Number(event.target.value))}
+            />
+          </label>
+        </div>
+      </fieldset>
+      <fieldset className="settings-section">
+        <legend>Prospecting enrichment</legend>
+        <div className="settings-grid">
+          <label>
+            Hunter API key
+            <input
+              type="password"
+              value={settings.prospecting.hunterApiKey}
+              onChange={(event) => updateProspecting("hunterApiKey", event.target.value)}
+            />
+          </label>
+          <label>
+            Apollo API key
+            <input
+              type="password"
+              value={settings.prospecting.apolloApiKey}
+              onChange={(event) => updateProspecting("apolloApiKey", event.target.value)}
+            />
+          </label>
+          <label>
+            Snov token
+            <input
+              type="password"
+              value={settings.prospecting.snovApiKey}
+              onChange={(event) => updateProspecting("snovApiKey", event.target.value)}
+            />
+          </label>
+          <label>
+            Contacts per company
+            <input
+              type="number"
+              min="1"
+              max="10"
+              value={settings.prospecting.maxContacts}
+              onChange={(event) => updateProspecting("maxContacts", Number(event.target.value))}
+            />
+          </label>
+          <label className="toggle-row settings-toggle">
+            <input
+              type="checkbox"
+              checked={settings.prospecting.includeWebsite}
+              onChange={(event) => updateProspecting("includeWebsite", event.target.checked)}
+            />
+            <span>Website enrichment</span>
+          </label>
+          <label className="toggle-row settings-toggle">
+            <input
+              type="checkbox"
+              checked={settings.prospecting.includeLinkedIn}
+              onChange={(event) => updateProspecting("includeLinkedIn", event.target.checked)}
+            />
+            <span>LinkedIn enrichment</span>
           </label>
         </div>
       </fieldset>
@@ -3668,6 +3797,10 @@ function prospectingDashboardFilters(filters: ProspectingFilterState): Prospecti
     status: filters.status === "all" ? undefined : filters.status,
     minScore: filters.minScore,
   };
+}
+
+function emailAddressFromContactLabel(value: string) {
+  return value.match(/<([^<>@\s]+@[^<>@\s]+\.[^<>@\s]+)>/)?.[1] ?? null;
 }
 
 function bodyTextToHtml(value: string) {

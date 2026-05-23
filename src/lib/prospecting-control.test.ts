@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  bodyTextToOutreachHtml,
   buildFindMoreProspectContactsDraft,
   buildManualProspectingCompanyDraft,
   buildProspectingOutreachDraft,
@@ -116,7 +117,7 @@ describe("prospecting control", () => {
         contact_id: "setu-priya",
         sequence_step: 1,
         subject: "Congrats on Series A - $30M",
-        body_html: "<p>Hi Priya,</p><p>Saw Setu&#39;s Series A - $30M funding. Strong fit for API and platform roles.</p><p>Your work around TypeScript, Rust lines up with my background. Would you be open to a quick conversation?</p><p style=\"font-size:12px;color:#5f6975\">If this is not relevant, you can <a href=\"careercaveman://unsubscribe?token=optout%3Apriya%40setu.co%3Aunsubscribe_link\">unsubscribe</a>.</p>",
+        body_html: "<p>Hi Priya,</p><p>Saw Setu&#39;s Series A - $30M funding. Strong fit for API and platform roles.</p><p>Your work around TypeScript, Rust lines up with my background. Would you be open to a quick conversation?</p><p style=\"font-size:12px;color:#5f6975\">If this is not relevant, you can <a href=\"http://127.0.0.1:17654/unsubscribe?token=cHJpeWFAc2V0dS5jbw\">unsubscribe</a>.</p>",
         status: "pending",
         scheduled_at: "2026-05-23T04:30:00.000Z",
         sent_at: null,
@@ -125,6 +126,15 @@ describe("prospecting control", () => {
       contactLabel: "Priya Recruiter <priya@setu.co>",
     });
     expect(buildProspectingOutreachDraft({ ...companyDetail, contacts: [] }, "2026-05-23T04:30:00.000Z")).toBeNull();
+  });
+
+  it("preserves a linked unsubscribe footer when edited review text is saved", () => {
+    expect(
+      bodyTextToOutreachHtml(
+        "Hi Priya,\n\nSharing a shorter note.\n\nIf this is not relevant, you can unsubscribe.",
+        "Priya@Setu.CO",
+      ),
+    ).toBe("<p>Hi Priya,</p><p>Sharing a shorter note.</p><p style=\"font-size:12px;color:#5f6975\">If this is not relevant, you can <a href=\"http://127.0.0.1:17654/unsubscribe?token=cHJpeWFAc2V0dS5jbw\">unsubscribe</a>.</p>");
   });
 
   it("builds an enriched manual prospect from entered company and contact details", () => {

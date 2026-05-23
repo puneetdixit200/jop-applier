@@ -100,5 +100,39 @@ fn replaces_known_setting_secrets_with_keyring_references() {
         Some("imap-secret".to_string()),
     );
 
+    let protected_prospecting = protect_setting_secrets(UpsertSetting {
+        key: "prospecting.config".to_string(),
+        category: Some("prospecting".to_string()),
+        value: SettingValue::Object(json!({
+            "sources": {
+                "crunchbaseApiKey": "cb-secret"
+            },
+            "enrichment": {
+                "hunterApiKey": "hunter-secret"
+            }
+        })),
+    })
+    .expect("protect prospecting setting secrets");
+
+    let SettingValue::Object(prospecting_value) = protected_prospecting.value else {
+        panic!("expected prospecting object setting");
+    };
+    assert_eq!(
+        prospecting_value["sources"]["crunchbaseApiKey"]["secretRef"],
+        json!("prospecting.crunchbase.apiKey")
+    );
+    assert_eq!(
+        prospecting_value["enrichment"]["hunterApiKey"]["secretRef"],
+        json!("prospecting.hunter.apiKey")
+    );
+    assert_eq!(
+        get_secret("prospecting.crunchbase.apiKey").expect("read crunchbase secret"),
+        Some("cb-secret".to_string()),
+    );
+    assert_eq!(
+        get_secret("prospecting.hunter.apiKey").expect("read hunter secret"),
+        Some("hunter-secret".to_string()),
+    );
+
     keyring_core::unset_default_store();
 }

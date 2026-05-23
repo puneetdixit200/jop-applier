@@ -1,14 +1,18 @@
 use careercaveman_lib::{
     commands::sidecar::run_sidecar_workflow_and_persist_jobs_with_command,
     db::{
-        queries::{list_funded_companies, list_prospect_contacts},
+        models::{SettingValue, UpsertSetting, UpsertUserProfile},
+        queries::{list_funded_companies, list_prospect_contacts, upsert_setting, upsert_user_profile},
         schema::initialize_schema,
     },
     sidecar::SidecarCommand,
 };
 use rusqlite::Connection;
 use serde_json::json;
-use std::path::PathBuf;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 #[test]
 fn persists_prospecting_scan_companies_and_contacts_into_sqlite() {
@@ -43,9 +47,96 @@ esac"#,
     assert_eq!(contacts[0].role, "hr_manager");
 }
 
+#[test]
+fn sends_prospecting_source_and_enrichment_settings_to_sidecar() {
+    let connection = Connection::open_in_memory().expect("open in-memory database");
+    initialize_schema(&connection).expect("initialize schema");
+    upsert_user_profile(
+        &connection,
+        UpsertUserProfile {
+            full_name: "Asha Rao".to_string(),
+            headline: "Frontend Engineer".to_string(),
+            email: None,
+            phone: None,
+            location: Some("India".to_string()),
+            portfolio_url: None,
+            linkedin_url: None,
+            github_url: None,
+            summary: Some("Builds React apps".to_string()),
+            skills: vec!["React".to_string(), "TypeScript".to_string()],
+            target_roles: vec!["Frontend Engineer".to_string()],
+            preferences: json!({}),
+        },
+    )
+    .expect("save profile");
+    upsert_setting(
+        &connection,
+        UpsertSetting {
+            key: "prospecting.config".to_string(),
+            category: Some("prospecting".to_string()),
+            value: SettingValue::Object(json!({
+                "minRelevanceScore": 72,
+                "sources": {
+                    "inc42": true,
+                    "yourstory": false,
+                    "techcrunch": true,
+                    "crunchbaseApiKey": "cb-key"
+                },
+                "enrichment": {
+                    "hunterApiKey": "hunter-key",
+                    "includeWebsite": true,
+                    "includeLinkedIn": true,
+                    "maxContacts": 4
+                }
+            })),
+        },
+    )
+    .expect("save prospecting config");
+    let request_path = std::env::temp_dir().join(format!(
+        "careercaveman-prospecting-request-{}.json",
+        std::process::id()
+    ));
+    let command = capture_request_sidecar(&request_path);
+
+    run_sidecar_workflow_and_persist_jobs_with_command(&command, &connection, "prospecting-scan")
+        .expect("run prospecting scan workflow");
+
+    let request: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&request_path).expect("read captured request"))
+            .expect("captured request is JSON");
+    let _ = fs::remove_file(&request_path);
+    assert_eq!(
+        request["params"]["prospectingScan"]["profile"],
+        json!({
+            "targetRole": "Frontend Engineer",
+            "skills": ["React", "TypeScript"],
+            "summary": "Builds React apps"
+        }),
+    );
+    assert_eq!(request["params"]["prospectingScan"]["minRelevanceScore"], json!(72.0));
+    assert_eq!(request["params"]["prospectingScan"]["sources"]["crunchbaseApiKey"], json!("cb-key"));
+    assert_eq!(request["params"]["prospectingScan"]["enrichment"]["hunterApiKey"], json!("hunter-key"));
+    assert_eq!(request["params"]["prospectingScan"]["enrichment"]["maxContacts"], json!(4));
+}
+
 fn shell_sidecar(script: &str) -> SidecarCommand {
     SidecarCommand {
         program: PathBuf::from("/bin/sh"),
         args: vec!["-c".to_string(), script.to_string()],
+    }
+}
+
+fn capture_request_sidecar(request_path: &Path) -> SidecarCommand {
+    SidecarCommand {
+        program: PathBuf::from("/bin/sh"),
+        args: vec![
+            "-c".to_string(),
+            format!(
+                r#"read line
+printf '%s' "$line" > '{}'
+printf '{{"id":"workflow-prospecting-scan","ok":true,"result":{{"sources":0,"discovered":0,"deduped":0,"qualified":0,"stored":0,"companies":[]}}}}\n'"#,
+                request_path.display(),
+            ),
+        ],
     }
 }

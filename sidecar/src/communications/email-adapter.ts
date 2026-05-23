@@ -48,6 +48,8 @@ export type InboundEmail = {
   subject: string | null;
   body: string | null;
   receivedAt: string | null;
+  inReplyTo?: string | null;
+  references?: string[];
 };
 
 type SmtpTransportOptions = {
@@ -216,6 +218,7 @@ async function inboundEmailFromMessage(message: FetchMessageObject): Promise<Inb
   const parsed = message.source ? await simpleParser(message.source) : null;
   const receivedAt = message.envelope?.date ?? parsed?.date ?? null;
 
+  const references = parsedReferences(parsed?.references);
   return {
     id: message.envelope?.messageId ?? parsed?.messageId ?? String(message.uid),
     uid: message.uid,
@@ -223,6 +226,8 @@ async function inboundEmailFromMessage(message: FetchMessageObject): Promise<Inb
     subject: message.envelope?.subject ?? parsed?.subject ?? null,
     body: parsed?.text?.trim() || null,
     receivedAt: receivedAt ? new Date(receivedAt).toISOString() : null,
+    ...(parsed?.inReplyTo ? { inReplyTo: parsed.inReplyTo } : {}),
+    ...(references.length > 0 ? { references } : {}),
   };
 }
 
@@ -247,4 +252,14 @@ function bodyWithSignature(body: string, signature: string | null | undefined) {
   }
 
   return `${trimmedBody}\n\n-- \n${trimmedSignature}`;
+}
+
+function parsedReferences(value: string | string[] | undefined): string[] {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean);
+  }
+  if (typeof value === "string" && value.trim()) {
+    return value.split(/\s+/).filter(Boolean);
+  }
+  return [];
 }

@@ -42,6 +42,19 @@ export type StoredProspectingCompany = {
   relevance_score: number | null;
 };
 
+export type ProspectingScanContact = {
+  companyDomain: string | null;
+  companyName: string;
+  full_name: string;
+  email: string;
+  email_confidence: number;
+  email_status: string;
+  role: string;
+  linkedin_url: string | null;
+  source: string;
+  opted_out: boolean;
+};
+
 export type ProspectingScanDependencies = {
   sources: FundingSource[];
   scoreCompany: (
@@ -49,6 +62,10 @@ export type ProspectingScanDependencies = {
     profile: ProspectingProfile,
   ) => Promise<ProspectingScore>;
   saveCompanies: (companies: ProspectingCompanyUpsert[]) => Promise<StoredProspectingCompany[]>;
+  enrichCompany?: (
+    company: StoredProspectingCompany,
+    upsert: ProspectingCompanyUpsert,
+  ) => Promise<ProspectingScanContact[]>;
 };
 
 export type ProspectingScanOptions = {
@@ -64,6 +81,8 @@ export type ProspectingScanResult = {
   qualified: number;
   stored: number;
   companies: ProspectingCompanyUpsert[];
+  contacts?: ProspectingScanContact[];
+  enriched?: number;
 };
 
 export async function runProspectingScan(
@@ -85,6 +104,8 @@ export async function runProspectingScan(
   }
 
   const stored = await dependencies.saveCompanies(upserts);
+  const contacts: ProspectingScanContact[] = [];
+  let enriched = 0;
   for (const [index, company] of stored.entries()) {
     const source = deduped[index];
     options.eventBus?.emit("prospecting.company_discovered", {
@@ -95,9 +116,16 @@ export async function runProspectingScan(
       source: source?.source ?? "unknown",
       discoveredAt: source?.fundingDate ?? new Date(),
     });
+    if (dependencies.enrichCompany) {
+      const companyContacts = await dependencies.enrichCompany(company, upserts[index]);
+      if (companyContacts.length > 0) {
+        enriched += 1;
+        contacts.push(...companyContacts);
+      }
+    }
   }
 
-  return {
+  const scanResult: ProspectingScanResult = {
     sources: dependencies.sources.length,
     discovered: events.length,
     deduped: deduped.length,
@@ -105,6 +133,11 @@ export async function runProspectingScan(
     stored: stored.length,
     companies: upserts,
   };
+  if (contacts.length > 0) {
+    scanResult.contacts = contacts;
+    scanResult.enriched = enriched;
+  }
+  return scanResult;
 }
 
 function companyUpsert(

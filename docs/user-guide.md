@@ -30,9 +30,11 @@ Optional email notifications use SMTP settings from environment variables such a
 
 Prospecting adds a proactive channel alongside posted-job discovery. The sidecar can scan funded-company sources such as Inc42, YourStory, TechCrunch, Crunchbase, and Tracxn, normalize duplicate funding events, score companies against your profile, enrich contacts, and prepare outreach campaigns.
 
+Settings includes prospecting source toggles, optional Crunchbase/Tracxn keys, Hunter/Apollo/Snov enrichment keys, website and LinkedIn enrichment toggles, minimum relevance score, and contacts-per-company limits. Secrets entered there are stored through the OS keychain-backed settings path rather than plain JSON.
+
 The Prospecting screen shows funded companies, relevance score, funding round, contact count, and review status. The Outreach screen shows pending review emails and campaign analytics for sent, opened, replied, and bounced messages.
 
-Outreach is review-first by default. Every generated message must pass content checks, include an unsubscribe link, respect the daily hard cap, avoid recent re-contact, stay inside business hours, and skip opted-out recipients.
+Outreach is review-first by default. Every generated message must pass content checks, include a one-click local unsubscribe link, respect the daily hard cap, avoid recent re-contact, stay inside business hours, and skip opted-out recipients. The app listens on `127.0.0.1:17654` while running so unsubscribe clicks can mark the contact opted out and cancel pending/queued outreach.
 
 ## Connectors
 
@@ -45,6 +47,8 @@ User-installable plugin manifests live under `plugins/`. The example connector s
 ## Build And Release
 
 Use the standard development commands from the README during local work. Tauri bundle targets are configured for macOS DMG, Linux AppImage/deb, and Windows MSI/NSIS installers, with updater artifacts enabled.
+
+For platform-specific local packaging, use `npm run build:mac` on macOS for a DMG and `npm run build:linux` on Linux for AppImage/deb artifacts. Both scripts build the sidecar and frontend first.
 
 Updater signing uses the Tauri private key stored outside the repo. The public key is committed in `src-tauri/tauri.conf.json`; do not commit the private key.
 

@@ -141,6 +141,16 @@ pub fn protect_setting_secrets(setting: UpsertSetting) -> Result<UpsertSetting, 
                 ("airtableApiKey", "export.airtable.apiKey"),
             ],
         ),
+        "prospecting.config" => protect_object_setting_paths(
+            setting,
+            &[
+                (&["sources", "crunchbaseApiKey"], "prospecting.crunchbase.apiKey"),
+                (&["sources", "tracxnApiKey"], "prospecting.tracxn.apiKey"),
+                (&["enrichment", "hunterApiKey"], "prospecting.hunter.apiKey"),
+                (&["enrichment", "apolloApiKey"], "prospecting.apollo.apiKey"),
+                (&["enrichment", "snovApiKey"], "prospecting.snov.apiKey"),
+            ],
+        ),
         _ => Ok(setting),
     }
 }
@@ -180,6 +190,62 @@ fn protect_object_setting_fields(
 
     setting.value = SettingValue::Object(Value::Object(object));
     Ok(setting)
+}
+
+fn protect_object_setting_paths(
+    mut setting: UpsertSetting,
+    fields: &[(&[&str], &str)],
+) -> Result<UpsertSetting, String> {
+    let value = std::mem::replace(&mut setting.value, SettingValue::Null);
+    let SettingValue::Object(Value::Object(mut object)) = value else {
+        setting.value = value;
+        return Ok(setting);
+    };
+
+    for (path, secret_key) in fields {
+        protect_nested_secret(&mut object, path, secret_key)?;
+    }
+
+    setting.value = SettingValue::Object(Value::Object(object));
+    Ok(setting)
+}
+
+fn protect_nested_secret(
+    object: &mut serde_json::Map<String, Value>,
+    path: &[&str],
+    secret_key: &str,
+) -> Result<(), String> {
+    let Some((field, parents)) = path.split_last() else {
+        return Ok(());
+    };
+    let mut current = object;
+    for parent in parents {
+        let Some(Value::Object(next)) = current.get_mut(*parent) else {
+            return Ok(());
+        };
+        current = next;
+    }
+    let Some(value) = current.get(*field) else {
+        return Ok(());
+    };
+    if secure_store::secret_ref_key(value).is_some() {
+        return Ok(());
+    }
+    let Some(secret) = value
+        .as_str()
+        .map(str::trim)
+        .filter(|secret| !secret.is_empty())
+    else {
+        return Ok(());
+    };
+
+    let reference =
+        secure_store::save_secret(secret_key, secret).map_err(|error| error.to_string())?;
+    current.insert(
+        (*field).to_string(),
+        secure_store::secret_ref_value(&reference),
+    );
+    Ok(())
 }
 
 #[tauri::command]

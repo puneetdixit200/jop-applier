@@ -1845,6 +1845,20 @@ describe("sidecar runtime", () => {
       recorded: 0,
       failed: 0,
       skipped: 1,
+      responses: [
+        {
+          id: "<reply-1@northstar.example>",
+          applicationId: null,
+          jobId: null,
+          companyName: null,
+          contactId: null,
+          from: "Mira <mira@northstar.example>",
+          subject: "Interview availability",
+          body: "Can you share availability this week?",
+          receivedAt: "2026-05-28T09:40:00.000Z",
+          responseType: "interview",
+        },
+      ],
     });
     expect(readerConfigs).toEqual([
       {

@@ -20,6 +20,8 @@ This repository starts with the Phase 1 foundation from `/Users/deepakkudi23/Doc
 npm install
 npm run test
 npm run build
+npm run build:mac
+npm run build:linux
 npm run dev
 ```
 
