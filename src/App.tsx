@@ -44,6 +44,8 @@ import {
   runSidecarWorkflow,
   saveApplication,
   saveContact,
+  saveOutreachCampaign,
+  saveOutreachEmail,
   saveScheduledTask,
   saveSetting,
   saveUserProfile,
@@ -96,6 +98,11 @@ import {
   type DiscoveryControlDependencies,
   type JobSummary,
 } from "./lib/discovery-control";
+import {
+  buildProspectingOutreachDraft,
+  runProspectingScanControl,
+  type ProspectingControlDependencies,
+} from "./lib/prospecting-control";
 import {
   defaultDiscoverySettings,
   discoverySettingsFromStoredValues,
@@ -481,6 +488,12 @@ const discoveryDependencies: DiscoveryControlDependencies = {
   listJobs,
 };
 
+const prospectingDependencies: ProspectingControlDependencies = {
+  ...runtimeDependencies,
+  listFundedCompanies,
+  listProspectContacts,
+};
+
 const scheduleDependencies: ScheduleControlDependencies = {
   isDesktopRuntime,
   runDueScheduledTasks,
@@ -548,6 +561,8 @@ export function App() {
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeControlStatus>(initialRuntimeStatus);
   const [workflowStatus, setWorkflowStatus] = useState("Idle");
   const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
+  const [isRunningProspectingScan, setIsRunningProspectingScan] = useState(false);
+  const [isStartingProspectingOutreach, setIsStartingProspectingOutreach] = useState(false);
   const [isRunningSchedules, setIsRunningSchedules] = useState(false);
   const [runningReviewActionId, setRunningReviewActionId] = useState<string | null>(null);
   const [runningOutreachReviewAction, setRunningOutreachReviewAction] =
@@ -882,6 +897,26 @@ export function App() {
     }
   }
 
+  async function startProspectingScan() {
+    setIsRunningProspectingScan(true);
+    setWorkflowStatus("prospecting-scan running");
+    try {
+      const result = await runProspectingScanControl(prospectingDependencies);
+      setWorkflowStatus(result.workflowStatus);
+      if (result.runtimeStatus) {
+        setRuntimeStatus(result.runtimeStatus);
+      }
+      if (result.companies) {
+        setPersistedFundedCompanies(result.companies);
+      }
+      if (result.contacts) {
+        setPersistedProspectContacts(result.contacts);
+      }
+    } finally {
+      setIsRunningProspectingScan(false);
+    }
+  }
+
   async function dismissOnboarding() {
     setIsOnboardingDismissed(true);
     if (!isDesktopRuntime()) {
@@ -1074,6 +1109,49 @@ export function App() {
     }
   }
 
+  async function startSelectedCompanyOutreach() {
+    const scheduledAt = new Date().toISOString();
+    const draft = buildProspectingOutreachDraft(prospectingCompanyDetail, scheduledAt);
+    if (!draft) {
+      setWorkflowStatus("prospecting contact required before outreach");
+      return;
+    }
+
+    setIsStartingProspectingOutreach(true);
+    try {
+      if (!isDesktopRuntime() || persistedFundedCompanies.length === 0) {
+        const previewEmail: OutreachEmail = {
+          ...draft.email,
+          id: `preview-outreach-${Date.now()}`,
+          campaign_id: `preview-campaign-${Date.now()}`,
+          created_at: scheduledAt,
+        };
+        setPreviewOutreachEmailRecords((current) => [previewEmail, ...current]);
+        setSelectedOutreachEmailId(previewEmail.id);
+        setRoute("outreach");
+        setWorkflowStatus(`outreach draft created for ${draft.contactLabel}`);
+        setStorageStatus("Browser preview");
+        return;
+      }
+
+      const campaign = await saveOutreachCampaign(draft.campaign);
+      const email = await saveOutreachEmail({
+        ...draft.email,
+        campaign_id: campaign.id,
+      });
+      setPersistedOutreachEmails((current) => [email, ...current]);
+      setSelectedOutreachEmailId(email.id);
+      setRoute("outreach");
+      setWorkflowStatus(`outreach draft created for ${draft.contactLabel}`);
+      setStorageStatus("SQLite ready");
+    } catch {
+      setWorkflowStatus("outreach draft creation failed");
+      setStorageStatus("Storage unavailable");
+    } finally {
+      setIsStartingProspectingOutreach(false);
+    }
+  }
+
   async function updateOutreachEmailReviewRecord(updatedEmail: OutreachEmail) {
     if (!isDesktopRuntime() || persistedOutreachEmails.length === 0) {
       setPreviewOutreachEmailRecords((current) =>
@@ -1253,6 +1331,15 @@ export function App() {
             detail={prospectingCompanyDetail}
             selectedCompanyId={selectedProspectingCompanyId}
             onSelectCompany={setSelectedProspectingCompanyId}
+            onRunScan={() => {
+              void startProspectingScan();
+            }}
+            onOpenSettings={() => setRoute("settings")}
+            onStartOutreach={() => {
+              void startSelectedCompanyOutreach();
+            }}
+            isRunningScan={isRunningProspectingScan}
+            isStartingOutreach={isStartingProspectingOutreach}
           />
         )}
         {route === "outreach" && (
@@ -1705,12 +1792,22 @@ function Prospecting({
   detail,
   selectedCompanyId,
   onSelectCompany,
+  onRunScan,
+  onOpenSettings,
+  onStartOutreach,
+  isRunningScan,
+  isStartingOutreach,
 }: {
   dashboard: ProspectingDashboard;
   companies: FundedCompany[];
   detail: ProspectingCompanyDetail | null;
   selectedCompanyId: string | null;
   onSelectCompany: (companyId: string) => void;
+  onRunScan: () => void;
+  onOpenSettings: () => void;
+  onStartOutreach: () => void;
+  isRunningScan: boolean;
+  isStartingOutreach: boolean;
 }) {
   return (
     <div className="dashboard-grid">
@@ -1734,7 +1831,16 @@ function Prospecting({
             <p className="eyebrow">ProspectCave</p>
             <h3>Recently funded companies</h3>
           </div>
-          <Bot size={19} aria-hidden="true" />
+          <div className="panel-heading-actions">
+            <button className="secondary-action" type="button" onClick={onOpenSettings}>
+              <Settings size={17} aria-hidden="true" />
+              Settings
+            </button>
+            <button className="primary-action" type="button" onClick={onRunScan} disabled={isRunningScan}>
+              <Bot size={17} aria-hidden="true" />
+              {isRunningScan ? "Scanning" : "Run Scan"}
+            </button>
+          </div>
         </div>
         <div className="table-list">
           {dashboard.rows.map((row) => {
@@ -1767,7 +1873,15 @@ function Prospecting({
             <p className="eyebrow">Company detail</p>
             <h3>{detail?.companyName ?? "Select a company"}</h3>
           </div>
-          <ShieldCheck size={19} aria-hidden="true" />
+          <button
+            className="primary-action"
+            type="button"
+            onClick={onStartOutreach}
+            disabled={!detail || detail.contacts.length === 0 || isStartingOutreach}
+          >
+            <Send size={17} aria-hidden="true" />
+            {isStartingOutreach ? "Starting" : "Start Outreach"}
+          </button>
         </div>
         {detail ? (
           <div className="activity-stack">

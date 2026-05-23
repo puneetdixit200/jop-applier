@@ -427,6 +427,13 @@ button:disabled {
   color: #24332b;
 }
 
+.panel-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .panel h3 {
   font-size: 1.05rem;
 }
@@ -1254,6 +1261,15 @@ legend {
   .topbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .panel-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .panel-heading-actions {
+    justify-content: stretch;
   }
 
   .topbar-actions {
