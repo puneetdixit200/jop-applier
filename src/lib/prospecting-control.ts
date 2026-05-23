@@ -7,8 +7,10 @@ import {
 import type {
   FundedCompany,
   ProspectContact,
+  UpsertFundedCompany,
   UpsertOutreachCampaign,
   UpsertOutreachEmail,
+  UpsertProspectContact,
 } from "./tauri-api";
 import type { ProspectingCompanyDetail } from "./prospecting-dashboard";
 
@@ -28,6 +30,26 @@ export type ProspectingOutreachDraft = {
   campaign: UpsertOutreachCampaign;
   email: Omit<UpsertOutreachEmail, "campaign_id">;
   contactLabel: string;
+};
+
+export type ManualProspectingCompanyForm = {
+  name: string;
+  domain: string;
+  region: string;
+  fundingStage: string;
+  fundingAmount: string;
+  industry: string;
+  techStack: string;
+  sourceUrl: string;
+  contactName: string;
+  contactEmail: string;
+  contactRole: string;
+};
+
+export type ManualProspectingCompanyDraft = {
+  company: UpsertFundedCompany;
+  contact: Omit<UpsertProspectContact, "company_id"> | null;
+  displayName: string;
 };
 
 const defaultSequence = [
@@ -111,6 +133,55 @@ export function buildProspectingOutreachDraft(
   };
 }
 
+export function buildManualProspectingCompanyDraft(
+  form: ManualProspectingCompanyForm,
+  now: string,
+): ManualProspectingCompanyDraft | null {
+  const name = form.name.trim();
+  const domain = normalizeDomain(form.domain);
+  if (!name || !domain) {
+    return null;
+  }
+
+  const contactName = form.contactName.trim();
+  const contactEmail = form.contactEmail.trim().toLowerCase();
+
+  return {
+    company: {
+      name,
+      domain,
+      description: `Manually added prospect for ${name}.`,
+      industry: textOrNull(form.industry),
+      tech_stack: splitList(form.techStack),
+      funding_stage: normalizeToken(form.fundingStage),
+      funding_amount: parseFundingAmount(form.fundingAmount),
+      funding_currency: "USD",
+      funding_date: now,
+      investors: [],
+      lead_investor: null,
+      source: "manual",
+      source_url: textOrNull(form.sourceUrl),
+      region: normalizeToken(form.region) ?? "global",
+      relevance_score: 65,
+      ai_summary: "Manual prospect added for targeted enrichment and outreach.",
+      status: contactName && contactEmail ? "enriched" : "no_contacts",
+    },
+    contact: contactName && contactEmail
+      ? {
+          full_name: contactName,
+          email: contactEmail,
+          email_confidence: 0.72,
+          email_status: "unknown",
+          role: normalizeToken(form.contactRole) ?? "recruiter",
+          linkedin_url: null,
+          source: "manual",
+          opted_out: false,
+        }
+      : null,
+    displayName: name,
+  };
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -118,4 +189,44 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function normalizeDomain(value: string) {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) {
+    return "";
+  }
+
+  const candidate = trimmed.includes("://") ? trimmed : `https://${trimmed}`;
+  try {
+    return new URL(candidate).hostname.replace(/^www\./, "");
+  } catch {
+    return trimmed.split("/")[0].split(":")[0].replace(/^www\./, "");
+  }
+}
+
+function normalizeToken(value: string) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return normalized || null;
+}
+
+function parseFundingAmount(value: string) {
+  const parsed = Number(value.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function splitList(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function textOrNull(value: string) {
+  const trimmed = value.trim();
+  return trimmed || null;
 }

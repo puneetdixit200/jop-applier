@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildManualProspectingCompanyDraft,
   buildProspectingOutreachDraft,
   runProspectingScanControl,
   type ProspectingControlDependencies,
@@ -123,6 +124,76 @@ describe("prospecting control", () => {
       contactLabel: "Priya Recruiter <priya@setu.co>",
     });
     expect(buildProspectingOutreachDraft({ ...companyDetail, contacts: [] }, "2026-05-23T04:30:00.000Z")).toBeNull();
+  });
+
+  it("builds an enriched manual prospect from entered company and contact details", () => {
+    expect(
+      buildManualProspectingCompanyDraft(
+        {
+          name: "  Acme AI  ",
+          domain: "https://www.acme.ai/careers",
+          region: "India",
+          fundingStage: "Series A",
+          fundingAmount: "$12,500,000",
+          industry: "Developer tools",
+          techStack: "React, Rust, AI",
+          sourceUrl: " https://news.example/acme-funding ",
+          contactName: " Mira Patel ",
+          contactEmail: " Mira@Acme.AI ",
+          contactRole: "Talent Partner",
+        },
+        "2026-05-23T04:30:00.000Z",
+      ),
+    ).toEqual({
+      company: {
+        name: "Acme AI",
+        domain: "acme.ai",
+        description: "Manually added prospect for Acme AI.",
+        industry: "Developer tools",
+        tech_stack: ["React", "Rust", "AI"],
+        funding_stage: "series_a",
+        funding_amount: 12_500_000,
+        funding_currency: "USD",
+        funding_date: "2026-05-23T04:30:00.000Z",
+        investors: [],
+        lead_investor: null,
+        source: "manual",
+        source_url: "https://news.example/acme-funding",
+        region: "india",
+        relevance_score: 65,
+        ai_summary: "Manual prospect added for targeted enrichment and outreach.",
+        status: "enriched",
+      },
+      contact: {
+        full_name: "Mira Patel",
+        email: "mira@acme.ai",
+        email_confidence: 0.72,
+        email_status: "unknown",
+        role: "talent_partner",
+        linkedin_url: null,
+        source: "manual",
+        opted_out: false,
+      },
+      displayName: "Acme AI",
+    });
+  });
+
+  it("requires manual prospect company name and domain before saving", () => {
+    const draft = {
+      name: "",
+      domain: " ",
+      region: "India",
+      fundingStage: "",
+      fundingAmount: "",
+      industry: "",
+      techStack: "",
+      sourceUrl: "",
+      contactName: "",
+      contactEmail: "",
+      contactRole: "Recruiter",
+    };
+
+    expect(buildManualProspectingCompanyDraft(draft, "2026-05-23T04:30:00.000Z")).toBeNull();
   });
 });
 

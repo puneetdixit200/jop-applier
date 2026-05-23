@@ -44,8 +44,10 @@ import {
   runSidecarWorkflow,
   saveApplication,
   saveContact,
+  saveFundedCompany,
   saveOutreachCampaign,
   saveOutreachEmail,
+  saveProspectContact,
   saveScheduledTask,
   saveSetting,
   saveUserProfile,
@@ -99,8 +101,10 @@ import {
   type JobSummary,
 } from "./lib/discovery-control";
 import {
+  buildManualProspectingCompanyDraft,
   buildProspectingOutreachDraft,
   runProspectingScanControl,
+  type ManualProspectingCompanyForm,
   type ProspectingControlDependencies,
 } from "./lib/prospecting-control";
 import {
@@ -200,6 +204,20 @@ type ProspectingFilterState = {
   status: string;
   minScore: number;
 };
+
+const emptyManualProspectingCompanyForm = (): ManualProspectingCompanyForm => ({
+  name: "",
+  domain: "",
+  region: "India",
+  fundingStage: "Seed",
+  fundingAmount: "",
+  industry: "",
+  techStack: "",
+  sourceUrl: "",
+  contactName: "",
+  contactEmail: "",
+  contactRole: "Recruiter",
+});
 
 const routes: Array<{ id: RouteId; label: string; icon: typeof BarChart3 }> = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
@@ -553,9 +571,16 @@ export function App() {
   const [persistedContacts, setPersistedContacts] = useState<Contact[]>([]);
   const [persistedFundedCompanies, setPersistedFundedCompanies] = useState<FundedCompany[]>([]);
   const [persistedProspectContacts, setPersistedProspectContacts] = useState<ProspectContact[]>([]);
+  const [previewFundedCompanyRecords, setPreviewFundedCompanyRecords] =
+    useState<FundedCompany[]>(previewFundedCompanies);
+  const [previewProspectContactRecords, setPreviewProspectContactRecords] =
+    useState<ProspectContact[]>(previewProspectContacts);
   const [persistedOutreachEmails, setPersistedOutreachEmails] = useState<OutreachEmail[]>([]);
   const [previewOutreachEmailRecords, setPreviewOutreachEmailRecords] = useState<OutreachEmail[]>(previewOutreachEmails);
   const [contactDraft, setContactDraft] = useState<ContactEditorDraft>(() => emptyContactDraft());
+  const [manualProspectingDraft, setManualProspectingDraft] = useState<ManualProspectingCompanyForm>(
+    () => emptyManualProspectingCompanyForm(),
+  );
   const [persistedNotifications, setPersistedNotifications] = useState<AppNotification[]>([]);
   const [previewNotificationRecords, setPreviewNotificationRecords] = useState<AppNotification[]>(previewNotifications);
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
@@ -579,6 +604,8 @@ export function App() {
   const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
   const [isRunningProspectingScan, setIsRunningProspectingScan] = useState(false);
   const [isStartingProspectingOutreach, setIsStartingProspectingOutreach] = useState(false);
+  const [isManualProspectingFormOpen, setIsManualProspectingFormOpen] = useState(false);
+  const [isAddingManualProspectingCompany, setIsAddingManualProspectingCompany] = useState(false);
   const [isRunningSchedules, setIsRunningSchedules] = useState(false);
   const [runningReviewActionId, setRunningReviewActionId] = useState<string | null>(null);
   const [runningOutreachReviewAction, setRunningOutreachReviewAction] =
@@ -613,9 +640,9 @@ export function App() {
     [visibleNotifications],
   );
   const visibleFundedCompanies =
-    persistedFundedCompanies.length > 0 ? persistedFundedCompanies : previewFundedCompanies;
+    persistedFundedCompanies.length > 0 ? persistedFundedCompanies : previewFundedCompanyRecords;
   const visibleProspectContacts =
-    persistedProspectContacts.length > 0 ? persistedProspectContacts : previewProspectContacts;
+    persistedFundedCompanies.length > 0 ? persistedProspectContacts : previewProspectContactRecords;
   const visibleOutreachEmails =
     persistedOutreachEmails.length > 0 ? persistedOutreachEmails : previewOutreachEmailRecords;
   const prospectingFilterOptions = useMemo(
@@ -934,6 +961,78 @@ export function App() {
       }
     } finally {
       setIsRunningProspectingScan(false);
+    }
+  }
+
+  async function addManualProspectingCompany() {
+    const now = new Date().toISOString();
+    const draft = buildManualProspectingCompanyDraft(manualProspectingDraft, now);
+    if (!draft) {
+      setWorkflowStatus("manual prospect needs company name and domain");
+      return;
+    }
+
+    setIsAddingManualProspectingCompany(true);
+    try {
+      if (!isDesktopRuntime()) {
+        const company: FundedCompany = {
+          ...draft.company,
+          id: `preview-manual-company-${Date.now()}`,
+          created_at: now,
+          updated_at: now,
+        };
+        const contact: ProspectContact | null = draft.contact
+          ? {
+              ...draft.contact,
+              id: `preview-manual-contact-${Date.now()}`,
+              company_id: company.id,
+              created_at: now,
+            }
+          : null;
+
+        setPreviewFundedCompanyRecords((current) => [
+          company,
+          ...current.filter((item) => item.domain !== company.domain),
+        ]);
+        if (contact) {
+          setPreviewProspectContactRecords((current) => [
+            contact,
+            ...current.filter((item) => item.email !== contact.email),
+          ]);
+        }
+        setSelectedProspectingCompanyId(company.id);
+        setManualProspectingDraft(emptyManualProspectingCompanyForm());
+        setIsManualProspectingFormOpen(false);
+        setWorkflowStatus(`manual prospect added for ${draft.displayName}`);
+        setStorageStatus("Browser preview");
+        return;
+      }
+
+      const savedCompany = await saveFundedCompany(draft.company);
+      setPersistedFundedCompanies((current) => [
+        savedCompany,
+        ...current.filter((item) => item.id !== savedCompany.id),
+      ]);
+      if (draft.contact) {
+        const savedContact = await saveProspectContact({
+          ...draft.contact,
+          company_id: savedCompany.id,
+        });
+        setPersistedProspectContacts((current) => [
+          savedContact,
+          ...current.filter((item) => item.id !== savedContact.id),
+        ]);
+      }
+      setSelectedProspectingCompanyId(savedCompany.id);
+      setManualProspectingDraft(emptyManualProspectingCompanyForm());
+      setIsManualProspectingFormOpen(false);
+      setWorkflowStatus(`manual prospect added for ${draft.displayName}`);
+      setStorageStatus("SQLite ready");
+    } catch {
+      setWorkflowStatus("manual prospect save failed");
+      setStorageStatus("Storage unavailable");
+    } finally {
+      setIsAddingManualProspectingCompany(false);
     }
   }
 
@@ -1351,9 +1450,16 @@ export function App() {
             detail={prospectingCompanyDetail}
             filters={prospectingFilters}
             filterOptions={prospectingFilterOptions}
+            manualDraft={manualProspectingDraft}
             selectedCompanyId={selectedProspectingCompanyId}
+            isManualFormOpen={isManualProspectingFormOpen}
             onSelectCompany={setSelectedProspectingCompanyId}
             onFiltersChange={setProspectingFilters}
+            onManualDraftChange={setManualProspectingDraft}
+            onToggleManualForm={() => setIsManualProspectingFormOpen((current) => !current)}
+            onAddManualCompany={() => {
+              void addManualProspectingCompany();
+            }}
             onRunScan={() => {
               void startProspectingScan();
             }}
@@ -1363,6 +1469,7 @@ export function App() {
             }}
             isRunningScan={isRunningProspectingScan}
             isStartingOutreach={isStartingProspectingOutreach}
+            isAddingManualCompany={isAddingManualProspectingCompany}
           />
         )}
         {route === "outreach" && (
@@ -1815,33 +1922,50 @@ function Prospecting({
   detail,
   filters,
   filterOptions,
+  manualDraft,
   selectedCompanyId,
+  isManualFormOpen,
   onSelectCompany,
   onFiltersChange,
+  onManualDraftChange,
+  onToggleManualForm,
+  onAddManualCompany,
   onRunScan,
   onOpenSettings,
   onStartOutreach,
   isRunningScan,
   isStartingOutreach,
+  isAddingManualCompany,
 }: {
   dashboard: ProspectingDashboard;
   companies: FundedCompany[];
   detail: ProspectingCompanyDetail | null;
   filters: ProspectingFilterState;
   filterOptions: ProspectingFilterOptions;
+  manualDraft: ManualProspectingCompanyForm;
   selectedCompanyId: string | null;
+  isManualFormOpen: boolean;
   onSelectCompany: (companyId: string) => void;
   onFiltersChange: (filters: ProspectingFilterState) => void;
+  onManualDraftChange: (draft: ManualProspectingCompanyForm) => void;
+  onToggleManualForm: () => void;
+  onAddManualCompany: () => void;
   onRunScan: () => void;
   onOpenSettings: () => void;
   onStartOutreach: () => void;
   isRunningScan: boolean;
   isStartingOutreach: boolean;
+  isAddingManualCompany: boolean;
 }) {
   const updateFilter = <Key extends keyof ProspectingFilterState>(
     key: Key,
     value: ProspectingFilterState[Key],
   ) => onFiltersChange({ ...filters, [key]: value });
+  const updateManualDraft = <Key extends keyof ManualProspectingCompanyForm>(
+    key: Key,
+    value: ManualProspectingCompanyForm[Key],
+  ) => onManualDraftChange({ ...manualDraft, [key]: value });
+  const canSaveManualCompany = manualDraft.name.trim().length > 0 && manualDraft.domain.trim().length > 0;
 
   return (
     <div className="dashboard-grid">
@@ -1866,6 +1990,14 @@ function Prospecting({
             <h3>Recently funded companies</h3>
           </div>
           <div className="panel-heading-actions">
+            <button className="secondary-action" type="button" onClick={onToggleManualForm}>
+              {isManualFormOpen ? (
+                <XCircle size={17} aria-hidden="true" />
+              ) : (
+                <Plus size={17} aria-hidden="true" />
+              )}
+              {isManualFormOpen ? "Close" : "Add Company Manually"}
+            </button>
             <button className="secondary-action" type="button" onClick={onOpenSettings}>
               <Settings size={17} aria-hidden="true" />
               Settings
@@ -1919,6 +2051,131 @@ function Prospecting({
               />
             </label>
           </div>
+          {isManualFormOpen && (
+            <form
+              className="manual-prospect-form"
+              aria-label="Add company manually"
+              onSubmit={(event) => {
+                event.preventDefault();
+                onAddManualCompany();
+              }}
+            >
+              <div className="manual-prospect-grid">
+                <label>
+                  Company
+                  <input
+                    value={manualDraft.name}
+                    onChange={(event) => updateManualDraft("name", event.target.value)}
+                    required
+                  />
+                </label>
+                <label>
+                  Domain
+                  <input
+                    value={manualDraft.domain}
+                    onChange={(event) => updateManualDraft("domain", event.target.value)}
+                    required
+                  />
+                </label>
+                <label>
+                  Region
+                  <select
+                    value={manualDraft.region}
+                    onChange={(event) => updateManualDraft("region", event.target.value)}
+                  >
+                    <option value="India">India</option>
+                    <option value="Global">Global</option>
+                    <option value="US">US</option>
+                    <option value="EU">EU</option>
+                    <option value="SEA">SEA</option>
+                  </select>
+                </label>
+                <label>
+                  Stage
+                  <select
+                    value={manualDraft.fundingStage}
+                    onChange={(event) => updateManualDraft("fundingStage", event.target.value)}
+                  >
+                    <option value="Pre Seed">Pre Seed</option>
+                    <option value="Seed">Seed</option>
+                    <option value="Series A">Series A</option>
+                    <option value="Series B">Series B</option>
+                    <option value="Series C">Series C</option>
+                    <option value="Growth">Growth</option>
+                    <option value="Undisclosed">Undisclosed</option>
+                  </select>
+                </label>
+                <label>
+                  Funding Amount
+                  <input
+                    value={manualDraft.fundingAmount}
+                    onChange={(event) => updateManualDraft("fundingAmount", event.target.value)}
+                    inputMode="decimal"
+                  />
+                </label>
+                <label>
+                  Industry
+                  <input
+                    value={manualDraft.industry}
+                    onChange={(event) => updateManualDraft("industry", event.target.value)}
+                  />
+                </label>
+                <label>
+                  Tech Stack
+                  <input
+                    value={manualDraft.techStack}
+                    onChange={(event) => updateManualDraft("techStack", event.target.value)}
+                  />
+                </label>
+                <label>
+                  Source URL
+                  <input
+                    type="url"
+                    value={manualDraft.sourceUrl}
+                    onChange={(event) => updateManualDraft("sourceUrl", event.target.value)}
+                  />
+                </label>
+                <label>
+                  Contact Name
+                  <input
+                    value={manualDraft.contactName}
+                    onChange={(event) => updateManualDraft("contactName", event.target.value)}
+                  />
+                </label>
+                <label>
+                  Contact Email
+                  <input
+                    type="email"
+                    value={manualDraft.contactEmail}
+                    onChange={(event) => updateManualDraft("contactEmail", event.target.value)}
+                  />
+                </label>
+                <label>
+                  Contact Role
+                  <select
+                    value={manualDraft.contactRole}
+                    onChange={(event) => updateManualDraft("contactRole", event.target.value)}
+                  >
+                    <option value="Recruiter">Recruiter</option>
+                    <option value="Talent Partner">Talent Partner</option>
+                    <option value="HR Manager">HR Manager</option>
+                    <option value="Founder">Founder</option>
+                    <option value="CTO">CTO</option>
+                  </select>
+                </label>
+              </div>
+              <div className="form-actions">
+                <button
+                  className="primary-action"
+                  type="submit"
+                  disabled={!canSaveManualCompany || isAddingManualCompany}
+                >
+                  <Plus size={16} aria-hidden="true" />
+                  {isAddingManualCompany ? "Saving" : "Save Company"}
+                </button>
+              </div>
+            </form>
+          )}
           {dashboard.rows.map((row) => {
             const company = companies.find((item) => item.id === row.id);
             return (
