@@ -128,7 +128,7 @@ export function buildProspectingOutreachDraft(
       contact_id: contact.id,
       sequence_step: 1,
       subject: `Congrats on ${detail.fundingLabel}`,
-      body_html: body.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join(""),
+      body_html: `${body.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("")}${renderUnsubscribeFooter(contact.email)}`,
       status: "pending",
       scheduled_at: scheduledAt,
       sent_at: null,
@@ -218,6 +218,11 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function renderUnsubscribeFooter(email: string) {
+  const token = encodeURIComponent(`optout:${email.toLowerCase()}:unsubscribe_link`);
+  return `<p style="font-size:12px;color:#5f6975">If this is not relevant, you can <a href="careercaveman://unsubscribe?token=${token}">unsubscribe</a>.</p>`;
 }
 
 function normalizeDomain(value: string) {

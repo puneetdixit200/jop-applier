@@ -483,6 +483,7 @@ function htmlToPreview(value: string) {
   return value
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
+    .replace(/\s+([.,!?;:])/g, "$1")
     .trim();
 }
 
@@ -493,7 +494,7 @@ function htmlToBodyText(value: string) {
       .replace(/<\/(?:p|div|li|h[1-6])>/gi, "\n")
       .replace(/<[^>]+>/g, " ")
       .split("\n")
-      .map((line) => line.replace(/\s+/g, " ").trim())
+      .map((line) => line.replace(/\s+/g, " ").replace(/\s+([.,!?;:])/g, "$1").trim())
       .filter(Boolean)
       .join("\n\n"),
   );
