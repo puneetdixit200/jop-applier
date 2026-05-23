@@ -63,6 +63,21 @@ describe("prospecting manager", () => {
       deduped: 2,
       qualified: 1,
       stored: 2,
+      companies: [
+        expect.objectContaining({
+          name: "Setu",
+          domain: "setu.co",
+          funding_amount: 30_000_000,
+          status: "discovered",
+          relevance_score: 91,
+        }),
+        expect.objectContaining({
+          name: "Zolve",
+          domain: null,
+          status: "no_domain",
+          relevance_score: 62,
+        }),
+      ],
     });
     expect(saved).toEqual([
       expect.objectContaining({

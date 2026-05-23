@@ -3,7 +3,8 @@ use crate::{
         models::{
             Application, ApplicationFollowUpUpdate, ApplicationResponseUpdate,
             ApplicationWorkflowStateUpdate, ScheduledTask, ScheduledTaskRunUpdate, SettingValue,
-            UpsertCommunication, UpsertJob, UpsertNotification, UpsertSetting,
+            UpsertCommunication, UpsertFundedCompany, UpsertJob, UpsertNotification,
+            UpsertProspectContact, UpsertSetting,
         },
         queries,
     },
@@ -66,6 +67,9 @@ pub fn run_sidecar_workflow_and_persist_jobs_with_command(
 
     if workflow_id == "job-discovery" {
         persist_discovered_jobs(connection, &mut result)?;
+    }
+    if workflow_id == "prospecting-scan" {
+        persist_prospecting_scan(connection, &mut result)?;
     }
     if workflow_id == "email-check" {
         persist_email_responses(connection, &mut result)?;
@@ -1048,6 +1052,105 @@ fn persist_discovered_jobs(connection: &Connection, result: &mut Value) -> Resul
     Ok(())
 }
 
+fn persist_prospecting_scan(connection: &Connection, result: &mut Value) -> Result<(), String> {
+    let companies_value = result
+        .get("companies")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if companies_value.is_empty() {
+        return Ok(());
+    }
+
+    let companies: Vec<UpsertFundedCompany> =
+        serde_json::from_value(Value::Array(companies_value)).map_err(|error| error.to_string())?;
+    let mut stored = 0;
+    let mut company_ids_by_domain = HashMap::new();
+    let mut company_ids_by_name = HashMap::new();
+
+    for company in companies {
+        let saved = queries::save_funded_company(connection, company)
+            .map_err(|error| error.to_string())?;
+        if let Some(domain) = saved.domain.as_deref() {
+            company_ids_by_domain.insert(normalized_company_name(domain), saved.id.clone());
+        }
+        company_ids_by_name.insert(normalized_company_name(&saved.name), saved.id);
+        stored += 1;
+    }
+
+    let contacts_stored = persist_prospecting_contacts(
+        connection,
+        result,
+        &company_ids_by_domain,
+        &company_ids_by_name,
+    )?;
+
+    if let Some(payload) = result.as_object_mut() {
+        payload.insert("stored".to_string(), json!(stored));
+        payload.insert("contactsStored".to_string(), json!(contacts_stored));
+    }
+
+    Ok(())
+}
+
+fn persist_prospecting_contacts(
+    connection: &Connection,
+    result: &Value,
+    company_ids_by_domain: &HashMap<String, String>,
+    company_ids_by_name: &HashMap<String, String>,
+) -> Result<usize, String> {
+    let Some(contacts_value) = result.get("contacts").cloned() else {
+        return Ok(0);
+    };
+    let contacts: Vec<SidecarProspectingContact> =
+        serde_json::from_value(contacts_value).map_err(|error| error.to_string())?;
+    let mut stored = 0;
+
+    for contact in contacts {
+        let Some(company_id) =
+            prospecting_contact_company_id(&contact, company_ids_by_domain, company_ids_by_name)
+        else {
+            continue;
+        };
+        queries::save_prospect_contact(
+            connection,
+            UpsertProspectContact {
+                company_id,
+                full_name: contact.full_name,
+                email: contact.email,
+                email_confidence: contact.email_confidence,
+                email_status: contact.email_status,
+                role: contact.role,
+                linkedin_url: contact.linkedin_url,
+                source: contact.source,
+                opted_out: contact.opted_out,
+            },
+        )
+        .map_err(|error| error.to_string())?;
+        stored += 1;
+    }
+
+    Ok(stored)
+}
+
+fn prospecting_contact_company_id(
+    contact: &SidecarProspectingContact,
+    company_ids_by_domain: &HashMap<String, String>,
+    company_ids_by_name: &HashMap<String, String>,
+) -> Option<String> {
+    contact
+        .company_domain
+        .as_deref()
+        .and_then(|domain| company_ids_by_domain.get(&normalized_company_name(domain)))
+        .or_else(|| {
+            contact
+                .company_name
+                .as_deref()
+                .and_then(|name| company_ids_by_name.get(&normalized_company_name(name)))
+        })
+        .cloned()
+}
+
 fn persist_sidecar_notifications(
     connection: &Connection,
     result: &mut Value,
@@ -1353,6 +1456,23 @@ struct SidecarNotificationDelivery {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+struct SidecarProspectingContact {
+    #[serde(default, alias = "companyDomain")]
+    company_domain: Option<String>,
+    #[serde(default, alias = "companyName")]
+    company_name: Option<String>,
+    full_name: String,
+    email: String,
+    email_confidence: f64,
+    email_status: String,
+    role: String,
+    linkedin_url: Option<String>,
+    source: String,
+    #[serde(default)]
+    opted_out: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 struct SidecarEmailResponse {
     #[serde(rename = "id")]
     email_id: String,
@@ -1432,6 +1552,7 @@ fn workflow_id_for_task_type(task_type: &str) -> Option<&'static str> {
         "analytics" => Some("analytics-refresh"),
         "weekly_analytics_report" => Some("analytics-refresh"),
         "export" => Some("export-sync"),
+        "prospecting_scan" => Some("prospecting-scan"),
         "session_health" => Some("session-health"),
         "cleanup" => Some("cleanup"),
         _ => None,

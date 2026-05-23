@@ -2,7 +2,7 @@ use careercaveman_lib::{
     commands::sidecar::run_due_scheduled_tasks_with_command,
     db::{
         models::UpsertScheduledTask,
-        queries::{list_jobs, list_scheduled_tasks, save_scheduled_task},
+        queries::{list_funded_companies, list_jobs, list_scheduled_tasks, save_scheduled_task},
         schema::initialize_schema,
     },
     sidecar::SidecarCommand,
@@ -90,6 +90,47 @@ esac"#,
     assert_eq!(jobs.len(), 1);
     assert_eq!(jobs[0].source_id.as_deref(), Some("scheduled-1"));
     assert_eq!(jobs[0].title, "Scheduled Discovery Engineer");
+}
+
+#[test]
+fn runs_due_prospecting_scan_schedule_through_sidecar() {
+    let connection = Connection::open_in_memory().expect("open in-memory database");
+    initialize_schema(&connection).expect("initialize schema");
+    save_scheduled_task(
+        &connection,
+        UpsertScheduledTask {
+            name: "Funded Company Prospecting".to_string(),
+            task_type: "prospecting_scan".to_string(),
+            cron_expression: Some("0 8 * * *".to_string()),
+            is_enabled: true,
+            last_run: None,
+            next_run: Some("2026-05-29T08:00:00Z".to_string()),
+            config: json!({
+                "cadence": { "kind": "daily", "hour": 8, "minute": 0 }
+            }),
+        },
+    )
+    .expect("save prospecting scheduled task");
+    let command = shell_sidecar(
+        r#"read line
+case "$line" in
+  *'"method":"workflow.run"'*'"workflowId":"prospecting-scan"'*) printf '{"id":"workflow-prospecting-scan","ok":true,"result":{"sources":1,"discovered":1,"deduped":1,"qualified":1,"stored":0,"companies":[{"name":"Setu","domain":"setu.co","description":"API infrastructure","industry":"Fintech","tech_stack":["TypeScript"],"funding_stage":"series_a","funding_amount":30000000,"funding_currency":"USD","funding_date":"2026-05-23T02:30:00.000Z","investors":["Lightspeed"],"lead_investor":"Lightspeed","source":"inc42","source_url":"https://inc42.example/setu","region":"india","relevance_score":91,"ai_summary":"Strong API fit","status":"discovered"}]}}\n' ;;
+  *) printf '{"id":null,"ok":false,"error":{"message":"unexpected request"}}\n' ;;
+esac"#,
+    );
+
+    let result =
+        run_due_scheduled_tasks_with_command(&command, &connection, "2026-05-29T08:00:00Z")
+            .expect("run due scheduled tasks");
+
+    assert_eq!(result.scanned, 1);
+    assert_eq!(result.due, 1);
+    assert_eq!(result.completed, 1);
+    assert_eq!(result.failed, 0);
+
+    let companies = list_funded_companies(&connection).expect("list funded companies");
+    assert_eq!(companies.len(), 1);
+    assert_eq!(companies[0].domain.as_deref(), Some("setu.co"));
 }
 
 fn shell_sidecar(script: &str) -> SidecarCommand {

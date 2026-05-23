@@ -63,6 +63,7 @@ export type ProspectingScanResult = {
   deduped: number;
   qualified: number;
   stored: number;
+  companies: ProspectingCompanyUpsert[];
 };
 
 export async function runProspectingScan(
@@ -102,6 +103,7 @@ export async function runProspectingScan(
     deduped: deduped.length,
     qualified,
     stored: stored.length,
+    companies: upserts,
   };
 }
 
