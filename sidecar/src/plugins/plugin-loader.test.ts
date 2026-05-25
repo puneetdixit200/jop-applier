@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path, { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { EventBus } from "../orchestrator/event-bus.js";
 import { WorkflowEngine } from "../orchestrator/workflow-engine.js";
 import type { CareerEventMap } from "../orchestrator/events.js";
-import { loadPluginFromDirectory } from "./plugin-loader.js";
+import { isPathInsideDirectory, loadPluginFromDirectory } from "./plugin-loader.js";
 
 describe("plugin loader", () => {
   it("loads a manifest-scoped plugin module with optional SHA-256 integrity", async () => {
@@ -92,5 +92,14 @@ export function createPlugin(manifest) {
     } finally {
       await rm(pluginDir, { recursive: true, force: true });
     }
+  });
+
+  it("recognizes nested plugin files with Windows path separators", () => {
+    const rootDir = "C:\\tmp\\careercaveman-plugin";
+
+    expect(
+      isPathInsideDirectory(rootDir, "C:\\tmp\\careercaveman-plugin\\dist\\index.mjs", path.win32),
+    ).toBe(true);
+    expect(isPathInsideDirectory(rootDir, "C:\\tmp\\bad.mjs", path.win32)).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { isAbsolute, normalize, resolve } from "node:path";
+import path, { isAbsolute, normalize, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parsePluginManifest, type Plugin, type PluginManifest } from "./plugin-manager.js";
 
@@ -41,6 +41,17 @@ export async function verifyPluginIntegrity(entryPath: string, integrity: Plugin
   }
 }
 
+type PathScopeApi = Pick<typeof path, "isAbsolute" | "relative">;
+
+export function isPathInsideDirectory(
+  rootDir: string,
+  candidate: string,
+  pathApi: PathScopeApi = path,
+): boolean {
+  const relativePath = pathApi.relative(rootDir, candidate);
+  return relativePath === "" || (!relativePath.startsWith("..") && !pathApi.isAbsolute(relativePath));
+}
+
 function pluginFromModule(module: PluginModule, manifest: PluginManifest): Plugin {
   if (typeof module.createPlugin === "function") {
     return module.createPlugin(manifest);
@@ -68,7 +79,7 @@ function safePluginPath(rootDir: string, pluginPath: string): string {
   }
 
   const candidate = resolve(rootDir, normalize(pluginPath));
-  if (candidate !== rootDir && !candidate.startsWith(`${rootDir}/`)) {
+  if (!isPathInsideDirectory(rootDir, candidate)) {
     throw new Error("Plugin path escapes the plugin directory");
   }
   return candidate;

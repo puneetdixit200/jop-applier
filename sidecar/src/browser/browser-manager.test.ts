@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   BrowserManager,
@@ -28,13 +29,15 @@ describe("browser manager", () => {
         };
       },
     };
+    const sessionRoot = path.join("/tmp", "careercaveman-sessions");
+    const expectedSessionDirectory = path.join(sessionRoot, "linkedin-jobs");
     const manager = new BrowserManager(
       adapter,
       createDefaultStealthConfig({
         headless: false,
         locale: "en-IN",
         maxConcurrentPages: 2,
-        sessionRoot: "/tmp/careercaveman-sessions",
+        sessionRoot,
         timezone: "Asia/Kolkata",
         userAgent: "CareerCaveman Test Browser",
         viewport: { width: 1366, height: 768 },
@@ -46,12 +49,10 @@ describe("browser manager", () => {
 
     expect(firstSession).toBe(secondSession);
     expect(manager.activePlatforms()).toEqual(["LinkedIn Jobs"]);
-    expect(sessionDirectoryForPlatform("/tmp/careercaveman-sessions", "LinkedIn Jobs")).toBe(
-      "/tmp/careercaveman-sessions/linkedin-jobs",
-    );
+    expect(sessionDirectoryForPlatform(sessionRoot, "LinkedIn Jobs")).toBe(expectedSessionDirectory);
     expect(launches).toHaveLength(1);
     expect(launches[0]).toMatchObject({
-      userDataDir: "/tmp/careercaveman-sessions/linkedin-jobs",
+      userDataDir: expectedSessionDirectory,
       options: {
         headless: false,
         locale: "en-IN",
@@ -67,7 +68,7 @@ describe("browser manager", () => {
     await manager.closeSession("LinkedIn Jobs");
 
     expect(manager.activePlatforms()).toEqual([]);
-    expect(closedSessions).toEqual(["/tmp/careercaveman-sessions/linkedin-jobs"]);
+    expect(closedSessions).toEqual([expectedSessionDirectory]);
   });
 
   it("adapts Playwright persistent contexts behind the browser automation interface", async () => {
