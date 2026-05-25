@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path, { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { EventBus } from "../orchestrator/event-bus.js";
@@ -10,7 +9,7 @@ import { isPathInsideDirectory, loadPluginFromDirectory } from "./plugin-loader.
 
 describe("plugin loader", () => {
   it("loads a manifest-scoped plugin module with optional SHA-256 integrity", async () => {
-    const pluginDir = await mkdtemp(join(tmpdir(), "careercaveman-plugin-"));
+    const pluginDir = await createPluginTestDirectory();
 
     try {
       await writeFile(
@@ -71,7 +70,7 @@ export function createPlugin(manifest) {
   });
 
   it("rejects plugin entries that escape the plugin directory", async () => {
-    const pluginDir = await mkdtemp(join(tmpdir(), "careercaveman-plugin-"));
+    const pluginDir = await createPluginTestDirectory();
 
     try {
       await writeFile(
@@ -103,3 +102,7 @@ export function createPlugin(manifest) {
     expect(isPathInsideDirectory(rootDir, "C:\\tmp\\bad.mjs", path.win32)).toBe(false);
   });
 });
+
+async function createPluginTestDirectory(): Promise<string> {
+  return mkdtemp(join(process.cwd(), ".tmp-careercaveman-plugin-"));
+}
