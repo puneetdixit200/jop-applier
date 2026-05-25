@@ -66,6 +66,7 @@ fn converts_existing_sqlite_database_to_sqlcipher_and_back() {
             .full_name,
         "Asha Rao"
     );
+    drop(encrypted);
 
     disable_database_encryption(&mut connection, &database_path).expect("disable encryption");
 
@@ -78,6 +79,8 @@ fn converts_existing_sqlite_database_to_sqlcipher_and_back() {
             .full_name,
         "Asha Rao"
     );
+    drop(plaintext);
+    drop(connection);
 
     fs::remove_dir_all(dir).expect("remove temp database dir");
 }
@@ -95,6 +98,7 @@ fn startup_opens_new_database_encrypted_when_key_is_configured() {
     assert!(database_file_is_encrypted(&database_path).expect("read encrypted header"));
     let reopened = open_application_database(&database_path).expect("reopen encrypted database");
     assert_eq!(schema_version(&reopened).expect("read schema version"), 4);
+    drop(reopened);
 
     std::env::remove_var(DATABASE_KEY_ENV);
     fs::remove_dir_all(dir).expect("remove temp database dir");
