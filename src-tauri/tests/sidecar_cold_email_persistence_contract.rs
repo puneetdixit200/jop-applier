@@ -8,24 +8,39 @@ use careercaveman_lib::{
         },
         schema::initialize_schema,
     },
-    sidecar::SidecarCommand,
 };
 use rusqlite::Connection;
 use serde_json::json;
-use std::path::PathBuf;
+
+mod common;
 
 #[test]
 fn persists_cold_email_workflow_outreach_into_application_history() {
     let connection = Connection::open_in_memory().expect("open in-memory database");
     initialize_schema(&connection).expect("initialize schema");
     let (application_id, job_id, contact_id) = create_application_context(&connection);
-    let command = shell_sidecar(&format!(
-        r#"read line
-case "$line" in
-  *'"method":"workflow.run"'*'"workflowId":"cold-email"'*) printf '{{"id":"workflow-cold-email","ok":true,"result":{{"scanned":1,"generated":1,"sent":1,"failed":0,"skipped":0,"coldEmails":[{{"applicationId":"{application_id}","jobId":"{job_id}","companyName":"Northstar Labs","contactId":"{contact_id}","contactName":"Mira","communicationId":"sidecar-comm-1","emailId":"smtp-message-1","subject":"Northstar Labs workflow automation intro","body":"Hi Mira,\\n\\nI build local-first workflow tools.","sentAt":"2026-05-28T10:00:00.000Z"}}]}}}}\n' ;;
-  *) printf '{{"id":null,"ok":false,"error":{{"message":"unexpected request"}}}}\n' ;;
-esac"#
-    ));
+    let command = common::workflow_sidecar(
+        "cold-email",
+        json!({
+            "scanned": 1,
+            "generated": 1,
+            "sent": 1,
+            "failed": 0,
+            "skipped": 0,
+            "coldEmails": [{
+                "applicationId": application_id,
+                "jobId": job_id,
+                "companyName": "Northstar Labs",
+                "contactId": contact_id,
+                "contactName": "Mira",
+                "communicationId": "sidecar-comm-1",
+                "emailId": "smtp-message-1",
+                "subject": "Northstar Labs workflow automation intro",
+                "body": "Hi Mira,\n\nI build local-first workflow tools.",
+                "sentAt": "2026-05-28T10:00:00.000Z"
+            }]
+        }),
+    );
 
     let result =
         run_sidecar_workflow_and_persist_jobs_with_command(&command, &connection, "cold-email")
@@ -36,7 +51,10 @@ esac"#
     let communications =
         list_communications(&connection, &application_id).expect("list communications");
     assert_eq!(communications.len(), 1);
-    assert_eq!(communications[0].contact_id.as_deref(), Some(contact_id.as_str()));
+    assert_eq!(
+        communications[0].contact_id.as_deref(),
+        Some(contact_id.as_str())
+    );
     assert_eq!(communications[0].direction, "sent");
     assert_eq!(communications[0].communication_type, "cold_email");
     assert_eq!(
@@ -47,7 +65,10 @@ esac"#
         communications[0].body.as_deref(),
         Some("Hi Mira,\n\nI build local-first workflow tools.")
     );
-    assert_eq!(communications[0].email_id.as_deref(), Some("smtp-message-1"));
+    assert_eq!(
+        communications[0].email_id.as_deref(),
+        Some("smtp-message-1")
+    );
     assert_eq!(
         communications[0].sent_at.as_deref(),
         Some("2026-05-28T10:00:00.000Z")
@@ -59,7 +80,10 @@ esac"#
         events[0].description.as_deref(),
         Some("Sent cold_email communication: Northstar Labs workflow automation intro")
     );
-    assert_eq!(events[0].metadata["communication_type"], json!("cold_email"));
+    assert_eq!(
+        events[0].metadata["communication_type"],
+        json!("cold_email")
+    );
     assert_eq!(events[0].metadata["contact_id"], json!(contact_id));
 }
 
@@ -132,11 +156,4 @@ fn create_application_context(connection: &Connection) -> (String, String, Strin
     .expect("save contact");
 
     (application.id, job.id, contact.id)
-}
-
-fn shell_sidecar(script: &str) -> SidecarCommand {
-    SidecarCommand {
-        program: PathBuf::from("/bin/sh"),
-        args: vec!["-c".to_string(), script.to_string()],
-    }
 }

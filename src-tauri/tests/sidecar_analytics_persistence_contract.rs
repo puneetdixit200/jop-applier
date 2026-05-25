@@ -11,14 +11,12 @@ use careercaveman_lib::{
         },
         schema::initialize_schema,
     },
-    sidecar::SidecarCommand,
 };
 use rusqlite::Connection;
 use serde_json::json;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::Path};
+
+mod common;
 
 #[test]
 fn scheduled_analytics_refresh_sends_database_inputs_and_persists_snapshot() {
@@ -125,12 +123,9 @@ fn scheduled_analytics_refresh_sends_database_inputs_and_persists_snapshot() {
         }),
     );
 
-    let result = run_due_scheduled_tasks_with_command(
-        &command,
-        &connection,
-        "2026-05-29T00:00:00.000Z",
-    )
-    .expect("run analytics scheduled task");
+    let result =
+        run_due_scheduled_tasks_with_command(&command, &connection, "2026-05-29T00:00:00.000Z")
+            .expect("run analytics scheduled task");
 
     assert_eq!(result.scanned, 1);
     assert_eq!(result.due, 1);
@@ -182,18 +177,6 @@ fn scheduled_analytics_refresh_sends_database_inputs_and_persists_snapshot() {
 fn capture_request_sidecar_with_result(
     request_path: &Path,
     response: serde_json::Value,
-) -> SidecarCommand {
-    SidecarCommand {
-        program: PathBuf::from("/bin/sh"),
-        args: vec![
-            "-c".to_string(),
-            format!(
-                r#"read line
-printf '%s' "$line" > '{}'
-printf '%s\n' '{}'"#,
-                request_path.display(),
-                response
-            ),
-        ],
-    }
+) -> careercaveman_lib::sidecar::SidecarCommand {
+    common::capture_request_sidecar_with_response(request_path, response)
 }

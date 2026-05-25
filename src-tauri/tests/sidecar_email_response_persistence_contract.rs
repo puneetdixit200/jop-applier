@@ -8,24 +8,53 @@ use careercaveman_lib::{
         },
         schema::initialize_schema,
     },
-    sidecar::SidecarCommand,
 };
 use rusqlite::Connection;
 use serde_json::json;
-use std::path::PathBuf;
+
+mod common;
 
 #[test]
 fn persists_email_check_responses_into_application_history_and_notifications() {
     let connection = Connection::open_in_memory().expect("open in-memory database");
     initialize_schema(&connection).expect("initialize schema");
     let (application_id, job_id, contact_id) = create_application_context(&connection);
-    let command = shell_sidecar(&format!(
-        r#"read line
-case "$line" in
-  *'"method":"workflow.run"'*'"workflowId":"email-check"'*) printf '{{"id":"workflow-email-check","ok":true,"result":{{"scanned":2,"matched":1,"recorded":1,"failed":0,"skipped":1,"responses":[{{"id":"imap-1","applicationId":"{application_id}","jobId":"{job_id}","companyName":"Northstar Labs","contactId":"{contact_id}","from":"recruiter@northstar.example","subject":"Interview availability","body":"Can you share availability this week?","receivedAt":"2026-05-28T09:40:00.000Z","responseType":"interview"}},{{"id":"imap-unmatched","applicationId":null,"jobId":null,"companyName":null,"contactId":null,"from":"unknown@example.com","subject":"Hello","body":null,"receivedAt":"2026-05-28T09:41:00.000Z","responseType":"other"}}]}}}}\n' ;;
-  *) printf '{{"id":null,"ok":false,"error":{{"message":"unexpected request"}}}}\n' ;;
-esac"#
-    ));
+    let command = common::workflow_sidecar(
+        "email-check",
+        json!({
+            "scanned": 2,
+            "matched": 1,
+            "recorded": 1,
+            "failed": 0,
+            "skipped": 1,
+            "responses": [
+                {
+                    "id": "imap-1",
+                    "applicationId": application_id,
+                    "jobId": job_id,
+                    "companyName": "Northstar Labs",
+                    "contactId": contact_id,
+                    "from": "recruiter@northstar.example",
+                    "subject": "Interview availability",
+                    "body": "Can you share availability this week?",
+                    "receivedAt": "2026-05-28T09:40:00.000Z",
+                    "responseType": "interview"
+                },
+                {
+                    "id": "imap-unmatched",
+                    "applicationId": null,
+                    "jobId": null,
+                    "companyName": null,
+                    "contactId": null,
+                    "from": "unknown@example.com",
+                    "subject": "Hello",
+                    "body": null,
+                    "receivedAt": "2026-05-28T09:41:00.000Z",
+                    "responseType": "other"
+                }
+            ]
+        }),
+    );
 
     let result =
         run_sidecar_workflow_and_persist_jobs_with_command(&command, &connection, "email-check")
@@ -54,7 +83,10 @@ esac"#
     let communications =
         list_communications(&connection, &application_id).expect("list communications");
     assert_eq!(communications.len(), 1);
-    assert_eq!(communications[0].contact_id.as_deref(), Some(contact_id.as_str()));
+    assert_eq!(
+        communications[0].contact_id.as_deref(),
+        Some(contact_id.as_str())
+    );
     assert_eq!(communications[0].direction, "received");
     assert_eq!(communications[0].communication_type, "response");
     assert_eq!(
@@ -81,9 +113,18 @@ esac"#
     );
     assert_eq!(notifications[0].priority, "high");
     assert_eq!(notifications[0].channel, "in_app");
-    assert_eq!(notifications[0].metadata["applicationId"], json!(application_id));
-    assert_eq!(notifications[0].metadata["communicationId"], json!(communications[0].id));
-    assert_eq!(notifications[0].metadata["responseType"], json!("interview"));
+    assert_eq!(
+        notifications[0].metadata["applicationId"],
+        json!(application_id)
+    );
+    assert_eq!(
+        notifications[0].metadata["communicationId"],
+        json!(communications[0].id)
+    );
+    assert_eq!(
+        notifications[0].metadata["responseType"],
+        json!("interview")
+    );
 }
 
 fn create_application_context(connection: &Connection) -> (String, String, String) {
@@ -155,11 +196,4 @@ fn create_application_context(connection: &Connection) -> (String, String, Strin
     .expect("save contact");
 
     (application.id, job.id, contact.id)
-}
-
-fn shell_sidecar(script: &str) -> SidecarCommand {
-    SidecarCommand {
-        program: PathBuf::from("/bin/sh"),
-        args: vec!["-c".to_string(), script.to_string()],
-    }
 }

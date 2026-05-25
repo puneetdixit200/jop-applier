@@ -5,23 +5,21 @@ use careercaveman_lib::{
         queries::{list_application_events, upsert_application, upsert_job},
         schema::initialize_schema,
     },
-    sidecar::SidecarCommand,
 };
 use rusqlite::Connection;
-use std::path::PathBuf;
+use serde_json::json;
+
+mod common;
 
 #[test]
 fn persists_approved_sidecar_review_decisions_into_sqlite() {
     let connection = Connection::open_in_memory().expect("open in-memory database");
     initialize_schema(&connection).expect("initialize schema");
     let application = review_pending_application(&connection);
-    let command = shell_sidecar(
-        r#"read line
-case "$line" in
-  *'"method":"application.reviewDecision"'*) printf '{"id":"application-review-decision","ok":true,"result":{"status":"submitted","confirmationId":"CONF-42"}}\n' ;;
-  *) printf '{"id":null,"ok":false,"error":{"message":"unexpected request"}}\n' ;;
-esac"#,
-    );
+    let command = common::application_review_sidecar(json!({
+        "status": "submitted",
+        "confirmationId": "CONF-42"
+    }));
 
     let updated = run_application_review_decision_and_persist_with_command(
         &command,
@@ -35,7 +33,10 @@ esac"#,
 
     assert_eq!(updated.status, "submitted");
     assert_eq!(updated.confirmation_id.as_deref(), Some("CONF-42"));
-    assert_eq!(updated.submitted_at.as_deref(), Some("2026-05-28T12:30:00Z"));
+    assert_eq!(
+        updated.submitted_at.as_deref(),
+        Some("2026-05-28T12:30:00Z")
+    );
     assert_eq!(updated.error_message, None);
 
     let events =
@@ -96,11 +97,4 @@ fn review_pending_application(connection: &Connection) -> Application {
         },
     )
     .expect("save application")
-}
-
-fn shell_sidecar(script: &str) -> SidecarCommand {
-    SidecarCommand {
-        program: PathBuf::from("/bin/sh"),
-        args: vec!["-c".to_string(), script.to_string()],
-    }
 }

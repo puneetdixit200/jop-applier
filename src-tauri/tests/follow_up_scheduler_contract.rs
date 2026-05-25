@@ -12,7 +12,8 @@ use careercaveman_lib::{
 };
 use rusqlite::Connection;
 use serde_json::json;
-use std::path::PathBuf;
+
+mod common;
 
 #[test]
 fn scheduled_follow_up_check_sends_due_follow_ups_and_updates_tracker_state() {
@@ -204,8 +205,5 @@ fn create_application(
 }
 
 fn failing_sidecar() -> SidecarCommand {
-    SidecarCommand {
-        program: PathBuf::from("/bin/sh"),
-        args: vec!["-c".to_string(), "exit 99".to_string()],
-    }
+    common::failing_sidecar(99)
 }

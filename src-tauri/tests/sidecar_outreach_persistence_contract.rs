@@ -2,20 +2,19 @@ use careercaveman_lib::{
     commands::sidecar::run_sidecar_workflow_and_persist_jobs_with_command,
     db::{
         models::{
-            UpsertFundedCompany, UpsertOutreachCampaign, UpsertOutreachEmail,
-            UpsertProspectContact,
+            UpsertFundedCompany, UpsertOutreachCampaign, UpsertOutreachEmail, UpsertProspectContact,
         },
         queries::{
-            list_outreach_emails, save_funded_company, save_outreach_campaign,
-            save_outreach_email, save_prospect_contact,
+            list_outreach_emails, save_funded_company, save_outreach_campaign, save_outreach_email,
+            save_prospect_contact,
         },
         schema::initialize_schema,
     },
-    sidecar::SidecarCommand,
 };
 use rusqlite::Connection;
 use serde_json::json;
-use std::path::PathBuf;
+
+mod common;
 
 #[test]
 fn persists_outreach_send_updates_from_sidecar() {
@@ -23,13 +22,21 @@ fn persists_outreach_send_updates_from_sidecar() {
     initialize_schema(&connection).expect("initialize schema");
     let (_company_id, _contact_id, _campaign_id, email_id) =
         seed_queued_outreach(&connection, "queued");
-    let command = shell_sidecar(&format!(
-        r#"read line
-case "$line" in
-  *'"method":"workflow.run"'*'"workflowId":"outreach-send"'*) printf '{{"id":"workflow-outreach-send","ok":true,"result":{{"scanned":1,"sent":1,"skipped":0,"failed":0,"updates":[{{"id":"{email_id}","status":"sent","sentAt":"2026-05-27T05:00:00.000Z","messageId":"smtp-outreach-1"}}]}}}}\n' ;;
-  *) printf '{{"id":null,"ok":false,"error":{{"message":"unexpected request"}}}}\n' ;;
-esac"#,
-    ));
+    let command = common::workflow_sidecar(
+        "outreach-send",
+        json!({
+            "scanned": 1,
+            "sent": 1,
+            "skipped": 0,
+            "failed": 0,
+            "updates": [{
+                "id": email_id,
+                "status": "sent",
+                "sentAt": "2026-05-27T05:00:00.000Z",
+                "messageId": "smtp-outreach-1"
+            }]
+        }),
+    );
 
     let result =
         run_sidecar_workflow_and_persist_jobs_with_command(&command, &connection, "outreach-send")
@@ -49,13 +56,25 @@ fn persists_outreach_follow_up_drafts_from_sidecar() {
     initialize_schema(&connection).expect("initialize schema");
     let (_company_id, contact_id, campaign_id, _email_id) =
         seed_queued_outreach(&connection, "sent");
-    let command = shell_sidecar(&format!(
-        r#"read line
-case "$line" in
-  *'"method":"workflow.run"'*'"workflowId":"outreach-follow-up"'*) printf '{{"id":"workflow-outreach-follow-up","ok":true,"result":{{"scanned":1,"queued":1,"skipped":0,"drafts":[{{"campaign_id":"{campaign_id}","contact_id":"{contact_id}","sequence_step":2,"subject":"Re: Congrats on Series A","body_html":"<p>Following up</p><p><a href='\''careercaveman://unsubscribe?token=abc'\''>unsubscribe</a></p>","status":"pending","scheduled_at":"2026-05-27T05:00:00.000Z","sent_at":null,"message_id":null}}]}}}}\n' ;;
-  *) printf '{{"id":null,"ok":false,"error":{{"message":"unexpected request"}}}}\n' ;;
-esac"#,
-    ));
+    let command = common::workflow_sidecar(
+        "outreach-follow-up",
+        json!({
+            "scanned": 1,
+            "queued": 1,
+            "skipped": 0,
+            "drafts": [{
+                "campaign_id": campaign_id,
+                "contact_id": contact_id,
+                "sequence_step": 2,
+                "subject": "Re: Congrats on Series A",
+                "body_html": "<p>Following up</p><p><a href='careercaveman://unsubscribe?token=abc'>unsubscribe</a></p>",
+                "status": "pending",
+                "scheduled_at": "2026-05-27T05:00:00.000Z",
+                "sent_at": null,
+                "message_id": null
+            }]
+        }),
+    );
 
     let result = run_sidecar_workflow_and_persist_jobs_with_command(
         &command,
@@ -65,7 +84,8 @@ esac"#,
     .expect("run outreach follow-up workflow");
 
     assert_eq!(result["storedOutreachFollowUps"], json!(1));
-    let pending = list_outreach_emails(&connection, Some("pending")).expect("list pending outreach");
+    let pending =
+        list_outreach_emails(&connection, Some("pending")).expect("list pending outreach");
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].sequence_step, 2);
     assert_eq!(pending[0].subject, "Re: Congrats on Series A");
@@ -92,20 +112,33 @@ fn persists_outreach_replies_from_email_check_and_cancels_follow_ups() {
         },
     )
     .expect("save queued follow-up");
-    let command = shell_sidecar(&format!(
-        r#"read line
-case "$line" in
-  *'"method":"workflow.run"'*'"workflowId":"email-check"'*) printf '{{"id":"workflow-email-check","ok":true,"result":{{"scanned":1,"matched":1,"recorded":1,"failed":0,"skipped":0,"outreachReplies":[{{"emailId":"{email_id}","contactId":"{contact_id}","campaignId":"{campaign_id}","messageId":"imap-reply-1","from":"Priya <priya@setu.co>","subject":"Re: Congrats on Series A","receivedAt":"2026-05-29T10:00:00.000Z"}}]}}}}\n' ;;
-  *) printf '{{"id":null,"ok":false,"error":{{"message":"unexpected request"}}}}\n' ;;
-esac"#,
-    ));
+    let command = common::workflow_sidecar(
+        "email-check",
+        json!({
+            "scanned": 1,
+            "matched": 1,
+            "recorded": 1,
+            "failed": 0,
+            "skipped": 0,
+            "outreachReplies": [{
+                "emailId": email_id,
+                "contactId": contact_id,
+                "campaignId": campaign_id,
+                "messageId": "imap-reply-1",
+                "from": "Priya <priya@setu.co>",
+                "subject": "Re: Congrats on Series A",
+                "receivedAt": "2026-05-29T10:00:00.000Z"
+            }]
+        }),
+    );
 
     let result =
         run_sidecar_workflow_and_persist_jobs_with_command(&command, &connection, "email-check")
             .expect("run email check workflow");
 
     assert_eq!(result["storedOutreachReplies"], json!(1));
-    let replied = list_outreach_emails(&connection, Some("replied")).expect("list replied outreach");
+    let replied =
+        list_outreach_emails(&connection, Some("replied")).expect("list replied outreach");
     assert_eq!(replied.len(), 1);
     assert_eq!(replied[0].id, email_id);
     let cancelled =
@@ -190,11 +223,4 @@ fn seed_queued_outreach(connection: &Connection, status: &str) -> (String, Strin
     .expect("save outreach email");
 
     (company.id, contact.id, campaign.id, email.id)
-}
-
-fn shell_sidecar(script: &str) -> SidecarCommand {
-    SidecarCommand {
-        program: PathBuf::from("/bin/sh"),
-        args: vec!["-c".to_string(), script.to_string()],
-    }
 }

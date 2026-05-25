@@ -5,11 +5,11 @@ use careercaveman_lib::{
         queries::{list_funded_companies, list_jobs, list_scheduled_tasks, save_scheduled_task},
         schema::initialize_schema,
     },
-    sidecar::SidecarCommand,
 };
 use rusqlite::Connection;
 use serde_json::json;
-use std::path::PathBuf;
+
+mod common;
 
 #[test]
 fn runs_due_scheduled_tasks_through_sidecar_and_updates_task_state() {
@@ -51,12 +51,56 @@ fn runs_due_scheduled_tasks_through_sidecar_and_updates_task_state() {
         },
     )
     .expect("save future scheduled task");
-    let command = shell_sidecar(
-        r#"read line
-case "$line" in
-  *'"method":"workflow.run"'*'"workflowId":"job-discovery"'*) printf '{"id":"workflow-job-discovery","ok":true,"result":{"queries":1,"discovered":1,"stored":0,"jobs":[{"source_id":"scheduled-1","platform":"custom","url":"https://jobs.example/scheduled","title":"Scheduled Discovery Engineer","company_name":"Schedule Labs","location":"Remote","is_remote":true,"salary_min":null,"salary_max":null,"salary_currency":"INR","job_type":null,"experience_level":null,"description":null,"requirements":[],"raw_html":null,"match_score":77,"match_confidence":0.8,"match_reasoning":"scheduled match","matched_skills":[],"missing_skills":[],"ai_tags":["scheduled"],"should_apply":true,"ai_priority":"medium"}],"notifications":[{"type":"job.high_match_found","title":"High-match job found","body":"Schedule Labs has a 77%% match.","priority":"high","channel":"os","createdAt":"2026-05-29T08:00:00.000Z"},{"type":"job.high_match_found","title":"High-match job found","body":"Schedule Labs has a 77%% match.","priority":"high","channel":"in_app","createdAt":"2026-05-29T08:00:00.000Z"}]}}\n' ;;
-  *) printf '{"id":null,"ok":false,"error":{"message":"unexpected request"}}\n' ;;
-esac"#,
+    let command = common::workflow_sidecar(
+        "job-discovery",
+        json!({
+            "queries": 1,
+            "discovered": 1,
+            "stored": 0,
+            "jobs": [{
+                "source_id": "scheduled-1",
+                "platform": "custom",
+                "url": "https://jobs.example/scheduled",
+                "title": "Scheduled Discovery Engineer",
+                "company_name": "Schedule Labs",
+                "location": "Remote",
+                "is_remote": true,
+                "salary_min": null,
+                "salary_max": null,
+                "salary_currency": "INR",
+                "job_type": null,
+                "experience_level": null,
+                "description": null,
+                "requirements": [],
+                "raw_html": null,
+                "match_score": 77,
+                "match_confidence": 0.8,
+                "match_reasoning": "scheduled match",
+                "matched_skills": [],
+                "missing_skills": [],
+                "ai_tags": ["scheduled"],
+                "should_apply": true,
+                "ai_priority": "medium"
+            }],
+            "notifications": [
+                {
+                    "type": "job.high_match_found",
+                    "title": "High-match job found",
+                    "body": "Schedule Labs has a 77% match.",
+                    "priority": "high",
+                    "channel": "os",
+                    "createdAt": "2026-05-29T08:00:00.000Z"
+                },
+                {
+                    "type": "job.high_match_found",
+                    "title": "High-match job found",
+                    "body": "Schedule Labs has a 77% match.",
+                    "priority": "high",
+                    "channel": "in_app",
+                    "createdAt": "2026-05-29T08:00:00.000Z"
+                }
+            ]
+        }),
     );
 
     let result =
@@ -111,12 +155,34 @@ fn runs_due_prospecting_scan_schedule_through_sidecar() {
         },
     )
     .expect("save prospecting scheduled task");
-    let command = shell_sidecar(
-        r#"read line
-case "$line" in
-  *'"method":"workflow.run"'*'"workflowId":"prospecting-scan"'*) printf '{"id":"workflow-prospecting-scan","ok":true,"result":{"sources":1,"discovered":1,"deduped":1,"qualified":1,"stored":0,"companies":[{"name":"Setu","domain":"setu.co","description":"API infrastructure","industry":"Fintech","tech_stack":["TypeScript"],"funding_stage":"series_a","funding_amount":30000000,"funding_currency":"USD","funding_date":"2026-05-23T02:30:00.000Z","investors":["Lightspeed"],"lead_investor":"Lightspeed","source":"inc42","source_url":"https://inc42.example/setu","region":"india","relevance_score":91,"ai_summary":"Strong API fit","status":"discovered"}]}}\n' ;;
-  *) printf '{"id":null,"ok":false,"error":{"message":"unexpected request"}}\n' ;;
-esac"#,
+    let command = common::workflow_sidecar(
+        "prospecting-scan",
+        json!({
+            "sources": 1,
+            "discovered": 1,
+            "deduped": 1,
+            "qualified": 1,
+            "stored": 0,
+            "companies": [{
+                "name": "Setu",
+                "domain": "setu.co",
+                "description": "API infrastructure",
+                "industry": "Fintech",
+                "tech_stack": ["TypeScript"],
+                "funding_stage": "series_a",
+                "funding_amount": 30000000,
+                "funding_currency": "USD",
+                "funding_date": "2026-05-23T02:30:00.000Z",
+                "investors": ["Lightspeed"],
+                "lead_investor": "Lightspeed",
+                "source": "inc42",
+                "source_url": "https://inc42.example/setu",
+                "region": "india",
+                "relevance_score": 91,
+                "ai_summary": "Strong API fit",
+                "status": "discovered"
+            }]
+        }),
     );
 
     let result =
@@ -131,11 +197,4 @@ esac"#,
     let companies = list_funded_companies(&connection).expect("list funded companies");
     assert_eq!(companies.len(), 1);
     assert_eq!(companies[0].domain.as_deref(), Some("setu.co"));
-}
-
-fn shell_sidecar(script: &str) -> SidecarCommand {
-    SidecarCommand {
-        program: PathBuf::from("/bin/sh"),
-        args: vec!["-c".to_string(), script.to_string()],
-    }
 }

@@ -5,25 +5,49 @@ use careercaveman_lib::{
         queries::{list_jobs, upsert_setting},
         schema::initialize_schema,
     },
-    sidecar::SidecarCommand,
 };
 use rusqlite::Connection;
 use serde_json::json;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::Path};
+
+mod common;
 
 #[test]
 fn persists_jobs_returned_by_sidecar_discovery_into_sqlite() {
     let connection = Connection::open_in_memory().expect("open in-memory database");
     initialize_schema(&connection).expect("initialize schema");
-    let command = shell_sidecar(
-        r#"read line
-case "$line" in
-  *'"method":"workflow.run"'*'"workflowId":"job-discovery"'*) printf '{"id":"workflow-job-discovery","ok":true,"result":{"queries":1,"discovered":1,"stored":0,"jobs":[{"source_id":"linkedin-42","platform":"linkedin","url":"https://linkedin.example/jobs/42","title":"Frontend Engineer Intern","company_name":"Northstar Labs","location":"Remote","is_remote":true,"salary_min":900000,"salary_max":1400000,"salary_currency":"INR","job_type":"internship","experience_level":"intern","description":"React and TypeScript internship","requirements":["React","TypeScript"],"raw_html":"<main>job</main>","match_score":91,"match_confidence":0.86,"match_reasoning":"Strong React and TypeScript match","matched_skills":["React","TypeScript"],"missing_skills":["GraphQL"],"ai_tags":["good-fit"],"should_apply":true,"ai_priority":"high"}]}}\n' ;;
-  *) printf '{"id":null,"ok":false,"error":{"message":"unexpected request"}}\n' ;;
-esac"#,
+    let command = common::workflow_sidecar(
+        "job-discovery",
+        json!({
+            "queries": 1,
+            "discovered": 1,
+            "stored": 0,
+            "jobs": [{
+                "source_id": "linkedin-42",
+                "platform": "linkedin",
+                "url": "https://linkedin.example/jobs/42",
+                "title": "Frontend Engineer Intern",
+                "company_name": "Northstar Labs",
+                "location": "Remote",
+                "is_remote": true,
+                "salary_min": 900000,
+                "salary_max": 1400000,
+                "salary_currency": "INR",
+                "job_type": "internship",
+                "experience_level": "intern",
+                "description": "React and TypeScript internship",
+                "requirements": ["React", "TypeScript"],
+                "raw_html": "<main>job</main>",
+                "match_score": 91,
+                "match_confidence": 0.86,
+                "match_reasoning": "Strong React and TypeScript match",
+                "matched_skills": ["React", "TypeScript"],
+                "missing_skills": ["GraphQL"],
+                "ai_tags": ["good-fit"],
+                "should_apply": true,
+                "ai_priority": "high"
+            }]
+        }),
     );
 
     let result =
@@ -181,24 +205,17 @@ fn sends_discovery_search_queries_from_settings_to_sidecar() {
     );
 }
 
-fn shell_sidecar(script: &str) -> SidecarCommand {
-    SidecarCommand {
-        program: PathBuf::from("/bin/sh"),
-        args: vec!["-c".to_string(), script.to_string()],
-    }
-}
-
-fn capture_request_sidecar(request_path: &Path) -> SidecarCommand {
-    SidecarCommand {
-        program: PathBuf::from("/bin/sh"),
-        args: vec![
-            "-c".to_string(),
-            format!(
-                r#"read line
-printf '%s' "$line" > '{}'
-printf '{{"id":"workflow-job-discovery","ok":true,"result":{{"queries":1,"discovered":0,"stored":0,"jobs":[]}}}}\n'"#,
-                request_path.display()
-            ),
-        ],
-    }
+fn capture_request_sidecar(request_path: &Path) -> careercaveman_lib::sidecar::SidecarCommand {
+    common::capture_request_sidecar_with_response(
+        request_path,
+        json!({
+            "ok": true,
+            "result": {
+                "queries": 1,
+                "discovered": 0,
+                "stored": 0,
+                "jobs": []
+            }
+        }),
+    )
 }

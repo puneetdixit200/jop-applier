@@ -1,19 +1,22 @@
 use careercaveman_lib::sidecar::{
     run_application_review_decision_with_command, run_sidecar_workflow_with_command,
-    sidecar_status_with_command, SidecarCommand,
+    sidecar_status_with_command,
 };
 use serde_json::json;
-use std::path::PathBuf;
+
+mod common;
 
 #[test]
 fn reads_runtime_status_from_sidecar_stdio() {
-    let command = shell_sidecar(
-        r#"read line
-case "$line" in
-  *'"method":"runtime.status"'*) printf '{"id":"runtime-status","ok":true,"result":{"status":"ready","workflows":["application-processing","job-discovery"],"provider":{"provider":"offline","model":"test-model","local":true}}}\n' ;;
-  *) printf '{"id":null,"ok":false,"error":{"message":"unexpected request"}}\n' ;;
-esac"#,
-    );
+    let command = common::runtime_status_sidecar(json!({
+        "status": "ready",
+        "workflows": ["application-processing", "job-discovery"],
+        "provider": {
+            "provider": "offline",
+            "model": "test-model",
+            "local": true
+        }
+    }));
 
     let status = sidecar_status_with_command(&command).expect("load sidecar status");
 
@@ -29,12 +32,9 @@ esac"#,
 
 #[test]
 fn runs_workflow_through_sidecar_stdio() {
-    let command = shell_sidecar(
-        r#"read line
-case "$line" in
-  *'"method":"workflow.run"'*'"workflowId":"job-discovery"'*) printf '{"id":"workflow-job-discovery","ok":true,"result":{"queries":1,"discovered":2,"stored":2}}\n' ;;
-  *) printf '{"id":null,"ok":false,"error":{"message":"unexpected request"}}\n' ;;
-esac"#,
+    let command = common::workflow_sidecar(
+        "job-discovery",
+        json!({ "queries": 1, "discovered": 2, "stored": 2 }),
     );
 
     let result =
@@ -48,13 +48,10 @@ esac"#,
 
 #[test]
 fn runs_application_review_decision_through_sidecar_stdio() {
-    let command = shell_sidecar(
-        r#"read line
-case "$line" in
-  *'"method":"application.reviewDecision"'*) printf '{"id":"application-review-decision","ok":true,"result":{"status":"submitted","confirmationId":"CONF-42"}}\n' ;;
-  *) printf '{"id":null,"ok":false,"error":{"message":"unexpected request"}}\n' ;;
-esac"#,
-    );
+    let command = common::application_review_sidecar(json!({
+        "status": "submitted",
+        "confirmationId": "CONF-42"
+    }));
 
     let result = run_application_review_decision_with_command(
         &command,
@@ -81,20 +78,10 @@ esac"#,
 
 #[test]
 fn reports_sidecar_error_response() {
-    let command = shell_sidecar(
-        r#"read line
-printf '{"id":"workflow-missing","ok":false,"error":{"message":"Unknown workflow: missing"}}\n'"#,
-    );
+    let command = common::error_sidecar("Unknown workflow: missing");
 
     let error = run_sidecar_workflow_with_command(&command, "missing")
         .expect_err("sidecar error response should fail");
 
     assert_eq!(error.to_string(), "Unknown workflow: missing");
-}
-
-fn shell_sidecar(script: &str) -> SidecarCommand {
-    SidecarCommand {
-        program: PathBuf::from("/bin/sh"),
-        args: vec!["-c".to_string(), script.to_string()],
-    }
 }

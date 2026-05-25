@@ -17,11 +17,9 @@ use careercaveman_lib::{
 };
 use rusqlite::Connection;
 use serde_json::json;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    sync::Mutex,
-};
+use std::{fs, path::Path, sync::Mutex};
+
+mod common;
 
 static SECURE_STORE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
@@ -165,8 +163,14 @@ fn resolves_keyring_email_secret_references_for_sidecar_workflows() {
         serde_json::from_str(&fs::read_to_string(&request_path).expect("read captured request"))
             .expect("captured request is JSON");
     let _ = fs::remove_file(&request_path);
-    assert_eq!(request["params"]["emailCheck"]["account"]["smtpPass"], json!("smtp-secret"));
-    assert_eq!(request["params"]["emailCheck"]["account"]["imapPass"], json!("imap-secret"));
+    assert_eq!(
+        request["params"]["emailCheck"]["account"]["smtpPass"],
+        json!("smtp-secret")
+    );
+    assert_eq!(
+        request["params"]["emailCheck"]["account"]["imapPass"],
+        json!("imap-secret")
+    );
 
     keyring_core::unset_default_store();
 }
@@ -353,12 +357,9 @@ fn sends_email_account_and_follow_up_context_to_follow_up_sidecar_and_persists_r
         }),
     );
 
-    let result = run_due_scheduled_tasks_with_command(
-        &command,
-        &connection,
-        "2026-05-28T09:00:00.000Z",
-    )
-    .expect("run configured scheduled follow-up workflow");
+    let result =
+        run_due_scheduled_tasks_with_command(&command, &connection, "2026-05-28T09:00:00.000Z")
+            .expect("run configured scheduled follow-up workflow");
 
     let request: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&request_path).expect("read captured request"))
@@ -536,17 +537,5 @@ fn capture_request_sidecar_with_result(
     request_path: &Path,
     response: serde_json::Value,
 ) -> SidecarCommand {
-    SidecarCommand {
-        program: PathBuf::from("/bin/sh"),
-        args: vec![
-            "-c".to_string(),
-            format!(
-                r#"read line
-printf '%s' "$line" > '{}'
-printf '%s\n' '{}'"#,
-                request_path.display(),
-                response
-            ),
-        ],
-    }
+    common::capture_request_sidecar_with_response(request_path, response)
 }

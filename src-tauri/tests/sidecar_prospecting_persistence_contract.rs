@@ -2,33 +2,69 @@ use careercaveman_lib::{
     commands::sidecar::run_sidecar_workflow_and_persist_jobs_with_command,
     db::{
         models::{SettingValue, UpsertSetting, UpsertUserProfile},
-        queries::{list_funded_companies, list_prospect_contacts, upsert_setting, upsert_user_profile},
+        queries::{
+            list_funded_companies, list_prospect_contacts, upsert_setting, upsert_user_profile,
+        },
         schema::initialize_schema,
     },
-    sidecar::SidecarCommand,
 };
 use rusqlite::Connection;
 use serde_json::json;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::Path};
+
+mod common;
 
 #[test]
 fn persists_prospecting_scan_companies_and_contacts_into_sqlite() {
     let connection = Connection::open_in_memory().expect("open in-memory database");
     initialize_schema(&connection).expect("initialize schema");
-    let command = shell_sidecar(
-        r#"read line
-case "$line" in
-  *'"method":"workflow.run"'*'"workflowId":"prospecting-scan"'*) printf '{"id":"workflow-prospecting-scan","ok":true,"result":{"sources":1,"discovered":1,"deduped":1,"qualified":1,"stored":0,"companies":[{"name":"Setu","domain":"setu.co","description":"API infrastructure for fintech teams","industry":"Fintech","tech_stack":["TypeScript","Rust"],"funding_stage":"series_a","funding_amount":30000000,"funding_currency":"USD","funding_date":"2026-05-23T02:30:00.000Z","investors":["Lightspeed"],"lead_investor":"Lightspeed","source":"inc42","source_url":"https://inc42.example/setu","region":"india","relevance_score":91,"ai_summary":"Strong API fit","status":"discovered"}],"contacts":[{"company_domain":"setu.co","full_name":"Priya Sharma","email":"Priya@Setu.CO","email_confidence":0.91,"email_status":"valid","role":"hr_manager","linkedin_url":"https://linkedin.example/in/priya","source":"hunter","opted_out":false}]}}\n' ;;
-  *) printf '{"id":null,"ok":false,"error":{"message":"unexpected request"}}\n' ;;
-esac"#,
+    let command = common::workflow_sidecar(
+        "prospecting-scan",
+        json!({
+            "sources": 1,
+            "discovered": 1,
+            "deduped": 1,
+            "qualified": 1,
+            "stored": 0,
+            "companies": [{
+                "name": "Setu",
+                "domain": "setu.co",
+                "description": "API infrastructure for fintech teams",
+                "industry": "Fintech",
+                "tech_stack": ["TypeScript", "Rust"],
+                "funding_stage": "series_a",
+                "funding_amount": 30000000,
+                "funding_currency": "USD",
+                "funding_date": "2026-05-23T02:30:00.000Z",
+                "investors": ["Lightspeed"],
+                "lead_investor": "Lightspeed",
+                "source": "inc42",
+                "source_url": "https://inc42.example/setu",
+                "region": "india",
+                "relevance_score": 91,
+                "ai_summary": "Strong API fit",
+                "status": "discovered"
+            }],
+            "contacts": [{
+                "company_domain": "setu.co",
+                "full_name": "Priya Sharma",
+                "email": "Priya@Setu.CO",
+                "email_confidence": 0.91,
+                "email_status": "valid",
+                "role": "hr_manager",
+                "linkedin_url": "https://linkedin.example/in/priya",
+                "source": "hunter",
+                "opted_out": false
+            }]
+        }),
     );
 
-    let result =
-        run_sidecar_workflow_and_persist_jobs_with_command(&command, &connection, "prospecting-scan")
-            .expect("run prospecting scan workflow");
+    let result = run_sidecar_workflow_and_persist_jobs_with_command(
+        &command,
+        &connection,
+        "prospecting-scan",
+    )
+    .expect("run prospecting scan workflow");
 
     assert_eq!(result["stored"], json!(1));
     assert_eq!(result["contactsStored"], json!(1));
@@ -113,30 +149,37 @@ fn sends_prospecting_source_and_enrichment_settings_to_sidecar() {
             "summary": "Builds React apps"
         }),
     );
-    assert_eq!(request["params"]["prospectingScan"]["minRelevanceScore"], json!(72.0));
-    assert_eq!(request["params"]["prospectingScan"]["sources"]["crunchbaseApiKey"], json!("cb-key"));
-    assert_eq!(request["params"]["prospectingScan"]["enrichment"]["hunterApiKey"], json!("hunter-key"));
-    assert_eq!(request["params"]["prospectingScan"]["enrichment"]["maxContacts"], json!(4));
+    assert_eq!(
+        request["params"]["prospectingScan"]["minRelevanceScore"],
+        json!(72.0)
+    );
+    assert_eq!(
+        request["params"]["prospectingScan"]["sources"]["crunchbaseApiKey"],
+        json!("cb-key")
+    );
+    assert_eq!(
+        request["params"]["prospectingScan"]["enrichment"]["hunterApiKey"],
+        json!("hunter-key")
+    );
+    assert_eq!(
+        request["params"]["prospectingScan"]["enrichment"]["maxContacts"],
+        json!(4)
+    );
 }
 
-fn shell_sidecar(script: &str) -> SidecarCommand {
-    SidecarCommand {
-        program: PathBuf::from("/bin/sh"),
-        args: vec!["-c".to_string(), script.to_string()],
-    }
-}
-
-fn capture_request_sidecar(request_path: &Path) -> SidecarCommand {
-    SidecarCommand {
-        program: PathBuf::from("/bin/sh"),
-        args: vec![
-            "-c".to_string(),
-            format!(
-                r#"read line
-printf '%s' "$line" > '{}'
-printf '{{"id":"workflow-prospecting-scan","ok":true,"result":{{"sources":0,"discovered":0,"deduped":0,"qualified":0,"stored":0,"companies":[]}}}}\n'"#,
-                request_path.display(),
-            ),
-        ],
-    }
+fn capture_request_sidecar(request_path: &Path) -> careercaveman_lib::sidecar::SidecarCommand {
+    common::capture_request_sidecar_with_response(
+        request_path,
+        json!({
+            "ok": true,
+            "result": {
+                "sources": 0,
+                "discovered": 0,
+                "deduped": 0,
+                "qualified": 0,
+                "stored": 0,
+                "companies": []
+            }
+        }),
+    )
 }
