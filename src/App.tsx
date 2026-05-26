@@ -9,6 +9,7 @@ import {
   CalendarClock,
   CheckCircle2,
   CheckCheck,
+  ExternalLink,
   FileText,
   Send,
   Play,
@@ -63,9 +64,19 @@ import {
   type Notification as AppNotification,
   type OutreachEmail,
   type ProspectContact,
+  type UpsertSetting,
   type UpsertUserProfile,
   type UserProfile,
 } from "./lib/tauri-api";
+import {
+  getBrowserJobs,
+  getBrowserSetting,
+  getBrowserUserProfile,
+  saveBrowserJobs,
+  saveBrowserSetting,
+  saveBrowserUserProfile,
+} from "./lib/browser-persistence";
+import { runBrowserDiscovery } from "./lib/browser-discovery";
 import {
   applicationEditDraft,
   applicationEditToUpsert,
@@ -177,6 +188,10 @@ import {
   type OnboardingStatus,
   type OnboardingStep,
 } from "./lib/onboarding";
+import {
+  preferencesWithProfileResume,
+  profileResumeFromPreferences,
+} from "./lib/profile-resume";
 import { useAppStore, type RouteId } from "./stores/app-store";
 
 type Profile = {
@@ -188,6 +203,10 @@ type Profile = {
   summary: string;
   skills: string;
   targetRoles: string;
+  resumeFileName: string;
+  resumePath: string;
+  resumeContent: string;
+  resumeUpdatedAt: string;
 };
 
 type AutomationSettings = {
@@ -245,6 +264,7 @@ const previewJobs: JobSummary[] = [
     company: "Northstar Labs",
     score: 91,
     source: "LinkedIn",
+    url: null,
     location: "Remote",
     priority: "high",
   },
@@ -253,6 +273,7 @@ const previewJobs: JobSummary[] = [
     company: "Helio Systems",
     score: 87,
     source: "Careers",
+    url: null,
     location: "Remote",
     priority: "high",
   },
@@ -261,6 +282,7 @@ const previewJobs: JobSummary[] = [
     company: "SignalWorks",
     score: 79,
     source: "Indeed",
+    url: null,
     location: "Bengaluru",
     priority: "medium",
   },
@@ -565,6 +587,10 @@ export function App() {
     summary: "Builds local-first desktop tools.",
     skills: "React, TypeScript, Rust, Node.js",
     targetRoles: "Frontend Engineer, AI Product Intern, Desktop App Engineer",
+    resumeFileName: "",
+    resumePath: "",
+    resumeContent: "",
+    resumeUpdatedAt: "",
   });
   const [settings, setSettings] = useState<AutomationSettings>({
     provider: "ollama",
@@ -764,7 +790,58 @@ export function App() {
 
   useEffect(() => {
     if (!isDesktopRuntime()) {
-      setStorageStatus("Browser preview");
+      const storedProfile = getBrowserUserProfile();
+      const storedProvider = getBrowserSetting("ai.provider");
+      const storedReview = getBrowserSetting("application.reviewBeforeSubmit");
+      const storedCache = getBrowserSetting("ai.cacheResponses");
+      const storedLimit = getBrowserSetting("application.maxDailyApplications");
+      const storedOnboardingDismissed = getBrowserSetting("app.onboardingDismissed");
+      const storedSearchQueries = getBrowserSetting("discovery.searchQueries");
+      const storedPortalSources = getBrowserSetting("discovery.portalSources");
+      const storedFeedSources = getBrowserSetting("discovery.feedSources");
+      const storedAtsSources = getBrowserSetting("discovery.atsSources");
+      const storedCareerPageSources = getBrowserSetting("discovery.careerPageSources");
+      const storedProspectingConfig = getBrowserSetting("prospecting.config");
+      const storedEmailAccount = getBrowserSetting("email.account");
+      const storedEmailCheck = getBrowserSetting("email.check");
+      const storedJobs = getBrowserJobs();
+
+      if (storedProfile) {
+        setProfile(profileFromRecord(storedProfile));
+      }
+      if (storedJobs.length > 0) {
+        void loadJobSummaries(() => Promise.resolve(storedJobs)).then(setPersistedJobs);
+      }
+      setSettings((current) => ({
+        ...current,
+        provider: typeof storedProvider?.value === "string" ? storedProvider.value : current.provider,
+        reviewBeforeSubmit:
+          typeof storedReview?.value === "boolean" ? storedReview.value : current.reviewBeforeSubmit,
+        cacheResponses: typeof storedCache?.value === "boolean" ? storedCache.value : current.cacheResponses,
+        maxDailyApplications:
+          typeof storedLimit?.value === "number" ? storedLimit.value : current.maxDailyApplications,
+        discovery: discoverySettingsFromStoredValues(
+          storedSearchQueries?.value,
+          storedFeedSources?.value,
+          storedAtsSources?.value,
+          storedCareerPageSources?.value,
+          storedPortalSources?.value,
+          current.discovery,
+        ),
+        prospecting: prospectingSettingsFromStoredValue(
+          storedProspectingConfig?.value,
+          current.prospecting,
+        ),
+        email: emailSettingsFromStoredValues(
+          storedEmailAccount?.value,
+          storedEmailCheck?.value,
+          current.email,
+        ),
+      }));
+      if (typeof storedOnboardingDismissed?.value === "boolean") {
+        setIsOnboardingDismissed(storedOnboardingDismissed.value);
+      }
+      setStorageStatus("Browser preview saved locally");
       return;
     }
 
@@ -948,6 +1025,29 @@ export function App() {
     setIsRunningDiscovery(true);
     setWorkflowStatus("job-discovery running");
     try {
+      if (!isDesktopRuntime()) {
+        const discoveryValues = discoverySettingsToStoredValues(settings.discovery);
+        const profileRecord = profileToRecord(profile);
+        const result = await runBrowserDiscovery({
+          ...discoveryValues,
+          profile: {
+            headline: profileRecord.headline,
+            skills: profileRecord.skills,
+          },
+        });
+        saveBrowserJobs(result.jobs);
+        setPersistedJobs(await loadJobSummaries(() => Promise.resolve(result.jobs)));
+        setWorkflowStatus(result.workflowStatus);
+        setRuntimeStatus({
+          providerLabel: result.sources.length > 0 ? result.sources.join(", ") : "Browser discovery",
+          runtimeStatus: "ready",
+          statusMessage: `${result.discovered} live jobs discovered`,
+          workflowCount: 1,
+        });
+        setStorageStatus("Browser preview saved locally");
+        return;
+      }
+
       const result = await runDiscoveryControl(discoveryDependencies);
       setWorkflowStatus(result.workflowStatus);
       if (result.runtimeStatus) {
@@ -1104,6 +1204,11 @@ export function App() {
   async function dismissOnboarding() {
     setIsOnboardingDismissed(true);
     if (!isDesktopRuntime()) {
+      saveBrowserSetting({
+        key: "app.onboardingDismissed",
+        value: true,
+        category: "app",
+      });
       return;
     }
 
@@ -1731,7 +1836,10 @@ function Dashboard({
             <article className="job-row" key={`${job.company}-${job.title}`}>
               <div>
                 <strong>{job.title}</strong>
-                <span>{job.company} · {job.source}</span>
+                <span className="job-meta">
+                  {job.company}
+                  <JobSourceLink job={job} />
+                </span>
               </div>
               <b>{job.score ?? "-"}</b>
             </article>
@@ -1977,12 +2085,34 @@ function Jobs({ jobs }: { jobs: JobSummary[] }) {
           <div className="table-row" key={`${job.source}-${job.company}-${job.title}`}>
             <span>{job.title}</span>
             <span>{job.company}</span>
-            <span>{job.location} · {job.source}</span>
+            <span className="job-source-cell">
+              <span>{job.location}</span>
+              <JobSourceLink job={job} />
+            </span>
             <strong>{job.score === null ? job.priority : `${job.score}%`}</strong>
           </div>
         ))}
       </div>
     </section>
+  );
+}
+
+function JobSourceLink({ job }: { job: JobSummary }) {
+  if (!job.url) {
+    return <span className="source-label">{job.source}</span>;
+  }
+
+  return (
+    <a
+      className="source-link"
+      href={job.url}
+      target="_blank"
+      rel="noreferrer"
+      title={`Open ${job.source} posting`}
+    >
+      <span>{job.source}</span>
+      <ExternalLink size={14} aria-hidden="true" />
+    </a>
   );
 }
 
@@ -3029,10 +3159,32 @@ function ProfileEditor({
 }) {
   const update = (field: keyof Profile, value: string) => onChange({ ...profile, [field]: value });
   const [isSaving, setIsSaving] = useState(false);
+  const [isEditingResume, setIsEditingResume] = useState(false);
+  const resumeLabel = profile.resumeFileName || profile.resumePath;
+  const resumeUpdatedLabel = profile.resumeUpdatedAt
+    ? new Date(profile.resumeUpdatedAt).toLocaleString()
+    : "";
+
+  async function selectResumeFile(fileList: FileList | null) {
+    const file = fileList?.[0];
+    if (!file) {
+      return;
+    }
+
+    const readableText = isEditableResumeUpload(file) ? await file.text().catch(() => "") : "";
+    onChange({
+      ...profile,
+      resumeFileName: file.name,
+      resumeContent: readableText || profile.resumeContent,
+      resumeUpdatedAt: new Date().toISOString(),
+    });
+    setIsEditingResume(true);
+  }
 
   async function persistProfile() {
     if (!isDesktopRuntime()) {
-      onStatusChange("Browser preview");
+      const saved = saveBrowserUserProfile(profileToRecord(profile));
+      onStatusChange(saved ? "Browser preview saved locally" : "Browser storage unavailable");
       return;
     }
 
@@ -3087,6 +3239,89 @@ function ProfileEditor({
         Target roles
         <textarea value={profile.targetRoles} onChange={(event) => update("targetRoles", event.target.value)} rows={3} />
       </label>
+      <fieldset className="settings-section profile-resume-section">
+        <legend>Resume</legend>
+        <div className="settings-grid">
+          <label>
+            Resume file
+            <input
+              type="file"
+              accept=".pdf,.doc,.docx,.txt,.md,.markdown"
+              onChange={(event) => {
+                void selectResumeFile(event.currentTarget.files);
+              }}
+            />
+          </label>
+          <label>
+            Resume path or link
+            <input
+              value={profile.resumePath}
+              onChange={(event) => update("resumePath", event.target.value)}
+              placeholder="/Users/deepak/Documents/resume.pdf"
+            />
+          </label>
+        </div>
+        <div className="resume-status-row">
+          <span>
+            {resumeLabel ? `Resume attached: ${resumeLabel}` : "No resume attached"}
+            {resumeUpdatedLabel ? ` · edited ${resumeUpdatedLabel}` : ""}
+          </span>
+          <div className="resume-action-row">
+            <button
+              className="secondary-action compact"
+              type="button"
+              disabled={!resumeLabel && !profile.resumeContent}
+              onClick={() => setIsEditingResume((current) => !current)}
+            >
+              {isEditingResume ? "Close Editor" : "Edit Resume"}
+            </button>
+            <button
+              className="secondary-action compact"
+              type="button"
+              disabled={!resumeLabel && !profile.resumeContent}
+              onClick={() => {
+                onChange({
+                  ...profile,
+                  resumeFileName: "",
+                  resumePath: "",
+                  resumeContent: "",
+                  resumeUpdatedAt: "",
+                });
+                setIsEditingResume(false);
+              }}
+            >
+              Clear Resume
+            </button>
+          </div>
+        </div>
+        {isEditingResume && (
+          <div className="resume-editor">
+            <label>
+              Resume text
+              <textarea
+                value={profile.resumeContent}
+                rows={14}
+                onChange={(event) =>
+                  onChange({
+                    ...profile,
+                    resumeContent: event.target.value,
+                    resumeUpdatedAt: new Date().toISOString(),
+                  })}
+              />
+            </label>
+            <div className="form-actions">
+              <button
+                className="primary-action"
+                type="button"
+                onClick={persistProfile}
+                disabled={isSaving}
+              >
+                {isSaving ? "Saving" : "Save Resume Edits"}
+              </button>
+            </div>
+          </div>
+        )}
+      </fieldset>
       <div className="form-actions">
         <button className="primary-action" type="button" onClick={persistProfile} disabled={isSaving}>
           {isSaving ? "Saving" : "Save Profile"}
@@ -3183,66 +3418,69 @@ function SettingsPanel({
   }
 
   async function persistSettings() {
-    if (!isDesktopRuntime()) {
-      onStatusChange("Browser preview");
-      return;
-    }
-
     const discoveryValues = discoverySettingsToStoredValues(settings.discovery);
     const prospectingValue = prospectingSettingsToStoredValue(settings.prospecting);
     const emailValues = emailSettingsToStoredValues(settings.email);
+    const settingsToPersist: UpsertSetting[] = [
+      { key: "ai.provider", value: settings.provider, category: "ai" },
+      { key: "application.reviewBeforeSubmit", value: settings.reviewBeforeSubmit, category: "application" },
+      { key: "ai.cacheResponses", value: settings.cacheResponses, category: "ai" },
+      {
+        key: "application.maxDailyApplications",
+        value: settings.maxDailyApplications,
+        category: "application",
+      },
+      {
+        key: "discovery.searchQueries",
+        value: discoveryValues.searchQueries,
+        category: "discovery",
+      },
+      {
+        key: "discovery.portalSources",
+        value: discoveryValues.portalSources,
+        category: "discovery",
+      },
+      {
+        key: "discovery.feedSources",
+        value: discoveryValues.feedSources,
+        category: "discovery",
+      },
+      {
+        key: "discovery.atsSources",
+        value: discoveryValues.atsSources,
+        category: "discovery",
+      },
+      {
+        key: "discovery.careerPageSources",
+        value: discoveryValues.careerPageSources,
+        category: "discovery",
+      },
+      {
+        key: "prospecting.config",
+        value: prospectingValue,
+        category: "prospecting",
+      },
+      {
+        key: "email.account",
+        value: emailValues.account,
+        category: "email",
+      },
+      {
+        key: "email.check",
+        value: emailValues.check,
+        category: "email",
+      },
+    ];
+
+    if (!isDesktopRuntime()) {
+      const savedAll = settingsToPersist.every((setting) => saveBrowserSetting(setting) !== null);
+      onStatusChange(savedAll ? "Browser preview saved locally" : "Browser storage unavailable");
+      return;
+    }
+
     setIsSaving(true);
     try {
-      await Promise.all([
-        saveSetting({ key: "ai.provider", value: settings.provider, category: "ai" }),
-        saveSetting({ key: "application.reviewBeforeSubmit", value: settings.reviewBeforeSubmit, category: "application" }),
-        saveSetting({ key: "ai.cacheResponses", value: settings.cacheResponses, category: "ai" }),
-        saveSetting({
-          key: "application.maxDailyApplications",
-          value: settings.maxDailyApplications,
-          category: "application",
-        }),
-        saveSetting({
-          key: "discovery.searchQueries",
-          value: discoveryValues.searchQueries,
-          category: "discovery",
-        }),
-        saveSetting({
-          key: "discovery.portalSources",
-          value: discoveryValues.portalSources,
-          category: "discovery",
-        }),
-        saveSetting({
-          key: "discovery.feedSources",
-          value: discoveryValues.feedSources,
-          category: "discovery",
-        }),
-        saveSetting({
-          key: "discovery.atsSources",
-          value: discoveryValues.atsSources,
-          category: "discovery",
-        }),
-        saveSetting({
-          key: "discovery.careerPageSources",
-          value: discoveryValues.careerPageSources,
-          category: "discovery",
-        }),
-        saveSetting({
-          key: "prospecting.config",
-          value: prospectingValue,
-          category: "prospecting",
-        }),
-        saveSetting({
-          key: "email.account",
-          value: emailValues.account,
-          category: "email",
-        }),
-        saveSetting({
-          key: "email.check",
-          value: emailValues.check,
-          category: "email",
-        }),
-      ]);
+      await Promise.all(settingsToPersist.map((setting) => saveSetting(setting)));
       onStatusChange("SQLite ready");
     } catch {
       onStatusChange("Storage unavailable");
@@ -3759,13 +3997,20 @@ function profileToRecord(profile: Profile): UpsertUserProfile {
     summary: nullableText(profile.summary),
     skills: splitList(profile.skills),
     target_roles: splitList(profile.targetRoles),
-    preferences: {
-      remotePreference: "any",
-    },
+    preferences: preferencesWithProfileResume(
+      { remotePreference: "any" },
+      {
+        fileName: profile.resumeFileName,
+        path: profile.resumePath,
+        content: profile.resumeContent,
+        updatedAt: profile.resumeUpdatedAt,
+      },
+    ),
   };
 }
 
 function profileFromRecord(profile: UserProfile): Profile {
+  const resume = profileResumeFromPreferences(profile.preferences);
   return {
     fullName: profile.full_name,
     headline: profile.headline,
@@ -3775,7 +4020,21 @@ function profileFromRecord(profile: UserProfile): Profile {
     summary: profile.summary ?? "",
     skills: profile.skills.join(", "),
     targetRoles: profile.target_roles.join(", "),
+    resumeFileName: resume.fileName,
+    resumePath: resume.path,
+    resumeContent: resume.content,
+    resumeUpdatedAt: resume.updatedAt,
   };
+}
+
+function isEditableResumeUpload(file: File) {
+  const name = file.name.toLowerCase();
+  return (
+    file.type.startsWith("text/") ||
+    name.endsWith(".txt") ||
+    name.endsWith(".md") ||
+    name.endsWith(".markdown")
+  );
 }
 
 function splitList(value: string) {

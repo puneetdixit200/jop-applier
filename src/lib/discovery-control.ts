@@ -11,6 +11,7 @@ export type JobSummary = {
   company: string;
   score: number | null;
   source: string;
+  url: string | null;
   location: string;
   priority: string;
 };
@@ -67,6 +68,7 @@ export function jobFromRecord(job: Job): JobSummary {
     company: job.company_name,
     score: job.match_score,
     source: job.platform,
+    url: job.url,
     location: job.location ?? (job.is_remote ? "Remote" : "Location unknown"),
     priority: job.ai_priority ?? "unscored",
   };

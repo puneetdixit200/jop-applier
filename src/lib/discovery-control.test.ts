@@ -70,6 +70,7 @@ describe("runDiscoveryControl", () => {
           company: "Northstar Labs",
           score: 91,
           source: "linkedin",
+          url: "https://linkedin.example/jobs/1",
           location: "Remote",
           priority: "high",
         },

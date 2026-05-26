@@ -552,6 +552,34 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.job-meta,
+.job-source-cell {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.source-label {
+  color: #68756e;
+  font-weight: 700;
+}
+
+.source-link {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  width: fit-content;
+  color: #2f6b4f;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.source-link:hover {
+  text-decoration: underline;
+}
+
 .job-row b {
   display: grid;
   width: 44px;
@@ -1184,6 +1212,37 @@ legend {
   font-weight: 700;
 }
 
+.resume-status-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  color: #4c5b53;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.resume-action-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.resume-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.resume-editor label {
+  display: grid;
+  gap: 7px;
+  color: #35423b;
+  font-weight: 700;
+}
+
 .toggle-row {
   display: flex;
   gap: 10px;
@@ -1301,6 +1360,19 @@ legend {
 
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .resume-status-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .resume-action-row {
+    justify-content: stretch;
+  }
+
+  .resume-action-row button {
+    flex: 1;
   }
 }
 
