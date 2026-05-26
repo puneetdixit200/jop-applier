@@ -1,4 +1,4 @@
-use careercaveman_lib::db::{
+use cluelyy_lib::db::{
     models::{ScheduledTaskRunUpdate, UpsertScheduledTask},
     queries::{list_scheduled_tasks, save_scheduled_task, update_scheduled_task_run},
     schema::initialize_schema,

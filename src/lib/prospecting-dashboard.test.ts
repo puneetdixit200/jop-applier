@@ -177,7 +177,7 @@ describe("prospecting dashboard helpers", () => {
         id: "pending-2",
         contact_id: "contact-1",
         subject: "Follow-up on API roles",
-        body_html: "<p>Hi Priya,</p><p>Sharing one more relevant platform project.</p><p>If this is not relevant, you can <a href=\"careercaveman://unsubscribe?token=abc\">unsubscribe</a>.</p>",
+        body_html: "<p>Hi Priya,</p><p>Sharing one more relevant platform project.</p><p>If this is not relevant, you can <a href=\"cluelyy://unsubscribe?token=abc\">unsubscribe</a>.</p>",
         scheduled_at: "2026-05-24T04:30:00.000Z",
         sequence_step: 2,
       }),

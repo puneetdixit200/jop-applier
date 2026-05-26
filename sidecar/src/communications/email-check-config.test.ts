@@ -166,7 +166,7 @@ describe("email check config", () => {
           subject: "Re: Congrats on Series A",
           body: "Open to chat next week.",
           receivedAt: "2026-05-29T10:00:00.000Z",
-          inReplyTo: "<smtp-outreach-1@careercaveman>",
+          inReplyTo: "<smtp-outreach-1@cluelyy>",
         },
       ],
     });
@@ -179,7 +179,7 @@ describe("email check config", () => {
             emails: [
               {
                 id: "outreach-email-1",
-                messageId: "smtp-outreach-1@careercaveman",
+                messageId: "smtp-outreach-1@cluelyy",
                 contactId: "contact-1",
                 campaignId: "campaign-1",
               },

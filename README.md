@@ -1,4 +1,4 @@
-# CareerCaveman
+# cluelyy
 
 Local-first desktop application for AI-assisted job and internship discovery, application tracking, and workflow orchestration.
 

@@ -1,4 +1,4 @@
-use careercaveman_lib::db::{
+use cluelyy_lib::db::{
     models::{ApplicationWorkflowStateUpdate, UpsertApplication, UpsertJob},
     queries::{
         list_application_events, list_applications, update_application_workflow_state,
@@ -150,7 +150,7 @@ fn returns_none_when_updating_missing_application_workflow_state() {
     assert_eq!(result, None);
 }
 
-fn queue_application(connection: &Connection) -> careercaveman_lib::db::models::Application {
+fn queue_application(connection: &Connection) -> cluelyy_lib::db::models::Application {
     let job = upsert_job(
         connection,
         UpsertJob {

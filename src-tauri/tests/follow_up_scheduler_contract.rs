@@ -1,4 +1,4 @@
-use careercaveman_lib::{
+use cluelyy_lib::{
     commands::sidecar::run_due_scheduled_tasks_with_command,
     db::{
         models::{UpsertApplication, UpsertJob, UpsertScheduledTask},

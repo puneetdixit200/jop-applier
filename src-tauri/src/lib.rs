@@ -25,7 +25,7 @@ pub fn run() {
                 .map_err(|error| format!("resolve app data dir: {error}"))?;
             std::fs::create_dir_all(&data_dir)
                 .map_err(|error| format!("create app data dir: {error}"))?;
-            let database_path = data_dir.join("careercaveman.db");
+            let database_path = data_dir.join("cluelyy.db");
             let connection = db::encryption::open_application_database(&database_path)
                 .map_err(|error| format!("open application database: {error}"))?;
             app.manage(AppState {

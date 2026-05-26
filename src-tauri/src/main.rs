@@ -1,4 +1,4 @@
 fn main() {
-    careercaveman_lib::run()
+    cluelyy_lib::run()
 }
 

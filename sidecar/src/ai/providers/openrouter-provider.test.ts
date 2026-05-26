@@ -36,7 +36,7 @@ describe("OpenRouterProvider", () => {
       Authorization: "Bearer test-key",
       "Content-Type": "application/json",
       "HTTP-Referer": "https://github.com/puneetdixit200/jop-applier",
-      "X-Title": "CareerCaveman",
+      "X-Title": "cluelyy",
     });
     expect(requests[0].body).toEqual({
       model: "openai/gpt-4o-mini",

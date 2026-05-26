@@ -4,7 +4,7 @@ use serde_json::{json, Map, Value};
 use std::sync::Arc;
 use thiserror::Error;
 
-const SERVICE_NAME: &str = "careercaveman";
+const SERVICE_NAME: &str = "cluelyy";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SecureSecretRef {

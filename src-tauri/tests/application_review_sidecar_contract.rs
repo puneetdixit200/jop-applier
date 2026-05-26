@@ -1,4 +1,4 @@
-use careercaveman_lib::{
+use cluelyy_lib::{
     commands::sidecar::run_application_review_decision_and_persist_with_command,
     db::{
         models::{Application, UpsertApplication, UpsertJob},

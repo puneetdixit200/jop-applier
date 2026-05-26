@@ -1,4 +1,4 @@
-use careercaveman_lib::{
+use cluelyy_lib::{
     commands::sidecar::{
         run_due_scheduled_tasks_with_command, run_sidecar_workflow_and_persist_jobs_with_command,
     },
@@ -71,7 +71,7 @@ fn sends_email_account_settings_to_email_check_sidecar() {
     )
     .expect("save email check setting");
     let request_path = std::env::temp_dir().join(format!(
-        "careercaveman-email-check-request-{}.json",
+        "cluelyy-email-check-request-{}.json",
         std::process::id()
     ));
     let command = capture_request_sidecar(&request_path);
@@ -103,12 +103,12 @@ fn resolves_keyring_email_secret_references_for_sidecar_workflows() {
         .lock()
         .expect("lock secure store test");
     keyring_core::set_default_store(keyring_core::mock::Store::new().expect("mock keyring store"));
-    careercaveman_lib::secure_store::save_secret(
+    cluelyy_lib::secure_store::save_secret(
         "email.account.oauthClientSecret",
         "google-client-secret",
     )
     .expect("save OAuth client secret");
-    careercaveman_lib::secure_store::save_secret(
+    cluelyy_lib::secure_store::save_secret(
         "email.account.oauthRefreshToken",
         "google-refresh-token",
     )
@@ -137,13 +137,13 @@ fn resolves_keyring_email_secret_references_for_sidecar_workflows() {
                 "oauthClientId": "google-client-id",
                 "oauthClientSecret": {
                     "secretRef": "email.account.oauthClientSecret",
-                    "service": "careercaveman",
-                    "uri": "keyring://careercaveman/email.account.oauthClientSecret"
+                    "service": "cluelyy",
+                    "uri": "keyring://cluelyy/email.account.oauthClientSecret"
                 },
                 "oauthRefreshToken": {
                     "secretRef": "email.account.oauthRefreshToken",
-                    "service": "careercaveman",
-                    "uri": "keyring://careercaveman/email.account.oauthRefreshToken"
+                    "service": "cluelyy",
+                    "uri": "keyring://cluelyy/email.account.oauthRefreshToken"
                 },
                 "signature": "Asha"
             })),
@@ -151,7 +151,7 @@ fn resolves_keyring_email_secret_references_for_sidecar_workflows() {
     )
     .expect("save email account setting");
     let request_path = std::env::temp_dir().join(format!(
-        "careercaveman-email-secret-ref-request-{}.json",
+        "cluelyy-email-secret-ref-request-{}.json",
         std::process::id()
     ));
     let command = capture_request_sidecar(&request_path);
@@ -182,7 +182,7 @@ fn sends_email_match_context_to_email_check_sidecar() {
     let (application_id, job_id, company_id, contact_id) =
         create_application_contact_context(&connection);
     let request_path = std::env::temp_dir().join(format!(
-        "careercaveman-email-match-request-{}.json",
+        "cluelyy-email-match-request-{}.json",
         std::process::id()
     ));
     let command = capture_request_sidecar(&request_path);
@@ -229,7 +229,7 @@ fn sends_email_account_settings_to_cold_email_sidecar() {
     )
     .expect("save email account setting");
     let request_path = std::env::temp_dir().join(format!(
-        "careercaveman-cold-email-request-{}.json",
+        "cluelyy-cold-email-request-{}.json",
         std::process::id()
     ));
     let command = capture_request_sidecar(&request_path);
@@ -278,7 +278,7 @@ fn sends_email_account_and_follow_up_context_to_follow_up_sidecar_and_persists_r
     )
     .expect("save follow-up task");
     let request_path = std::env::temp_dir().join(format!(
-        "careercaveman-follow-up-request-{}.json",
+        "cluelyy-follow-up-request-{}.json",
         std::process::id()
     ));
     let command = capture_request_sidecar_with_result(

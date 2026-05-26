@@ -116,7 +116,7 @@ describe("sidecar runtime", () => {
   });
 
   it("persists runtime event logs when configured", async () => {
-    const logDir = await mkdtemp(join(tmpdir(), "careercaveman-runtime-log-"));
+    const logDir = await mkdtemp(join(tmpdir(), "cluelyy-runtime-log-"));
 
     try {
       const runtime = createSidecarRuntime({
@@ -1426,7 +1426,7 @@ describe("sidecar runtime", () => {
         permissions: ["network"],
       },
       initialize: async (context) => {
-        calls.push(`initialize:${context.env.CAREERCAVEMAN_PLUGIN_TEST}`);
+        calls.push(`initialize:${context.env.CLUELYY_PLUGIN_TEST}`);
       },
       destroy: async () => {
         calls.push("destroy");
@@ -1439,7 +1439,7 @@ describe("sidecar runtime", () => {
     const runtime = createSidecarRuntime({
       env: {
         ...process.env,
-        CAREERCAVEMAN_PLUGIN_TEST: "enabled",
+        CLUELYY_PLUGIN_TEST: "enabled",
       },
       plugins: [runtimePlugin],
     });
@@ -1464,7 +1464,7 @@ describe("sidecar runtime", () => {
 
   it("wires document generation into due application processing tasks", async () => {
     const checkedAt = new Date("2026-05-28T10:30:00Z");
-    const outputDir = await mkdtemp(join(tmpdir(), "careercaveman-runtime-docs-"));
+    const outputDir = await mkdtemp(join(tmpdir(), "cluelyy-runtime-docs-"));
     const applicationUpdates: Array<{ applicationId: string; update: Record<string, unknown> }> = [];
     const scheduledTaskUpdates: Array<{ id: string; update: PersistedScheduledTaskRunUpdate }> = [];
     const savedDocuments: Array<Record<string, unknown>> = [];

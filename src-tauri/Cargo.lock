@@ -430,25 +430,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "careercaveman"
-version = "0.1.0"
-dependencies = [
- "apple-native-keyring-store",
- "dbus-secret-service-keyring-store",
- "keyring-core",
- "rusqlite",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-notification",
- "tauri-plugin-updater",
- "thiserror 2.0.18",
- "time",
- "windows-native-keyring-store",
-]
-
-[[package]]
 name = "cargo-platform"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -553,6 +534,25 @@ checksum = "773f3b9af64447d2ce9850330c473515014aa235e6a783b02db81ff39e4a3dad"
 dependencies = [
  "crypto-common",
  "inout",
+]
+
+[[package]]
+name = "cluelyy"
+version = "0.1.0"
+dependencies = [
+ "apple-native-keyring-store",
+ "dbus-secret-service-keyring-store",
+ "keyring-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-notification",
+ "tauri-plugin-updater",
+ "thiserror 2.0.18",
+ "time",
+ "windows-native-keyring-store",
 ]
 
 [[package]]

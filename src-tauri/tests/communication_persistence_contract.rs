@@ -1,4 +1,4 @@
-use careercaveman_lib::db::{
+use cluelyy_lib::db::{
     models::{UpsertApplication, UpsertCommunication, UpsertContact, UpsertJob},
     queries::{
         list_application_events, list_communications, save_communication, save_contact,

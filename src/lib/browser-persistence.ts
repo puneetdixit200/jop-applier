@@ -6,14 +6,14 @@ import type {
   UserProfile,
 } from "./tauri-api";
 
-const PROFILE_KEY = "careercaveman.browser.profile";
-const SETTINGS_KEY = "careercaveman.browser.settings";
-const JOBS_KEY = "careercaveman.browser.jobs";
+const PROFILE_KEY = "cluelyy.browser.profile";
+const SETTINGS_KEY = "cluelyy.browser.settings";
+const JOBS_KEY = "cluelyy.browser.jobs";
 
 function getStorage() {
   try {
     const storage = globalThis.localStorage;
-    const probeKey = "careercaveman.browser.probe";
+    const probeKey = "cluelyy.browser.probe";
     storage.setItem(probeKey, "1");
     storage.removeItem(probeKey);
     return storage;

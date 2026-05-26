@@ -1,4 +1,4 @@
-use careercaveman_lib::{
+use cluelyy_lib::{
     commands::sidecar::run_due_scheduled_tasks_with_command,
     db::{
         models::{
@@ -113,7 +113,7 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
                 "googleSheetsAccessToken": "ya29-token",
                 "googleSheetsRange": "Applications!A1",
                 "csvEnabled": true,
-                "csvOutputPath": "/tmp/careercaveman-applications.csv",
+                "csvOutputPath": "/tmp/cluelyy-applications.csv",
                 "airtableEnabled": true,
                 "airtableApiKey": "pat_airtable",
                 "airtableBaseId": "appBase1",
@@ -138,7 +138,7 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
     )
     .expect("save export task");
     let request_path = std::env::temp_dir().join(format!(
-        "careercaveman-export-request-{}.json",
+        "cluelyy-export-request-{}.json",
         std::process::id()
     ));
     let command = capture_request_sidecar_with_result(
@@ -174,7 +174,7 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
                         "exporterName": "CSV",
                         "status": "completed",
                         "recordsWritten": 2,
-                        "externalUrl": "file:///tmp/careercaveman-applications.csv",
+                        "externalUrl": "file:///tmp/cluelyy-applications.csv",
                         "syncedAt": "2026-05-29T06:00:00.000Z"
                     },
                     {
@@ -258,7 +258,7 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
         request["params"]["exportSync"]["csv"],
         json!({
             "enabled": true,
-            "outputPath": "/tmp/careercaveman-applications.csv"
+            "outputPath": "/tmp/cluelyy-applications.csv"
         })
     );
     assert_eq!(
@@ -289,6 +289,6 @@ fn scheduled_export_sync_sends_payload_settings_and_persists_runs() {
 fn capture_request_sidecar_with_result(
     request_path: &Path,
     response: serde_json::Value,
-) -> careercaveman_lib::sidecar::SidecarCommand {
+) -> cluelyy_lib::sidecar::SidecarCommand {
     common::capture_request_sidecar_with_response(request_path, response)
 }

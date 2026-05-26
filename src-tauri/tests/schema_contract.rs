@@ -1,4 +1,4 @@
-use careercaveman_lib::db::schema::{initialize_schema, schema_version};
+use cluelyy_lib::db::schema::{initialize_schema, schema_version};
 use rusqlite::Connection;
 
 #[test]

@@ -1,4 +1,4 @@
-use careercaveman_lib::{
+use cluelyy_lib::{
     commands::sidecar::run_sidecar_workflow_and_persist_jobs_with_command,
     db::{
         models::{
@@ -67,7 +67,7 @@ fn persists_outreach_follow_up_drafts_from_sidecar() {
                 "contact_id": contact_id,
                 "sequence_step": 2,
                 "subject": "Re: Congrats on Series A",
-                "body_html": "<p>Following up</p><p><a href='careercaveman://unsubscribe?token=abc'>unsubscribe</a></p>",
+                "body_html": "<p>Following up</p><p><a href='cluelyy://unsubscribe?token=abc'>unsubscribe</a></p>",
                 "status": "pending",
                 "scheduled_at": "2026-05-27T05:00:00.000Z",
                 "sent_at": null,
@@ -205,7 +205,7 @@ fn seed_queued_outreach(connection: &Connection, status: &str) -> (String, Strin
             contact_id: contact.id.clone(),
             sequence_step: 1,
             subject: "Congrats on Series A".to_string(),
-            body_html: "<p>Hello</p><p><a href=\"careercaveman://unsubscribe?token=abc\">unsubscribe</a></p>".to_string(),
+            body_html: "<p>Hello</p><p><a href=\"cluelyy://unsubscribe?token=abc\">unsubscribe</a></p>".to_string(),
             status: status.to_string(),
             scheduled_at: Some("2026-05-23T04:30:00.000Z".to_string()),
             sent_at: if status == "sent" {

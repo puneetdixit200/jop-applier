@@ -73,7 +73,7 @@ struct SidecarIpcErrorPayload {
 }
 
 pub fn default_sidecar_command() -> Result<SidecarCommand, SidecarError> {
-    let sidecar_path = match std::env::var("CAREERCAVEMAN_SIDECAR_PATH") {
+    let sidecar_path = match std::env::var("CLUELYY_SIDECAR_PATH") {
         Ok(path) => PathBuf::from(path),
         Err(_) => std::env::current_dir()
             .map_err(SidecarError::ResolveSidecarPath)?

@@ -1,4 +1,4 @@
-use careercaveman_lib::db::{
+use cluelyy_lib::db::{
     models::UpsertAiCacheEntry,
     queries::{get_ai_cache_entry, save_ai_cache_entry},
     schema::initialize_schema,

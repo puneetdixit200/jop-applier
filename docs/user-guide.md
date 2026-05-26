@@ -1,6 +1,6 @@
-# CareerCaveman User Guide
+# cluelyy User Guide
 
-CareerCaveman is a local-first desktop app for job discovery, AI-assisted application preparation, tracking, follow-ups, analytics, and exports.
+cluelyy is a local-first desktop app for job discovery, AI-assisted application preparation, tracking, follow-ups, analytics, and exports.
 
 ## First Run
 
@@ -14,9 +14,9 @@ CareerCaveman is a local-first desktop app for job discovery, AI-assisted applic
 
 Application data is stored in the local SQLite database under the app data directory. Secrets such as Gmail OAuth tokens, export tokens, and the optional database encryption key are stored in the OS keychain.
 
-To encrypt the database, open Settings, enter an encryption key under Database privacy, and choose Enable Encryption. The app converts the existing SQLite file to SQLCipher and keeps the key in the OS keychain. You can also set `CAREERCAVEMAN_DATABASE_KEY` before launch to open an encrypted database with an environment-provided key.
+To encrypt the database, open Settings, enter an encryption key under Database privacy, and choose Enable Encryption. The app converts the existing SQLite file to SQLCipher and keeps the key in the OS keychain. You can also set `CLUELYY_DATABASE_KEY` before launch to open an encrypted database with an environment-provided key.
 
-Browser session snapshots are encrypted separately when `BROWSER_SESSION_KEY` or `CAREERCAVEMAN_BROWSER_SESSION_KEY` is configured.
+Browser session snapshots are encrypted separately when `BROWSER_SESSION_KEY` or `CLUELYY_BROWSER_SESSION_KEY` is configured.
 
 ## Automation
 
@@ -24,7 +24,7 @@ The dashboard can run due scheduled tasks or start discovery manually. The defau
 
 When a profile is configured, discovery can classify raw postings, score jobs against your skills, apply saved match rules, and surface high-match jobs through OS and in-app notifications.
 
-Optional email notifications use SMTP settings from environment variables such as `CAREERCAVEMAN_NOTIFICATION_EMAIL_TO`, `CAREERCAVEMAN_SMTP_HOST`, `CAREERCAVEMAN_SMTP_USER`, `CAREERCAVEMAN_SMTP_PASS`, and `CAREERCAVEMAN_EMAIL_FROM`.
+Optional email notifications use SMTP settings from environment variables such as `CLUELYY_NOTIFICATION_EMAIL_TO`, `CLUELYY_SMTP_HOST`, `CLUELYY_SMTP_USER`, `CLUELYY_SMTP_PASS`, and `CLUELYY_EMAIL_FROM`.
 
 ## Gmail
 

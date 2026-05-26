@@ -666,8 +666,8 @@ function runtimeNotificationAdaptersFromEnv(
   configuredAdapters: NotificationAdapter[],
 ): NotificationAdapter[] {
   const adapters: NotificationAdapter[] = [];
-  const telegramBotToken = env.TELEGRAM_BOT_TOKEN ?? env.CAREERCAVEMAN_TELEGRAM_BOT_TOKEN;
-  const telegramChatId = env.TELEGRAM_CHAT_ID ?? env.CAREERCAVEMAN_TELEGRAM_CHAT_ID;
+  const telegramBotToken = env.TELEGRAM_BOT_TOKEN ?? env.CLUELYY_TELEGRAM_BOT_TOKEN;
+  const telegramChatId = env.TELEGRAM_CHAT_ID ?? env.CLUELYY_TELEGRAM_CHAT_ID;
   if (
     telegramBotToken &&
     telegramChatId &&
@@ -681,7 +681,7 @@ function runtimeNotificationAdaptersFromEnv(
     );
   }
 
-  const discordWebhookUrl = env.DISCORD_WEBHOOK_URL ?? env.CAREERCAVEMAN_DISCORD_WEBHOOK_URL;
+  const discordWebhookUrl = env.DISCORD_WEBHOOK_URL ?? env.CLUELYY_DISCORD_WEBHOOK_URL;
   if (
     discordWebhookUrl &&
     !configuredAdapters.some((adapter) => adapter.channel === "discord")
@@ -706,34 +706,34 @@ function runtimeNotificationAdaptersFromEnv(
 
 function emailNotificationConfigFromEnv(env: NodeJS.ProcessEnv) {
   const to = splitEnvList(
-    env.NOTIFICATION_EMAIL_TO ?? env.CAREERCAVEMAN_NOTIFICATION_EMAIL_TO,
+    env.NOTIFICATION_EMAIL_TO ?? env.CLUELYY_NOTIFICATION_EMAIL_TO,
   );
-  const smtpHost = env.SMTP_HOST ?? env.CAREERCAVEMAN_SMTP_HOST;
-  const smtpUser = env.SMTP_USER ?? env.CAREERCAVEMAN_SMTP_USER;
-  const smtpPass = env.SMTP_PASS ?? env.CAREERCAVEMAN_SMTP_PASS;
+  const smtpHost = env.SMTP_HOST ?? env.CLUELYY_SMTP_HOST;
+  const smtpUser = env.SMTP_USER ?? env.CLUELYY_SMTP_USER;
+  const smtpPass = env.SMTP_PASS ?? env.CLUELYY_SMTP_PASS;
   const fromEmail =
-    env.EMAIL_FROM ?? env.FROM_EMAIL ?? env.CAREERCAVEMAN_EMAIL_FROM;
+    env.EMAIL_FROM ?? env.FROM_EMAIL ?? env.CLUELYY_EMAIL_FROM;
 
   if (to.length === 0 || !smtpHost || !smtpUser || !smtpPass || !fromEmail) {
     return null;
   }
 
-  const smtpPort = numberEnv(env.SMTP_PORT ?? env.CAREERCAVEMAN_SMTP_PORT, 587);
-  const smtpSecure = booleanEnv(env.SMTP_SECURE ?? env.CAREERCAVEMAN_SMTP_SECURE);
+  const smtpPort = numberEnv(env.SMTP_PORT ?? env.CLUELYY_SMTP_PORT, 587);
+  const smtpSecure = booleanEnv(env.SMTP_SECURE ?? env.CLUELYY_SMTP_SECURE);
   const account: EmailAccountConfig = {
-    provider: emailProviderEnv(env.EMAIL_PROVIDER ?? env.CAREERCAVEMAN_EMAIL_PROVIDER),
+    provider: emailProviderEnv(env.EMAIL_PROVIDER ?? env.CLUELYY_EMAIL_PROVIDER),
     smtpHost,
     smtpPort,
     smtpSecure,
     smtpUser,
     smtpPass,
-    imapHost: env.IMAP_HOST ?? env.CAREERCAVEMAN_IMAP_HOST ?? "",
-    imapPort: numberEnv(env.IMAP_PORT ?? env.CAREERCAVEMAN_IMAP_PORT, 993),
-    imapSecure: booleanEnv(env.IMAP_SECURE ?? env.CAREERCAVEMAN_IMAP_SECURE ?? "true"),
-    imapUser: env.IMAP_USER ?? env.CAREERCAVEMAN_IMAP_USER ?? smtpUser,
-    imapPass: env.IMAP_PASS ?? env.CAREERCAVEMAN_IMAP_PASS ?? smtpPass,
+    imapHost: env.IMAP_HOST ?? env.CLUELYY_IMAP_HOST ?? "",
+    imapPort: numberEnv(env.IMAP_PORT ?? env.CLUELYY_IMAP_PORT, 993),
+    imapSecure: booleanEnv(env.IMAP_SECURE ?? env.CLUELYY_IMAP_SECURE ?? "true"),
+    imapUser: env.IMAP_USER ?? env.CLUELYY_IMAP_USER ?? smtpUser,
+    imapPass: env.IMAP_PASS ?? env.CLUELYY_IMAP_PASS ?? smtpPass,
     fromName:
-      env.EMAIL_FROM_NAME ?? env.FROM_NAME ?? env.CAREERCAVEMAN_EMAIL_FROM_NAME ?? "CareerCaveman",
+      env.EMAIL_FROM_NAME ?? env.FROM_NAME ?? env.CLUELYY_EMAIL_FROM_NAME ?? "cluelyy",
     fromEmail,
   };
 
@@ -1229,17 +1229,17 @@ export function browserSessionTargetsFromEnv(env: NodeJS.ProcessEnv = process.en
 }
 
 function browserStealthConfigFromEnv(env: NodeJS.ProcessEnv) {
-  const proxyList = (env.BROWSER_PROXY_LIST ?? env.CAREERCAVEMAN_BROWSER_PROXY_LIST ?? "")
+  const proxyList = (env.BROWSER_PROXY_LIST ?? env.CLUELYY_BROWSER_PROXY_LIST ?? "")
     .split(",")
     .map((server) => server.trim())
     .filter(Boolean)
     .map((server) => ({ server }));
-  const sessionRoot = env.BROWSER_SESSION_ROOT ?? env.CAREERCAVEMAN_BROWSER_SESSION_ROOT;
+  const sessionRoot = env.BROWSER_SESSION_ROOT ?? env.CLUELYY_BROWSER_SESSION_ROOT;
   const persistCookies =
-    env.BROWSER_PERSIST_COOKIES ?? env.CAREERCAVEMAN_BROWSER_PERSIST_COOKIES;
+    env.BROWSER_PERSIST_COOKIES ?? env.CLUELYY_BROWSER_PERSIST_COOKIES;
 
   return createDefaultStealthConfig({
-    rotateProxy: booleanEnv(env.BROWSER_ROTATE_PROXY ?? env.CAREERCAVEMAN_BROWSER_ROTATE_PROXY),
+    rotateProxy: booleanEnv(env.BROWSER_ROTATE_PROXY ?? env.CLUELYY_BROWSER_ROTATE_PROXY),
     proxyList,
     ...(sessionRoot ? { sessionRoot } : {}),
     ...(persistCookies !== undefined ? { persistCookies: booleanEnv(persistCookies) } : {}),
@@ -1247,7 +1247,7 @@ function browserStealthConfigFromEnv(env: NodeJS.ProcessEnv) {
 }
 
 function browserSessionStoreFromEnv(env: NodeJS.ProcessEnv, sessionRoot: string) {
-  const key = env.BROWSER_SESSION_KEY ?? env.CAREERCAVEMAN_BROWSER_SESSION_KEY;
+  const key = env.BROWSER_SESSION_KEY ?? env.CLUELYY_BROWSER_SESSION_KEY;
   if (!key) {
     return undefined;
   }
@@ -1283,7 +1283,7 @@ function emailProviderEnv(value: string | undefined): EmailProvider {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const runtime = createSidecarRuntime({
     logging: {
-      logDir: process.env.CAREERCAVEMAN_LOG_DIR ?? defaultLocalEventLogDir(),
+      logDir: process.env.CLUELYY_LOG_DIR ?? defaultLocalEventLogDir(),
     },
   });
   if (process.argv.includes("--stdio")) {

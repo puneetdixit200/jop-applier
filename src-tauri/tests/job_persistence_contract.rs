@@ -1,4 +1,4 @@
-use careercaveman_lib::db::{
+use cluelyy_lib::db::{
     models::UpsertJob,
     queries::{list_jobs, upsert_job},
     schema::initialize_schema,

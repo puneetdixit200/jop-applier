@@ -1,4 +1,4 @@
-use careercaveman_lib::db::{
+use cluelyy_lib::db::{
     models::{
         OutreachEmailReviewUpdate, UpsertEmailOptOut, UpsertFundedCompany, UpsertOutreachCampaign,
         UpsertOutreachEmail, UpsertProspectContact,

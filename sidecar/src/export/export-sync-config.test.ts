@@ -62,7 +62,7 @@ describe("export sync config", () => {
           },
           csv: {
             enabled: true,
-            outputPath: "/tmp/careercaveman-applications.csv",
+            outputPath: "/tmp/cluelyy-applications.csv",
           },
           airtable: {
             enabled: true,
@@ -186,7 +186,7 @@ describe("export sync config", () => {
     expect(csvConfigs).toEqual([
       {
         enabled: true,
-        outputPath: "/tmp/careercaveman-applications.csv",
+        outputPath: "/tmp/cluelyy-applications.csv",
       },
     ]);
     expect(airtableConfigs).toEqual([
@@ -230,7 +230,7 @@ describe("export sync config", () => {
           exporterName: "CSV",
           status: "completed",
           recordsWritten: 2,
-          externalUrl: "file:///tmp/careercaveman-applications.csv",
+          externalUrl: "file:///tmp/cluelyy-applications.csv",
           syncedAt: "2026-05-29T06:00:00.000Z",
         },
         {
@@ -329,7 +329,7 @@ describe("export sync config", () => {
   });
 
   it("writes local CSV exports with escaped application and analytics rows", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "careercaveman-export-"));
+    const directory = await mkdtemp(join(tmpdir(), "cluelyy-export-"));
     const outputPath = join(directory, "applications.csv");
 
     try {

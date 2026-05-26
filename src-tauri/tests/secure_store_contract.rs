@@ -1,4 +1,4 @@
-use careercaveman_lib::{
+use cluelyy_lib::{
     commands::db::protect_setting_secrets,
     db::models::{SettingValue, UpsertSetting},
     secure_store::{delete_secret, get_secret, save_secret},
@@ -17,9 +17,9 @@ fn stores_reads_updates_and_deletes_secrets_in_keyring() {
 
     let saved = save_secret("email.account.smtpPass", "app-password").expect("save secret");
 
-    assert_eq!(saved.service, "careercaveman");
+    assert_eq!(saved.service, "cluelyy");
     assert_eq!(saved.key, "email.account.smtpPass");
-    assert_eq!(saved.uri, "keyring://careercaveman/email.account.smtpPass");
+    assert_eq!(saved.uri, "keyring://cluelyy/email.account.smtpPass");
     assert_eq!(
         get_secret("email.account.smtpPass").expect("read secret"),
         Some("app-password".to_string()),
@@ -81,16 +81,16 @@ fn replaces_known_setting_secrets_with_keyring_references() {
         value["smtpPass"],
         json!({
             "secretRef": "email.account.smtpPass",
-            "service": "careercaveman",
-            "uri": "keyring://careercaveman/email.account.smtpPass"
+            "service": "cluelyy",
+            "uri": "keyring://cluelyy/email.account.smtpPass"
         })
     );
     assert_eq!(
         value["imapPass"],
         json!({
             "secretRef": "email.account.imapPass",
-            "service": "careercaveman",
-            "uri": "keyring://careercaveman/email.account.imapPass"
+            "service": "cluelyy",
+            "uri": "keyring://cluelyy/email.account.imapPass"
         })
     );
     assert_eq!(

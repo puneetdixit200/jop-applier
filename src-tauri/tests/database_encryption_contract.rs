@@ -1,5 +1,5 @@
-use careercaveman_lib::db::models::UpsertUserProfile;
-use careercaveman_lib::db::{
+use cluelyy_lib::db::models::UpsertUserProfile;
+use cluelyy_lib::db::{
     encryption::{
         database_file_is_encrypted, disable_database_encryption, enable_database_encryption,
         open_application_database, open_encrypted_database, DATABASE_KEY_ENV,
@@ -18,7 +18,7 @@ use std::{
 #[test]
 fn converts_existing_sqlite_database_to_sqlcipher_and_back() {
     let dir = temp_database_dir("encryption-roundtrip");
-    let database_path = dir.join("careercaveman.db");
+    let database_path = dir.join("cluelyy.db");
     let mut connection = Connection::open(&database_path).expect("open plaintext database");
     initialize_schema(&connection).expect("initialize schema");
     upsert_user_profile(
@@ -88,7 +88,7 @@ fn converts_existing_sqlite_database_to_sqlcipher_and_back() {
 #[test]
 fn startup_opens_new_database_encrypted_when_key_is_configured() {
     let dir = temp_database_dir("encrypted-startup");
-    let database_path = dir.join("careercaveman.db");
+    let database_path = dir.join("cluelyy.db");
     std::env::set_var(DATABASE_KEY_ENV, "startup passphrase");
 
     let connection = open_application_database(&database_path).expect("open app database");
@@ -110,7 +110,7 @@ fn temp_database_dir(label: &str) -> PathBuf {
         .expect("system time")
         .as_nanos();
     let dir = std::env::temp_dir().join(format!(
-        "careercaveman-{label}-{}-{nanos}",
+        "cluelyy-{label}-{}-{nanos}",
         std::process::id()
     ));
     fs::create_dir_all(&dir).expect("create temp database dir");
