@@ -67,7 +67,9 @@ fn replaces_known_setting_secrets_with_keyring_references() {
         value: SettingValue::Object(json!({
             "fromEmail": "asha@gmail.example",
             "smtpPass": "smtp-secret",
-            "imapPass": "imap-secret"
+            "imapPass": "imap-secret",
+            "oauthClientSecret": "google-client-secret",
+            "oauthRefreshToken": "google-refresh-token"
         })),
     })
     .expect("protect setting secrets");
@@ -98,6 +100,22 @@ fn replaces_known_setting_secrets_with_keyring_references() {
     assert_eq!(
         get_secret("email.account.imapPass").expect("read imap secret"),
         Some("imap-secret".to_string()),
+    );
+    assert_eq!(
+        value["oauthClientSecret"]["secretRef"],
+        json!("email.account.oauthClientSecret")
+    );
+    assert_eq!(
+        value["oauthRefreshToken"]["secretRef"],
+        json!("email.account.oauthRefreshToken")
+    );
+    assert_eq!(
+        get_secret("email.account.oauthClientSecret").expect("read oauth client secret"),
+        Some("google-client-secret".to_string()),
+    );
+    assert_eq!(
+        get_secret("email.account.oauthRefreshToken").expect("read oauth refresh token"),
+        Some("google-refresh-token".to_string()),
     );
 
     let protected_prospecting = protect_setting_secrets(UpsertSetting {

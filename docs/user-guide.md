@@ -12,7 +12,7 @@ CareerCaveman is a local-first desktop app for job discovery, AI-assisted applic
 
 ## Privacy
 
-Application data is stored in the local SQLite database under the app data directory. Secrets such as email passwords, export tokens, and the optional database encryption key are stored in the OS keychain.
+Application data is stored in the local SQLite database under the app data directory. Secrets such as Gmail OAuth tokens, export tokens, and the optional database encryption key are stored in the OS keychain.
 
 To encrypt the database, open Settings, enter an encryption key under Database privacy, and choose Enable Encryption. The app converts the existing SQLite file to SQLCipher and keeps the key in the OS keychain. You can also set `CAREERCAVEMAN_DATABASE_KEY` before launch to open an encrypted database with an environment-provided key.
 
@@ -25,6 +25,12 @@ The dashboard can run due scheduled tasks or start discovery manually. The defau
 When a profile is configured, discovery can classify raw postings, score jobs against your skills, apply saved match rules, and surface high-match jobs through OS and in-app notifications.
 
 Optional email notifications use SMTP settings from environment variables such as `CAREERCAVEMAN_NOTIFICATION_EMAIL_TO`, `CAREERCAVEMAN_SMTP_HOST`, `CAREERCAVEMAN_SMTP_USER`, `CAREERCAVEMAN_SMTP_PASS`, and `CAREERCAVEMAN_EMAIL_FROM`.
+
+## Gmail
+
+Gmail workflow email is OAuth-only. Settings asks for your Google OAuth client ID, client secret, and refresh token, then sends mail through Gmail SMTP OAuth2 and checks replies through Gmail IMAP OAuth2. The app does not store or use a Gmail app password for Gmail workflow email.
+
+The browser job-discovery preview does not need an API key. It fetches public postings from Remotive and RemoteOK through the local Vite API, then stores the results in browser localStorage. The desktop sidecar keeps using SQLite and the OS keychain for persisted settings.
 
 ## Prospecting And Outreach
 

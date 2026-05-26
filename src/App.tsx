@@ -3801,14 +3801,42 @@ function SettingsPanel({
               onChange={(event) => updateEmail("username", event.target.value)}
             />
           </label>
-          <label>
-            App password
-            <input
-              type="password"
-              value={settings.email.appPassword}
-              onChange={(event) => updateEmail("appPassword", event.target.value)}
-            />
-          </label>
+          {settings.email.provider === "gmail" ? (
+            <>
+              <label>
+                Google OAuth client ID
+                <input
+                  value={settings.email.oauthClientId}
+                  onChange={(event) => updateEmail("oauthClientId", event.target.value)}
+                />
+              </label>
+              <label>
+                Google OAuth client secret
+                <input
+                  type="password"
+                  value={settings.email.oauthClientSecret}
+                  onChange={(event) => updateEmail("oauthClientSecret", event.target.value)}
+                />
+              </label>
+              <label>
+                Google OAuth refresh token
+                <input
+                  type="password"
+                  value={settings.email.oauthRefreshToken}
+                  onChange={(event) => updateEmail("oauthRefreshToken", event.target.value)}
+                />
+              </label>
+            </>
+          ) : (
+            <label>
+              App password
+              <input
+                type="password"
+                value={settings.email.appPassword}
+                onChange={(event) => updateEmail("appPassword", event.target.value)}
+              />
+            </label>
+          )}
           <label>
             Mailbox
             <input

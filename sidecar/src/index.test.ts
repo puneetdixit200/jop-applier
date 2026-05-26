@@ -71,6 +71,25 @@ function htmlResponse(payload: string): Response {
   } as unknown as Response;
 }
 
+const gmailOAuthAccount = {
+  provider: "gmail",
+  authType: "oauth2",
+  fromName: "Asha Rao",
+  fromEmail: "asha@gmail.example",
+  smtpHost: "smtp.gmail.com",
+  smtpPort: 465,
+  smtpSecure: true,
+  smtpUser: "asha@gmail.example",
+  imapHost: "imap.gmail.com",
+  imapPort: 993,
+  imapSecure: true,
+  imapUser: "asha@gmail.example",
+  oauthClientId: "google-client-id",
+  oauthClientSecret: "google-client-secret",
+  oauthRefreshToken: "google-refresh-token",
+  signature: "Asha",
+};
+
 describe("sidecar runtime", () => {
   it("wires configured Anthropic and Groq providers into the AI engine", () => {
     const engine = createAIEngineFromEnv({
@@ -962,22 +981,7 @@ describe("sidecar runtime", () => {
     await expect(
       runtime.workflowEngine.run("follow-up-check", {
         followUp: {
-          account: {
-            provider: "gmail",
-            fromName: "Asha Rao",
-            fromEmail: "asha@gmail.example",
-            smtpHost: "smtp.gmail.com",
-            smtpPort: 465,
-            smtpSecure: true,
-            smtpUser: "asha@gmail.example",
-            smtpPass: "app-password",
-            imapHost: "imap.gmail.com",
-            imapPort: 993,
-            imapSecure: true,
-            imapUser: "asha@gmail.example",
-            imapPass: "app-password",
-            signature: "Asha",
-          },
+          account: gmailOAuthAccount,
           applications: [
             {
               id: "app-1",
@@ -1023,24 +1027,7 @@ describe("sidecar runtime", () => {
         },
       ],
     });
-    expect(senderConfigs).toEqual([
-      {
-        provider: "gmail",
-        fromName: "Asha Rao",
-        fromEmail: "asha@gmail.example",
-        smtpHost: "smtp.gmail.com",
-        smtpPort: 465,
-        smtpSecure: true,
-        smtpUser: "asha@gmail.example",
-        smtpPass: "app-password",
-        imapHost: "imap.gmail.com",
-        imapPort: 993,
-        imapSecure: true,
-        imapUser: "asha@gmail.example",
-        imapPass: "app-password",
-        signature: "Asha",
-      },
-    ]);
+    expect(senderConfigs).toEqual([gmailOAuthAccount]);
     expect(sentEmails).toEqual([
       {
         to: "mira@northstar.example",
@@ -1816,22 +1803,7 @@ describe("sidecar runtime", () => {
     await expect(
       runtime.workflowEngine.run("email-check", {
         emailCheck: {
-          account: {
-            provider: "gmail",
-            fromName: "Asha Rao",
-            fromEmail: "asha@gmail.example",
-            smtpHost: "smtp.gmail.com",
-            smtpPort: 465,
-            smtpSecure: true,
-            smtpUser: "asha@gmail.example",
-            smtpPass: "app-password",
-            imapHost: "imap.gmail.com",
-            imapPort: 993,
-            imapSecure: true,
-            imapUser: "asha@gmail.example",
-            imapPass: "app-password",
-            signature: "Asha",
-          },
+          account: gmailOAuthAccount,
           fetch: {
             mailbox: "Replies",
             limit: 25,
@@ -1860,24 +1832,7 @@ describe("sidecar runtime", () => {
         },
       ],
     });
-    expect(readerConfigs).toEqual([
-      {
-        provider: "gmail",
-        fromName: "Asha Rao",
-        fromEmail: "asha@gmail.example",
-        smtpHost: "smtp.gmail.com",
-        smtpPort: 465,
-        smtpSecure: true,
-        smtpUser: "asha@gmail.example",
-        smtpPass: "app-password",
-        imapHost: "imap.gmail.com",
-        imapPort: 993,
-        imapSecure: true,
-        imapUser: "asha@gmail.example",
-        imapPass: "app-password",
-        signature: "Asha",
-      },
-    ]);
+    expect(readerConfigs).toEqual([gmailOAuthAccount]);
     expect(fetchOptions).toEqual([
       {
         mailbox: "Replies",
@@ -2006,22 +1961,7 @@ describe("sidecar runtime", () => {
     await expect(
       runtime.workflowEngine.run("cold-email", {
         coldEmail: {
-          account: {
-            provider: "gmail",
-            fromName: "Asha Rao",
-            fromEmail: "asha@gmail.example",
-            smtpHost: "smtp.gmail.com",
-            smtpPort: 465,
-            smtpSecure: true,
-            smtpUser: "asha@gmail.example",
-            smtpPass: "app-password",
-            imapHost: "imap.gmail.com",
-            imapPort: 993,
-            imapSecure: true,
-            imapUser: "asha@gmail.example",
-            imapPass: "app-password",
-            signature: "Asha",
-          },
+          account: gmailOAuthAccount,
         },
       }),
     ).resolves.toMatchObject({
@@ -2033,24 +1973,7 @@ describe("sidecar runtime", () => {
         },
       ],
     });
-    expect(senderConfigs).toEqual([
-      {
-        provider: "gmail",
-        fromName: "Asha Rao",
-        fromEmail: "asha@gmail.example",
-        smtpHost: "smtp.gmail.com",
-        smtpPort: 465,
-        smtpSecure: true,
-        smtpUser: "asha@gmail.example",
-        smtpPass: "app-password",
-        imapHost: "imap.gmail.com",
-        imapPort: 993,
-        imapSecure: true,
-        imapUser: "asha@gmail.example",
-        imapPass: "app-password",
-        signature: "Asha",
-      },
-    ]);
+    expect(senderConfigs).toEqual([gmailOAuthAccount]);
     expect(sentEmails).toEqual([
       {
         to: "mira@northstar.example",

@@ -23,6 +23,27 @@ mod common;
 
 static SECURE_STORE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
+fn gmail_oauth_account() -> serde_json::Value {
+    json!({
+        "provider": "gmail",
+        "authType": "oauth2",
+        "fromName": "Asha Rao",
+        "fromEmail": "asha@gmail.example",
+        "smtpHost": "smtp.gmail.com",
+        "smtpPort": 465,
+        "smtpSecure": true,
+        "smtpUser": "asha@gmail.example",
+        "imapHost": "imap.gmail.com",
+        "imapPort": 993,
+        "imapSecure": true,
+        "imapUser": "asha@gmail.example",
+        "oauthClientId": "google-client-id",
+        "oauthClientSecret": "google-client-secret",
+        "oauthRefreshToken": "google-refresh-token",
+        "signature": "Asha"
+    })
+}
+
 #[test]
 fn sends_email_account_settings_to_email_check_sidecar() {
     let connection = Connection::open_in_memory().expect("open in-memory database");
@@ -32,22 +53,7 @@ fn sends_email_account_settings_to_email_check_sidecar() {
         UpsertSetting {
             key: "email.account".to_string(),
             category: Some("email".to_string()),
-            value: SettingValue::Object(json!({
-                "provider": "gmail",
-                "fromName": "Asha Rao",
-                "fromEmail": "asha@gmail.example",
-                "smtpHost": "smtp.gmail.com",
-                "smtpPort": 465,
-                "smtpSecure": true,
-                "smtpUser": "asha@gmail.example",
-                "smtpPass": "app-password",
-                "imapHost": "imap.gmail.com",
-                "imapPort": 993,
-                "imapSecure": true,
-                "imapUser": "asha@gmail.example",
-                "imapPass": "app-password",
-                "signature": "Asha"
-            })),
+            value: SettingValue::Object(gmail_oauth_account()),
         },
     )
     .expect("save email account setting");
@@ -79,22 +85,7 @@ fn sends_email_account_settings_to_email_check_sidecar() {
     let _ = fs::remove_file(&request_path);
     assert_eq!(
         request["params"]["emailCheck"]["account"],
-        json!({
-            "provider": "gmail",
-            "fromName": "Asha Rao",
-            "fromEmail": "asha@gmail.example",
-            "smtpHost": "smtp.gmail.com",
-            "smtpPort": 465,
-            "smtpSecure": true,
-            "smtpUser": "asha@gmail.example",
-            "smtpPass": "app-password",
-            "imapHost": "imap.gmail.com",
-            "imapPort": 993,
-            "imapSecure": true,
-            "imapUser": "asha@gmail.example",
-            "imapPass": "app-password",
-            "signature": "Asha"
-        })
+        gmail_oauth_account()
     );
     assert_eq!(
         request["params"]["emailCheck"]["fetch"],
@@ -112,10 +103,16 @@ fn resolves_keyring_email_secret_references_for_sidecar_workflows() {
         .lock()
         .expect("lock secure store test");
     keyring_core::set_default_store(keyring_core::mock::Store::new().expect("mock keyring store"));
-    careercaveman_lib::secure_store::save_secret("email.account.smtpPass", "smtp-secret")
-        .expect("save smtp secret");
-    careercaveman_lib::secure_store::save_secret("email.account.imapPass", "imap-secret")
-        .expect("save imap secret");
+    careercaveman_lib::secure_store::save_secret(
+        "email.account.oauthClientSecret",
+        "google-client-secret",
+    )
+    .expect("save OAuth client secret");
+    careercaveman_lib::secure_store::save_secret(
+        "email.account.oauthRefreshToken",
+        "google-refresh-token",
+    )
+    .expect("save OAuth refresh token");
 
     let connection = Connection::open_in_memory().expect("open in-memory database");
     initialize_schema(&connection).expect("initialize schema");
@@ -126,26 +123,29 @@ fn resolves_keyring_email_secret_references_for_sidecar_workflows() {
             category: Some("email".to_string()),
             value: SettingValue::Object(json!({
                 "provider": "gmail",
+                "authType": "oauth2",
                 "fromName": "Asha Rao",
                 "fromEmail": "asha@gmail.example",
                 "smtpHost": "smtp.gmail.com",
                 "smtpPort": 465,
                 "smtpSecure": true,
                 "smtpUser": "asha@gmail.example",
-                "smtpPass": {
-                    "secretRef": "email.account.smtpPass",
-                    "service": "careercaveman",
-                    "uri": "keyring://careercaveman/email.account.smtpPass"
-                },
                 "imapHost": "imap.gmail.com",
                 "imapPort": 993,
                 "imapSecure": true,
                 "imapUser": "asha@gmail.example",
-                "imapPass": {
-                    "secretRef": "email.account.imapPass",
+                "oauthClientId": "google-client-id",
+                "oauthClientSecret": {
+                    "secretRef": "email.account.oauthClientSecret",
                     "service": "careercaveman",
-                    "uri": "keyring://careercaveman/email.account.imapPass"
-                }
+                    "uri": "keyring://careercaveman/email.account.oauthClientSecret"
+                },
+                "oauthRefreshToken": {
+                    "secretRef": "email.account.oauthRefreshToken",
+                    "service": "careercaveman",
+                    "uri": "keyring://careercaveman/email.account.oauthRefreshToken"
+                },
+                "signature": "Asha"
             })),
         },
     )
@@ -164,12 +164,12 @@ fn resolves_keyring_email_secret_references_for_sidecar_workflows() {
             .expect("captured request is JSON");
     let _ = fs::remove_file(&request_path);
     assert_eq!(
-        request["params"]["emailCheck"]["account"]["smtpPass"],
-        json!("smtp-secret")
+        request["params"]["emailCheck"]["account"]["oauthClientSecret"],
+        json!("google-client-secret")
     );
     assert_eq!(
-        request["params"]["emailCheck"]["account"]["imapPass"],
-        json!("imap-secret")
+        request["params"]["emailCheck"]["account"]["oauthRefreshToken"],
+        json!("google-refresh-token")
     );
 
     keyring_core::unset_default_store();
@@ -224,22 +224,7 @@ fn sends_email_account_settings_to_cold_email_sidecar() {
         UpsertSetting {
             key: "email.account".to_string(),
             category: Some("email".to_string()),
-            value: SettingValue::Object(json!({
-                "provider": "gmail",
-                "fromName": "Asha Rao",
-                "fromEmail": "asha@gmail.example",
-                "smtpHost": "smtp.gmail.com",
-                "smtpPort": 465,
-                "smtpSecure": true,
-                "smtpUser": "asha@gmail.example",
-                "smtpPass": "app-password",
-                "imapHost": "imap.gmail.com",
-                "imapPort": 993,
-                "imapSecure": true,
-                "imapUser": "asha@gmail.example",
-                "imapPass": "app-password",
-                "signature": "Asha"
-            })),
+            value: SettingValue::Object(gmail_oauth_account()),
         },
     )
     .expect("save email account setting");
@@ -258,22 +243,7 @@ fn sends_email_account_settings_to_cold_email_sidecar() {
     let _ = fs::remove_file(&request_path);
     assert_eq!(
         request["params"]["coldEmail"]["account"],
-        json!({
-            "provider": "gmail",
-            "fromName": "Asha Rao",
-            "fromEmail": "asha@gmail.example",
-            "smtpHost": "smtp.gmail.com",
-            "smtpPort": 465,
-            "smtpSecure": true,
-            "smtpUser": "asha@gmail.example",
-            "smtpPass": "app-password",
-            "imapHost": "imap.gmail.com",
-            "imapPort": 993,
-            "imapSecure": true,
-            "imapUser": "asha@gmail.example",
-            "imapPass": "app-password",
-            "signature": "Asha"
-        })
+        gmail_oauth_account()
     );
 }
 
@@ -286,22 +256,7 @@ fn sends_email_account_and_follow_up_context_to_follow_up_sidecar_and_persists_r
         UpsertSetting {
             key: "email.account".to_string(),
             category: Some("email".to_string()),
-            value: SettingValue::Object(json!({
-                "provider": "gmail",
-                "fromName": "Asha Rao",
-                "fromEmail": "asha@gmail.example",
-                "smtpHost": "smtp.gmail.com",
-                "smtpPort": 465,
-                "smtpSecure": true,
-                "smtpUser": "asha@gmail.example",
-                "smtpPass": "app-password",
-                "imapHost": "imap.gmail.com",
-                "imapPort": 993,
-                "imapSecure": true,
-                "imapUser": "asha@gmail.example",
-                "imapPass": "app-password",
-                "signature": "Asha"
-            })),
+            value: SettingValue::Object(gmail_oauth_account()),
         },
     )
     .expect("save email account setting");
@@ -367,22 +322,7 @@ fn sends_email_account_and_follow_up_context_to_follow_up_sidecar_and_persists_r
     let _ = fs::remove_file(&request_path);
     assert_eq!(
         request["params"]["followUp"]["account"],
-        json!({
-            "provider": "gmail",
-            "fromName": "Asha Rao",
-            "fromEmail": "asha@gmail.example",
-            "smtpHost": "smtp.gmail.com",
-            "smtpPort": 465,
-            "smtpSecure": true,
-            "smtpUser": "asha@gmail.example",
-            "smtpPass": "app-password",
-            "imapHost": "imap.gmail.com",
-            "imapPort": 993,
-            "imapSecure": true,
-            "imapUser": "asha@gmail.example",
-            "imapPass": "app-password",
-            "signature": "Asha"
-        })
+        gmail_oauth_account()
     );
     assert_eq!(
         request["params"]["followUp"]["applications"][0],

@@ -36,10 +36,14 @@ describe("email settings", () => {
 
     expect(settings).toEqual({
       provider: "outlook",
+      authType: "password",
       fromName: "Asha Rao",
       fromEmail: "asha@example.com",
       username: "asha@example.com",
       appPassword: "app-password",
+      oauthClientId: "",
+      oauthClientSecret: "",
+      oauthRefreshToken: "",
       smtpHost: "smtp.office365.com",
       smtpPort: 587,
       smtpSecure: false,
@@ -53,32 +57,36 @@ describe("email settings", () => {
     });
   });
 
-  it("serializes a configured Gmail account into sidecar SMTP and IMAP settings", () => {
+  it("serializes a configured Gmail account into OAuth2 sidecar settings", () => {
     const values = emailSettingsToStoredValues({
       ...defaultEmailSettings,
       provider: "gmail",
       fromName: " Asha Rao ",
       fromEmail: " asha@gmail.com ",
       username: "",
-      appPassword: " app-password ",
+      oauthClientId: " google-client-id ",
+      oauthClientSecret: " google-client-secret ",
+      oauthRefreshToken: " google-refresh-token ",
       signature: " Best,\nAsha ",
     });
 
     expect(values).toEqual({
       account: {
         provider: "gmail",
+        authType: "oauth2",
         fromName: "Asha Rao",
         fromEmail: "asha@gmail.com",
         smtpHost: "smtp.gmail.com",
         smtpPort: 465,
         smtpSecure: true,
         smtpUser: "asha@gmail.com",
-        smtpPass: "app-password",
         imapHost: "imap.gmail.com",
         imapPort: 993,
         imapSecure: true,
         imapUser: "asha@gmail.com",
-        imapPass: "app-password",
+        oauthClientId: "google-client-id",
+        oauthClientSecret: "google-client-secret",
+        oauthRefreshToken: "google-refresh-token",
         signature: "Best,\nAsha",
       },
       check: {
@@ -117,7 +125,9 @@ describe("email settings", () => {
         ...defaultEmailSettings,
         fromName: "Asha Rao",
         fromEmail: "asha@gmail.com",
-        appPassword: "app-password",
+        oauthClientId: "google-client-id",
+        oauthClientSecret: "google-client-secret",
+        oauthRefreshToken: "google-refresh-token",
       }),
     ).toBe(true);
   });

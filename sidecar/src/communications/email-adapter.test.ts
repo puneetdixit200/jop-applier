@@ -7,13 +7,14 @@ import {
 } from "./email-adapter.js";
 
 const account: EmailAccountConfig = {
-  provider: "gmail",
-  smtpHost: "smtp.gmail.com",
-  smtpPort: 465,
-  smtpSecure: true,
+  provider: "outlook",
+  authType: "password",
+  smtpHost: "smtp.office365.com",
+  smtpPort: 587,
+  smtpSecure: false,
   smtpUser: "asha@gmail.example",
   smtpPass: "app-password",
-  imapHost: "imap.gmail.com",
+  imapHost: "outlook.office365.com",
   imapPort: 993,
   imapSecure: true,
   imapUser: "asha@gmail.example",
@@ -21,6 +22,24 @@ const account: EmailAccountConfig = {
   fromName: "Asha Rao",
   fromEmail: "asha@gmail.example",
   signature: "Asha Rao\nReact and Tauri engineer",
+};
+
+const oauthAccount: EmailAccountConfig = {
+  provider: "gmail",
+  authType: "oauth2",
+  smtpHost: "smtp.gmail.com",
+  smtpPort: 465,
+  smtpSecure: true,
+  smtpUser: "asha@gmail.example",
+  imapHost: "imap.gmail.com",
+  imapPort: 993,
+  imapSecure: true,
+  imapUser: "asha@gmail.example",
+  fromName: "Asha Rao",
+  fromEmail: "asha@gmail.example",
+  oauthClientId: "google-client-id",
+  oauthClientSecret: "google-client-secret",
+  oauthRefreshToken: "google-refresh-token",
 };
 
 describe("email adapter", () => {
@@ -48,9 +67,9 @@ describe("email adapter", () => {
     ).resolves.toEqual({ messageId: "smtp-message-1" });
 
     expect(transportOptions).toEqual({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
+      host: "smtp.office365.com",
+      port: 587,
+      secure: false,
       auth: {
         user: "asha@gmail.example",
         pass: "app-password",
@@ -61,6 +80,39 @@ describe("email adapter", () => {
       to: "mira@northstar.example",
       subject: "Northstar Labs workflow automation intro",
       text: "Hi Mira,\n\nI build local-first workflow tools.\n\n-- \nAsha Rao\nReact and Tauri engineer",
+    });
+  });
+
+  it("sends Gmail SMTP through OAuth2 instead of app password auth", async () => {
+    let transportOptions: unknown;
+    const sender = createSmtpEmailSender(oauthAccount, {
+      createTransport: (options) => {
+        transportOptions = options;
+        return {
+          sendMail: async () => ({ messageId: "oauth-smtp-message-1" }),
+        };
+      },
+    });
+
+    await expect(
+      sender.sendEmail({
+        to: "mira@northstar.example",
+        subject: "Hello",
+        body: "Hi Mira",
+      }),
+    ).resolves.toEqual({ messageId: "oauth-smtp-message-1" });
+
+    expect(transportOptions).toEqual({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      auth: {
+        type: "OAuth2",
+        user: "asha@gmail.example",
+        clientId: "google-client-id",
+        clientSecret: "google-client-secret",
+        refreshToken: "google-refresh-token",
+      },
     });
   });
 
@@ -136,7 +188,7 @@ describe("email adapter", () => {
     ]);
 
     expect(clientOptions).toEqual({
-      host: "imap.gmail.com",
+      host: "outlook.office365.com",
       port: 993,
       secure: true,
       auth: {
@@ -148,6 +200,36 @@ describe("email adapter", () => {
     expect(fetchUids).toEqual([101]);
     expect(fetchQuery).toEqual({ envelope: true, source: true, uid: true });
     expect(calls).toEqual(["connect", "mailbox:INBOX", "fetch:101", "seen:101:\\Seen", "logout"]);
+  });
+
+  it("fetches Gmail IMAP through an OAuth2 access token", async () => {
+    let clientOptions: unknown;
+    const reader = createImapEmailReader(oauthAccount, {
+      resolveOAuth2AccessToken: async () => "ya29-access-token",
+      createClient: (options) => {
+        clientOptions = options;
+        return {
+          connect: async () => {},
+          mailboxOpen: async () => {},
+          search: async () => [],
+          fetch: async function* () {},
+          messageFlagsAdd: async () => {},
+          logout: async () => {},
+        };
+      },
+    });
+
+    await expect(reader.fetchUnread()).resolves.toEqual([]);
+
+    expect(clientOptions).toEqual({
+      host: "imap.gmail.com",
+      port: 993,
+      secure: true,
+      auth: {
+        user: "asha@gmail.example",
+        accessToken: "ya29-access-token",
+      },
+    });
   });
 
   it("provides built-in Gmail and Outlook server defaults", () => {

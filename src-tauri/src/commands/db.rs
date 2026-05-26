@@ -126,6 +126,8 @@ pub fn protect_setting_secrets(setting: UpsertSetting) -> Result<UpsertSetting, 
             &[
                 ("smtpPass", "email.account.smtpPass"),
                 ("imapPass", "email.account.imapPass"),
+                ("oauthClientSecret", "email.account.oauthClientSecret"),
+                ("oauthRefreshToken", "email.account.oauthRefreshToken"),
             ],
         ),
         "export.config" => protect_object_setting_fields(

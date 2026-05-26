@@ -3,6 +3,7 @@ import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
 
 export type EmailProvider = "gmail" | "outlook" | "custom";
+export type EmailAuthType = "password" | "oauth2";
 
 export type EmailServerSettings = {
   smtpHost?: string;
@@ -15,16 +16,20 @@ export type EmailServerSettings = {
 
 export type EmailAccountConfig = {
   provider: EmailProvider;
+  authType?: EmailAuthType;
   smtpHost: string;
   smtpPort: number;
   smtpSecure: boolean;
   smtpUser: string;
-  smtpPass: string;
+  smtpPass?: string;
   imapHost: string;
   imapPort: number;
   imapSecure: boolean;
   imapUser: string;
-  imapPass: string;
+  imapPass?: string;
+  oauthClientId?: string;
+  oauthClientSecret?: string;
+  oauthRefreshToken?: string;
   fromName: string;
   fromEmail: string;
   signature?: string | null;
@@ -56,10 +61,20 @@ type SmtpTransportOptions = {
   host: string;
   port: number;
   secure: boolean;
-  auth: {
-    user: string;
-    pass: string;
-  };
+  auth: SmtpPasswordAuth | SmtpOAuth2Auth;
+};
+
+type SmtpPasswordAuth = {
+  user: string;
+  pass: string;
+};
+
+type SmtpOAuth2Auth = {
+  type: "OAuth2";
+  user: string;
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
 };
 
 type SmtpMessage = {
@@ -97,7 +112,10 @@ export type SmtpEmailSenderOptions = {
 
 export type ImapEmailReaderOptions = {
   createClient?: ImapClientFactory;
+  resolveOAuth2AccessToken?: OAuth2AccessTokenResolver;
 };
+
+export type OAuth2AccessTokenResolver = (config: EmailAccountConfig) => Promise<string>;
 
 export type FetchUnreadOptions = {
   mailbox?: string;
@@ -145,10 +163,7 @@ export function createSmtpEmailSender(
         host: config.smtpHost,
         port: config.smtpPort,
         secure: config.smtpSecure,
-        auth: {
-          user: config.smtpUser,
-          pass: config.smtpPass,
-        },
+        auth: smtpAuth(config),
       });
       const info = await transport.sendMail({
         from: formatAddress(config.fromName, config.fromEmail),
@@ -170,6 +185,7 @@ export function createImapEmailReader(
   options: ImapEmailReaderOptions = {},
 ) {
   const createClient = options.createClient ?? ((imapOptions) => new ImapFlow(imapOptions) as ImapClient);
+  const resolveOAuth2AccessToken = options.resolveOAuth2AccessToken ?? fetchGoogleOAuth2AccessToken;
 
   return {
     async fetchUnread(fetchOptions: FetchUnreadOptions = {}): Promise<InboundEmail[]> {
@@ -177,10 +193,7 @@ export function createImapEmailReader(
         host: config.imapHost,
         port: config.imapPort,
         secure: config.imapSecure,
-        auth: {
-          user: config.imapUser,
-          pass: config.imapPass,
-        },
+        auth: await imapAuth(config, resolveOAuth2AccessToken),
       });
       const mailbox = fetchOptions.mailbox ?? "INBOX";
 
@@ -212,6 +225,84 @@ export function createImapEmailReader(
       }
     },
   };
+}
+
+function smtpAuth(config: EmailAccountConfig): SmtpPasswordAuth | SmtpOAuth2Auth {
+  if (config.authType === "oauth2") {
+    return {
+      type: "OAuth2",
+      user: config.smtpUser,
+      clientId: requiredOAuthField(config.oauthClientId, "Google OAuth client ID"),
+      clientSecret: requiredOAuthField(config.oauthClientSecret, "Google OAuth client secret"),
+      refreshToken: requiredOAuthField(config.oauthRefreshToken, "Google OAuth refresh token"),
+    };
+  }
+
+  return {
+    user: config.smtpUser,
+    pass: requiredOAuthField(config.smtpPass, "SMTP password"),
+  };
+}
+
+async function imapAuth(
+  config: EmailAccountConfig,
+  resolveOAuth2AccessToken: OAuth2AccessTokenResolver,
+): Promise<ImapFlowOptions["auth"]> {
+  if (config.authType === "oauth2") {
+    return {
+      user: config.imapUser,
+      accessToken: await resolveOAuth2AccessToken(config),
+    };
+  }
+
+  return {
+    user: config.imapUser,
+    pass: requiredOAuthField(config.imapPass, "IMAP password"),
+  };
+}
+
+export async function fetchGoogleOAuth2AccessToken(config: EmailAccountConfig): Promise<string> {
+  const clientId = requiredOAuthField(config.oauthClientId, "Google OAuth client ID");
+  const clientSecret = requiredOAuthField(config.oauthClientSecret, "Google OAuth client secret");
+  const refreshToken = requiredOAuthField(config.oauthRefreshToken, "Google OAuth refresh token");
+  const body = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    refresh_token: refreshToken,
+    grant_type: "refresh_token",
+  });
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+  const payload = await response.json().catch(() => null);
+  const accessToken = isRecord(payload) && typeof payload.access_token === "string"
+    ? payload.access_token
+    : null;
+
+  if (!response.ok || !accessToken) {
+    const errorDescription = isRecord(payload) && typeof payload.error_description === "string"
+      ? payload.error_description
+      : `Google OAuth token refresh returned HTTP ${response.status}`;
+    throw new Error(errorDescription);
+  }
+
+  return accessToken;
+}
+
+function requiredOAuthField(value: string | undefined, label: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    throw new Error(`${label} is required`);
+  }
+  return trimmed;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function inboundEmailFromMessage(message: FetchMessageObject): Promise<InboundEmail> {

@@ -12,6 +12,25 @@ const fallback: EmailResponseWorkerDependencies = {
   markResponseProcessed: async () => undefined,
 };
 
+const gmailOAuthAccount = {
+  provider: "gmail",
+  authType: "oauth2",
+  fromName: "Asha Rao",
+  fromEmail: "asha@gmail.example",
+  smtpHost: "smtp.gmail.com",
+  smtpPort: 465,
+  smtpSecure: true,
+  smtpUser: "asha@gmail.example",
+  imapHost: "imap.gmail.com",
+  imapPort: 993,
+  imapSecure: true,
+  imapUser: "asha@gmail.example",
+  oauthClientId: "google-client-id",
+  oauthClientSecret: "google-client-secret",
+  oauthRefreshToken: "google-refresh-token",
+  signature: "Asha",
+};
+
 describe("email check config", () => {
   it("builds email-check dependencies from workflow SMTP and IMAP settings", async () => {
     const readerConfigs: unknown[] = [];
@@ -38,22 +57,7 @@ describe("email check config", () => {
     const dependencies = createEmailCheckDependenciesFromWorkflowInput(
       {
         emailCheck: {
-          account: {
-            provider: "gmail",
-            fromName: "Asha Rao",
-            fromEmail: "asha@gmail.example",
-            smtpHost: "smtp.gmail.com",
-            smtpPort: 465,
-            smtpSecure: true,
-            smtpUser: "asha@gmail.example",
-            smtpPass: "app-password",
-            imapHost: "imap.gmail.com",
-            imapPort: 993,
-            imapSecure: true,
-            imapUser: "asha@gmail.example",
-            imapPass: "app-password",
-            signature: "Asha",
-          },
+          account: gmailOAuthAccount,
           fetch: {
             mailbox: "Replies",
             limit: 25,
@@ -82,24 +86,7 @@ describe("email check config", () => {
         responseType: "interview",
       },
     ]);
-    expect(readerConfigs).toEqual([
-      {
-        provider: "gmail",
-        fromName: "Asha Rao",
-        fromEmail: "asha@gmail.example",
-        smtpHost: "smtp.gmail.com",
-        smtpPort: 465,
-        smtpSecure: true,
-        smtpUser: "asha@gmail.example",
-        smtpPass: "app-password",
-        imapHost: "imap.gmail.com",
-        imapPort: 993,
-        imapSecure: true,
-        imapUser: "asha@gmail.example",
-        imapPass: "app-password",
-        signature: "Asha",
-      },
-    ]);
+    expect(readerConfigs).toEqual([gmailOAuthAccount]);
     expect(fetchOptions).toEqual([
       {
         mailbox: "Replies",
@@ -126,22 +113,7 @@ describe("email check config", () => {
     const dependencies = createEmailCheckDependenciesFromWorkflowInput(
       {
         emailCheck: {
-          account: {
-            provider: "gmail",
-            fromName: "Asha Rao",
-            fromEmail: "asha@gmail.example",
-            smtpHost: "smtp.gmail.com",
-            smtpPort: 465,
-            smtpSecure: true,
-            smtpUser: "asha@gmail.example",
-            smtpPass: "app-password",
-            imapHost: "imap.gmail.com",
-            imapPort: 993,
-            imapSecure: true,
-            imapUser: "asha@gmail.example",
-            imapPass: "app-password",
-            signature: null,
-          },
+          account: { ...gmailOAuthAccount, signature: null },
           matchContext: {
             applications: [
               {
@@ -202,22 +174,7 @@ describe("email check config", () => {
     const dependencies = createEmailCheckDependenciesFromWorkflowInput(
       {
         emailCheck: {
-          account: {
-            provider: "gmail",
-            fromName: "Asha Rao",
-            fromEmail: "asha@gmail.example",
-            smtpHost: "smtp.gmail.com",
-            smtpPort: 465,
-            smtpSecure: true,
-            smtpUser: "asha@gmail.example",
-            smtpPass: "app-password",
-            imapHost: "imap.gmail.com",
-            imapPort: 993,
-            imapSecure: true,
-            imapUser: "asha@gmail.example",
-            imapPass: "app-password",
-            signature: null,
-          },
+          account: { ...gmailOAuthAccount, signature: null },
           outreachContext: {
             emails: [
               {

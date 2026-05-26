@@ -12,6 +12,25 @@ const fallback: ColdEmailWorkerDependencies = {
   saveCommunication: async () => ({ communicationId: null }),
 };
 
+const gmailOAuthAccount = {
+  provider: "gmail",
+  authType: "oauth2",
+  fromName: "Asha Rao",
+  fromEmail: "asha@gmail.example",
+  smtpHost: "smtp.gmail.com",
+  smtpPort: 465,
+  smtpSecure: true,
+  smtpUser: "asha@gmail.example",
+  imapHost: "imap.gmail.com",
+  imapPort: 993,
+  imapSecure: true,
+  imapUser: "asha@gmail.example",
+  oauthClientId: "google-client-id",
+  oauthClientSecret: "google-client-secret",
+  oauthRefreshToken: "google-refresh-token",
+  signature: "Asha",
+};
+
 describe("cold email config", () => {
   it("builds an SMTP sender from configured workflow email account", async () => {
     const senderConfigs: unknown[] = [];
@@ -29,22 +48,7 @@ describe("cold email config", () => {
     const dependencies = createColdEmailDependenciesFromWorkflowInput(
       {
         coldEmail: {
-          account: {
-            provider: "gmail",
-            fromName: "Asha Rao",
-            fromEmail: "asha@gmail.example",
-            smtpHost: "smtp.gmail.com",
-            smtpPort: 465,
-            smtpSecure: true,
-            smtpUser: "asha@gmail.example",
-            smtpPass: "app-password",
-            imapHost: "imap.gmail.com",
-            imapPort: 993,
-            imapSecure: true,
-            imapUser: "asha@gmail.example",
-            imapPass: "app-password",
-            signature: "Asha",
-          },
+          account: gmailOAuthAccount,
         },
       },
       {
@@ -61,24 +65,7 @@ describe("cold email config", () => {
         body: "Hi Mira",
       }),
     ).resolves.toEqual({ messageId: "smtp-message-1" });
-    expect(senderConfigs).toEqual([
-      {
-        provider: "gmail",
-        fromName: "Asha Rao",
-        fromEmail: "asha@gmail.example",
-        smtpHost: "smtp.gmail.com",
-        smtpPort: 465,
-        smtpSecure: true,
-        smtpUser: "asha@gmail.example",
-        smtpPass: "app-password",
-        imapHost: "imap.gmail.com",
-        imapPort: 993,
-        imapSecure: true,
-        imapUser: "asha@gmail.example",
-        imapPass: "app-password",
-        signature: "Asha",
-      },
-    ]);
+    expect(senderConfigs).toEqual([gmailOAuthAccount]);
     expect(sentMessages).toEqual([
       {
         to: "mira@northstar.example",

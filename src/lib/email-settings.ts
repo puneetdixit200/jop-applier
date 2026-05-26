@@ -1,11 +1,16 @@
 export type EmailProvider = "gmail" | "outlook" | "custom";
+export type EmailAuthType = "password" | "oauth2";
 
 export type EmailSettings = {
   provider: EmailProvider;
+  authType: EmailAuthType;
   fromName: string;
   fromEmail: string;
   username: string;
   appPassword: string;
+  oauthClientId: string;
+  oauthClientSecret: string;
+  oauthRefreshToken: string;
   smtpHost: string;
   smtpPort: number;
   smtpSecure: boolean;
@@ -20,18 +25,22 @@ export type EmailSettings = {
 
 export type StoredEmailAccount = {
   provider: EmailProvider;
+  authType?: EmailAuthType;
   fromName: string;
   fromEmail: string;
   smtpHost: string;
   smtpPort: number;
   smtpSecure: boolean;
   smtpUser: string;
-  smtpPass: string;
+  smtpPass?: string;
   imapHost: string;
   imapPort: number;
   imapSecure: boolean;
   imapUser: string;
-  imapPass: string;
+  imapPass?: string;
+  oauthClientId?: string;
+  oauthClientSecret?: string;
+  oauthRefreshToken?: string;
   signature: string | null;
 };
 
@@ -78,10 +87,14 @@ const providerServerSettings = {
 
 export const defaultEmailSettings: EmailSettings = {
   provider: "gmail",
+  authType: "oauth2",
   fromName: "",
   fromEmail: "",
   username: "",
   appPassword: "",
+  oauthClientId: "",
+  oauthClientSecret: "",
+  oauthRefreshToken: "",
   ...providerServerSettings.gmail,
   mailbox: "INBOX",
   markSeen: false,
@@ -94,12 +107,13 @@ export function emailSettingsForProvider(
   provider: EmailProvider,
 ): EmailSettings {
   if (provider === "custom") {
-    return { ...current, provider };
+    return { ...current, provider, authType: "password" };
   }
 
   return {
     ...current,
     provider,
+    authType: provider === "gmail" ? "oauth2" : "password",
     ...providerServerSettings[provider],
   };
 }
@@ -113,13 +127,20 @@ export function emailSettingsFromStoredValues(
   const check = isRecord(checkValue) ? checkValue : {};
   const provider = emailProvider(account.provider, fallback.provider);
   const providerDefaults = emailSettingsForProvider(fallback, provider);
+  const authType = provider === "gmail"
+    ? "oauth2"
+    : emailAuthType(account.authType, "password");
 
   return {
     ...providerDefaults,
+    authType,
     fromName: stringValue(account.fromName, fallback.fromName),
     fromEmail: stringValue(account.fromEmail, fallback.fromEmail),
     username: stringValue(account.smtpUser, stringValue(account.imapUser, fallback.username)),
     appPassword: stringValue(account.smtpPass, stringValue(account.imapPass, fallback.appPassword)),
+    oauthClientId: stringValue(account.oauthClientId, fallback.oauthClientId),
+    oauthClientSecret: stringValue(account.oauthClientSecret, fallback.oauthClientSecret),
+    oauthRefreshToken: stringValue(account.oauthRefreshToken, fallback.oauthRefreshToken),
     smtpHost: stringValue(account.smtpHost, providerDefaults.smtpHost),
     smtpPort: positiveInteger(account.smtpPort, providerDefaults.smtpPort),
     smtpSecure: booleanValue(account.smtpSecure, providerDefaults.smtpSecure),
@@ -138,6 +159,10 @@ export function emailSettingsToStoredValues(settings: EmailSettings): StoredEmai
   const fromEmail = settings.fromEmail.trim();
   const username = settings.username.trim() || fromEmail;
   const appPassword = settings.appPassword.trim();
+  const authType = settings.provider === "gmail" ? "oauth2" : settings.authType;
+  const oauthClientId = settings.oauthClientId.trim();
+  const oauthClientSecret = settings.oauthClientSecret.trim();
+  const oauthRefreshToken = settings.oauthRefreshToken.trim();
   const smtpHost = settings.smtpHost.trim();
   const imapHost = settings.imapHost.trim();
   const mailbox = settings.mailbox.trim() || "INBOX";
@@ -153,7 +178,6 @@ export function emailSettingsToStoredValues(settings: EmailSettings): StoredEmai
     fromName.length === 0 ||
     fromEmail.length === 0 ||
     username.length === 0 ||
-    appPassword.length === 0 ||
     smtpHost.length === 0 ||
     imapHost.length === 0 ||
     settings.smtpPort <= 0 ||
@@ -165,22 +189,57 @@ export function emailSettingsToStoredValues(settings: EmailSettings): StoredEmai
     };
   }
 
+  const baseAccount = {
+    provider: settings.provider,
+    authType,
+    fromName,
+    fromEmail,
+    smtpHost,
+    smtpPort: Math.floor(settings.smtpPort),
+    smtpSecure: settings.smtpSecure,
+    smtpUser: username,
+    imapHost,
+    imapPort: Math.floor(settings.imapPort),
+    imapSecure: settings.imapSecure,
+    imapUser: username,
+    signature: signature.length > 0 ? signature : null,
+  };
+
+  if (authType === "oauth2") {
+    if (
+      oauthClientId.length === 0 ||
+      oauthClientSecret.length === 0 ||
+      oauthRefreshToken.length === 0
+    ) {
+      return {
+        account: null,
+        check,
+      };
+    }
+
+    return {
+      account: {
+        ...baseAccount,
+        oauthClientId,
+        oauthClientSecret,
+        oauthRefreshToken,
+      },
+      check,
+    };
+  }
+
+  if (appPassword.length === 0) {
+    return {
+      account: null,
+      check,
+    };
+  }
+
   return {
     account: {
-      provider: settings.provider,
-      fromName,
-      fromEmail,
-      smtpHost,
-      smtpPort: Math.floor(settings.smtpPort),
-      smtpSecure: settings.smtpSecure,
-      smtpUser: username,
+      ...baseAccount,
       smtpPass: appPassword,
-      imapHost,
-      imapPort: Math.floor(settings.imapPort),
-      imapSecure: settings.imapSecure,
-      imapUser: username,
       imapPass: appPassword,
-      signature: signature.length > 0 ? signature : null,
     },
     check,
   };
@@ -192,6 +251,10 @@ export function isEmailSettingsConfigured(settings: EmailSettings) {
 
 function emailProvider(value: unknown, fallback: EmailProvider): EmailProvider {
   return value === "gmail" || value === "outlook" || value === "custom" ? value : fallback;
+}
+
+function emailAuthType(value: unknown, fallback: EmailAuthType): EmailAuthType {
+  return value === "password" || value === "oauth2" ? value : fallback;
 }
 
 function stringValue(value: unknown, fallback: string): string {
