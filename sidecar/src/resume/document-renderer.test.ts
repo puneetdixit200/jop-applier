@@ -34,7 +34,7 @@ afterEach(async () => {
 
 describe("document renderers", () => {
   it("writes tailored resume PDF and application-form JSON artifacts", async () => {
-    const outputDir = await mkdtemp(join(tmpdir(), "cluelyy-render-"));
+    const outputDir = await mkdtemp(join(tmpdir(), "job-hunt-render-"));
     tempDirs.push(outputDir);
 
     const result = await renderResumeArtifacts(
@@ -90,7 +90,7 @@ describe("document renderers", () => {
   });
 
   it("writes a cover letter PDF artifact", async () => {
-    const outputDir = await mkdtemp(join(tmpdir(), "cluelyy-cover-"));
+    const outputDir = await mkdtemp(join(tmpdir(), "job-hunt-cover-"));
     tempDirs.push(outputDir);
 
     const result = await renderCoverLetterPdf(
@@ -117,7 +117,7 @@ describe("document renderers", () => {
   });
 
   it("renders named resume templates for professional layouts", async () => {
-    const outputDir = await mkdtemp(join(tmpdir(), "cluelyy-template-"));
+    const outputDir = await mkdtemp(join(tmpdir(), "job-hunt-template-"));
     tempDirs.push(outputDir);
 
     const result = await renderResumeArtifacts(

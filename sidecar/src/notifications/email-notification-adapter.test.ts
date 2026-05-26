@@ -19,7 +19,7 @@ describe("email notification adapter", () => {
         imapSecure: true,
         imapUser: "sender@example.com",
         imapPass: "secret",
-        fromName: "cluelyy",
+        fromName: "job-hunt",
         fromEmail: "sender@example.com",
       },
       to: ["beta@example.com", "owner@example.com"],

@@ -29,7 +29,7 @@ describe("browser manager", () => {
         };
       },
     };
-    const sessionRoot = path.join("/tmp", "cluelyy-sessions");
+    const sessionRoot = path.join("/tmp", "job-hunt-sessions");
     const expectedSessionDirectory = path.join(sessionRoot, "linkedin-jobs");
     const manager = new BrowserManager(
       adapter,
@@ -39,7 +39,7 @@ describe("browser manager", () => {
         maxConcurrentPages: 2,
         sessionRoot,
         timezone: "Asia/Kolkata",
-        userAgent: "cluelyy Test Browser",
+        userAgent: "job-hunt Test Browser",
         viewport: { width: 1366, height: 768 },
       }),
     );
@@ -58,7 +58,7 @@ describe("browser manager", () => {
         locale: "en-IN",
         maxConcurrentPages: 2,
         timezoneId: "Asia/Kolkata",
-        userAgent: "cluelyy Test Browser",
+        userAgent: "job-hunt Test Browser",
         viewport: { width: 1366, height: 768 },
       },
     });
@@ -93,7 +93,7 @@ describe("browser manager", () => {
       locale: "en-IN",
       maxConcurrentPages: 2,
       timezoneId: "Asia/Kolkata",
-      userAgent: "cluelyy Test Browser",
+      userAgent: "job-hunt Test Browser",
       viewport: { width: 1366, height: 768 },
     });
 
@@ -108,7 +108,7 @@ describe("browser manager", () => {
           locale: "en-IN",
           maxConcurrentPages: 2,
           timezoneId: "Asia/Kolkata",
-          userAgent: "cluelyy Test Browser",
+          userAgent: "job-hunt Test Browser",
           viewport: { width: 1366, height: 768 },
         },
       },
@@ -137,7 +137,7 @@ describe("browser manager", () => {
           { server: "http://proxy-a.example:8080" },
           { server: "http://proxy-b.example:8080", username: "user", password: "pass" },
         ],
-        sessionRoot: "/tmp/cluelyy-sessions",
+        sessionRoot: "/tmp/job-hunt-sessions",
       }),
     );
 
@@ -219,7 +219,7 @@ describe("browser manager", () => {
     };
     const manager = new BrowserManager(
       adapter,
-      createDefaultStealthConfig({ sessionRoot: "/tmp/cluelyy-sessions" }),
+      createDefaultStealthConfig({ sessionRoot: "/tmp/job-hunt-sessions" }),
       { sessionStore: store },
     );
 

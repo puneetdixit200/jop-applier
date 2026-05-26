@@ -91,8 +91,8 @@ function smtpRcptProbe(
 ): Promise<EmailVerificationResult["status"]> {
   const timeoutMs = dependencies.timeoutMs ?? 4_000;
   const connect = dependencies.connect ?? net.connect;
-  const heloHost = dependencies.heloHost ?? "cluelyy.local";
-  const probeFrom = dependencies.probeFrom ?? "probe@cluelyy.local";
+  const heloHost = dependencies.heloHost ?? "job-hunt.local";
+  const probeFrom = dependencies.probeFrom ?? "probe@job-hunt.local";
   const commands = [
     `EHLO ${heloHost}\r\n`,
     `MAIL FROM:<${probeFrom}>\r\n`,

@@ -1530,7 +1530,7 @@ export function App() {
         <div className="brand">
           <div className="brand-mark">C</div>
           <div>
-            <h1>cluelyy</h1>
+            <h1>job-hunt</h1>
             <span>Local career agent</span>
           </div>
         </div>

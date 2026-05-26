@@ -10,7 +10,7 @@ import {
 
 describe("encrypted browser session store", () => {
   it("stores per-platform browser storage state as AES-GCM encrypted files", async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), "cluelyy-sessions-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "job-hunt-sessions-"));
     const store = new EncryptedBrowserSessionStore({
       rootDir,
       key: "local test passphrase",
@@ -54,7 +54,7 @@ describe("encrypted browser session store", () => {
   });
 
   it("rejects encrypted session files when the key does not match", async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), "cluelyy-sessions-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "job-hunt-sessions-"));
     const state: BrowserStorageState = { cookies: [], origins: [] };
 
     try {

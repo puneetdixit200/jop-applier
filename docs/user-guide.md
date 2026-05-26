@@ -1,6 +1,6 @@
-# cluelyy User Guide
+# job-hunt User Guide
 
-cluelyy is a local-first desktop app for job discovery, AI-assisted application preparation, tracking, follow-ups, analytics, and exports.
+job-hunt is a local-first desktop app for job discovery, AI-assisted application preparation, tracking, follow-ups, analytics, and exports.
 
 ## First Run
 
@@ -14,9 +14,9 @@ cluelyy is a local-first desktop app for job discovery, AI-assisted application 
 
 Application data is stored in the local SQLite database under the app data directory. Secrets such as Gmail OAuth tokens, export tokens, and the optional database encryption key are stored in the OS keychain.
 
-To encrypt the database, open Settings, enter an encryption key under Database privacy, and choose Enable Encryption. The app converts the existing SQLite file to SQLCipher and keeps the key in the OS keychain. You can also set `CLUELYY_DATABASE_KEY` before launch to open an encrypted database with an environment-provided key.
+To encrypt the database, open Settings, enter an encryption key under Database privacy, and choose Enable Encryption. The app converts the existing SQLite file to SQLCipher and keeps the key in the OS keychain. You can also set `JOB_HUNT_DATABASE_KEY` before launch to open an encrypted database with an environment-provided key.
 
-Browser session snapshots are encrypted separately when `BROWSER_SESSION_KEY` or `CLUELYY_BROWSER_SESSION_KEY` is configured.
+Browser session snapshots are encrypted separately when `BROWSER_SESSION_KEY` or `JOB_HUNT_BROWSER_SESSION_KEY` is configured.
 
 ## Automation
 
@@ -24,7 +24,7 @@ The dashboard can run due scheduled tasks or start discovery manually. The defau
 
 When a profile is configured, discovery can classify raw postings, score jobs against your skills, apply saved match rules, and surface high-match jobs through OS and in-app notifications.
 
-Optional email notifications use SMTP settings from environment variables such as `CLUELYY_NOTIFICATION_EMAIL_TO`, `CLUELYY_SMTP_HOST`, `CLUELYY_SMTP_USER`, `CLUELYY_SMTP_PASS`, and `CLUELYY_EMAIL_FROM`.
+Optional email notifications use SMTP settings from environment variables such as `JOB_HUNT_NOTIFICATION_EMAIL_TO`, `JOB_HUNT_SMTP_HOST`, `JOB_HUNT_SMTP_USER`, `JOB_HUNT_SMTP_PASS`, and `JOB_HUNT_EMAIL_FROM`.
 
 ## Gmail
 

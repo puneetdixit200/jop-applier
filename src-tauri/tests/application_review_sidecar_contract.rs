@@ -1,4 +1,4 @@
-use cluelyy_lib::{
+use job_hunt_lib::{
     commands::sidecar::run_application_review_decision_and_persist_with_command,
     db::{
         models::{Application, UpsertApplication, UpsertJob},

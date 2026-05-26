@@ -1,4 +1,4 @@
-use cluelyy_lib::db::{
+use job_hunt_lib::db::{
     models::{UpsertApplication, UpsertJob},
     queries::{list_application_events, list_applications, upsert_application, upsert_job},
     schema::initialize_schema,

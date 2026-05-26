@@ -1,4 +1,4 @@
 fn main() {
-    cluelyy_lib::run()
+    job_hunt_lib::run()
 }
 

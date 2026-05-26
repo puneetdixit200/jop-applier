@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "cluelyy",
+  "productName": "job-hunt",
   "version": "0.1.0",
-  "identifier": "com.cluelyy.app",
+  "identifier": "com.job-hunt.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "cluelyy",
+        "title": "job-hunt",
         "width": 1180,
         "height": 780,
         "minWidth": 860,

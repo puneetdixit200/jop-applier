@@ -1,4 +1,4 @@
-use cluelyy_lib::db::{
+use job_hunt_lib::db::{
     models::UpsertContact,
     queries::{list_contacts, save_contact},
     schema::initialize_schema,

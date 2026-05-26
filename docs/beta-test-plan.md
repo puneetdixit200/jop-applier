@@ -1,4 +1,4 @@
-# cluelyy Beta Test Plan
+# job-hunt Beta Test Plan
 
 Use this checklist before publishing a beta release candidate.
 

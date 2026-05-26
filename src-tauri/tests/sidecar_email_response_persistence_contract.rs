@@ -1,4 +1,4 @@
-use cluelyy_lib::{
+use job_hunt_lib::{
     commands::sidecar::run_sidecar_workflow_and_persist_jobs_with_command,
     db::{
         models::{UpsertApplication, UpsertContact, UpsertJob},

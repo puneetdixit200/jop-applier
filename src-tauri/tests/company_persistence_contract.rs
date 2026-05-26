@@ -1,4 +1,4 @@
-use cluelyy_lib::db::{
+use job_hunt_lib::db::{
     models::UpsertCompany,
     queries::{list_companies, save_company},
     schema::initialize_schema,

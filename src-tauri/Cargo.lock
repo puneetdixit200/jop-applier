@@ -537,25 +537,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cluelyy"
-version = "0.1.0"
-dependencies = [
- "apple-native-keyring-store",
- "dbus-secret-service-keyring-store",
- "keyring-core",
- "rusqlite",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-notification",
- "tauri-plugin-updater",
- "thiserror 2.0.18",
- "time",
- "windows-native-keyring-store",
-]
-
-[[package]]
 name = "combine"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2040,6 +2021,25 @@ checksum = "38c0b942f458fe50cdac086d2f946512305e5631e720728f2a61aabcd47a6264"
 dependencies = [
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "job-hunt"
+version = "0.1.0"
+dependencies = [
+ "apple-native-keyring-store",
+ "dbus-secret-service-keyring-store",
+ "keyring-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-notification",
+ "tauri-plugin-updater",
+ "thiserror 2.0.18",
+ "time",
+ "windows-native-keyring-store",
 ]
 
 [[package]]

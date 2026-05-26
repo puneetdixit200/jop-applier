@@ -1,4 +1,4 @@
-use cluelyy_lib::{
+use job_hunt_lib::{
     commands::sidecar::run_due_scheduled_tasks_with_command,
     db::{
         models::{
@@ -98,7 +98,7 @@ fn scheduled_analytics_refresh_sends_database_inputs_and_persists_snapshot() {
     )
     .expect("save analytics task");
     let request_path = std::env::temp_dir().join(format!(
-        "cluelyy-analytics-request-{}.json",
+        "job-hunt-analytics-request-{}.json",
         std::process::id()
     ));
     let command = capture_request_sidecar_with_result(
@@ -177,6 +177,6 @@ fn scheduled_analytics_refresh_sends_database_inputs_and_persists_snapshot() {
 fn capture_request_sidecar_with_result(
     request_path: &Path,
     response: serde_json::Value,
-) -> cluelyy_lib::sidecar::SidecarCommand {
+) -> job_hunt_lib::sidecar::SidecarCommand {
     common::capture_request_sidecar_with_response(request_path, response)
 }

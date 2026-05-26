@@ -1,4 +1,4 @@
-use cluelyy_lib::db::schema::{initialize_schema, schema_version};
+use job_hunt_lib::db::schema::{initialize_schema, schema_version};
 use rusqlite::Connection;
 
 #[test]

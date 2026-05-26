@@ -21,7 +21,7 @@ export default defineConfig({
 
 function browserDiscoveryApi() {
   return {
-    name: "cluelyy-browser-discovery-api",
+    name: "job-hunt-browser-discovery-api",
     configureServer(server) {
       server.middlewares.use("/api/discovery/run", handleBrowserDiscoveryRequest);
     },
@@ -118,7 +118,7 @@ function runSidecarRequest(payload: unknown): Promise<Record<string, unknown>> {
       cwd: rootDir,
       env: {
         ...process.env,
-        CLUELYY_SIDECAR_PATH: sidecarPath,
+        JOB_HUNT_SIDECAR_PATH: sidecarPath,
       },
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -178,7 +178,7 @@ async function fetchRemotiveJobs(query: SearchQuery) {
   }
 
   const response = await fetch(url, {
-    headers: { "user-agent": "cluelyyLocalDiscovery/0.1" },
+    headers: { "user-agent": "job-huntLocalDiscovery/0.1" },
   });
   if (!response.ok) {
     throw new Error(`Remotive discovery returned HTTP ${response.status}`);
@@ -200,7 +200,7 @@ async function fetchRemoteOkJobs(query: SearchQuery) {
   }
 
   const response = await fetch(url, {
-    headers: { "user-agent": "cluelyyLocalDiscovery/0.1" },
+    headers: { "user-agent": "job-huntLocalDiscovery/0.1" },
   });
   if (!response.ok) {
     throw new Error(`RemoteOK discovery returned HTTP ${response.status}`);

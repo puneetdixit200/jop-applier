@@ -14,7 +14,7 @@ afterEach(async () => {
 
 describe("local event log", () => {
   it("writes workflow events as daily JSONL records", async () => {
-    const logDir = await mkdtemp(join(tmpdir(), "cluelyy-log-"));
+    const logDir = await mkdtemp(join(tmpdir(), "job-hunt-log-"));
     tempDirs.push(logDir);
     const bus = new EventBus<CareerEventMap>();
     const binding = bindLocalEventLog(bus, {
@@ -56,7 +56,7 @@ describe("local event log", () => {
   });
 
   it("stops recording after close", async () => {
-    const logDir = await mkdtemp(join(tmpdir(), "cluelyy-log-"));
+    const logDir = await mkdtemp(join(tmpdir(), "job-hunt-log-"));
     tempDirs.push(logDir);
     const bus = new EventBus<CareerEventMap>();
     const binding = bindLocalEventLog(bus, {

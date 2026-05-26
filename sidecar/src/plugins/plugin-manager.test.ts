@@ -90,13 +90,13 @@ describe("PluginManager", () => {
     const manager = new PluginManager({
       eventBus,
       workflowEngine,
-      env: { CLUELYY_TEST: "enabled" },
+      env: { JOB_HUNT_TEST: "enabled" },
     });
     manager.register(
       plugin(manifest({ name: "jobs", type: "job-connector" }), calls, (context) => {
         expect(context.eventBus).toBe(eventBus);
         expect(context.workflowEngine).toBe(workflowEngine);
-        expect(context.env.CLUELYY_TEST).toBe("enabled");
+        expect(context.env.JOB_HUNT_TEST).toBe("enabled");
       }),
     );
     manager.register(plugin(manifest({ name: "notifier", type: "notifier" }), calls));

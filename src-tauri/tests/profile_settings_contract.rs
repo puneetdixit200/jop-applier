@@ -1,4 +1,4 @@
-use cluelyy_lib::db::{
+use job_hunt_lib::db::{
     models::{SettingValue, UpsertSetting, UpsertUserProfile},
     queries::{get_setting, get_user_profile, upsert_setting, upsert_user_profile},
     schema::initialize_schema,

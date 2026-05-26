@@ -1,4 +1,4 @@
-use cluelyy_lib::{
+use job_hunt_lib::{
     commands::sidecar::run_due_scheduled_tasks_with_command,
     db::{
         models::UpsertScheduledTask,

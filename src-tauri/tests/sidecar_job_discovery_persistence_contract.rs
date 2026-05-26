@@ -1,4 +1,4 @@
-use cluelyy_lib::{
+use job_hunt_lib::{
     commands::sidecar::run_sidecar_workflow_and_persist_jobs_with_command,
     db::{
         models::{SettingValue, UpsertSetting},
@@ -144,7 +144,7 @@ fn sends_discovery_search_queries_from_settings_to_sidecar() {
     )
     .expect("save discovery career page source setting");
     let request_path = std::env::temp_dir().join(format!(
-        "cluelyy-sidecar-request-{}.json",
+        "job-hunt-sidecar-request-{}.json",
         std::process::id()
     ));
     let command = capture_request_sidecar(&request_path);
@@ -205,7 +205,7 @@ fn sends_discovery_search_queries_from_settings_to_sidecar() {
     );
 }
 
-fn capture_request_sidecar(request_path: &Path) -> cluelyy_lib::sidecar::SidecarCommand {
+fn capture_request_sidecar(request_path: &Path) -> job_hunt_lib::sidecar::SidecarCommand {
     common::capture_request_sidecar_with_response(
         request_path,
         json!({

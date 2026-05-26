@@ -1,4 +1,4 @@
-use cluelyy_lib::db::{
+use job_hunt_lib::db::{
     models::UpsertNotification,
     queries::{list_notifications, mark_notification_read, save_notification},
     schema::initialize_schema,

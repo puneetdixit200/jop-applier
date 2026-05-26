@@ -64,7 +64,7 @@ export class OpenRouterProvider implements AIProvider {
       method: "POST",
       headers: requestHeaders(this.config.apiKey, {
         "HTTP-Referer": "https://github.com/puneetdixit200/jop-applier",
-        "X-Title": "cluelyy",
+        "X-Title": "job-hunt",
       }),
       body: JSON.stringify({
         model: this.config.model,

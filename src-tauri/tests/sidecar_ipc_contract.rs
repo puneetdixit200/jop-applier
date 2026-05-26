@@ -1,4 +1,4 @@
-use cluelyy_lib::sidecar::{
+use job_hunt_lib::sidecar::{
     run_application_review_decision_with_command, run_sidecar_workflow_with_command,
     sidecar_status_with_command,
 };

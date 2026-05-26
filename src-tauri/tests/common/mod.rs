@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use cluelyy_lib::sidecar::SidecarCommand;
+use job_hunt_lib::sidecar::SidecarCommand;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 

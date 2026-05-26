@@ -11,7 +11,7 @@ use crate::{db::schema, secure_store};
 
 const SQLITE_HEADER: &[u8; 16] = b"SQLite format 3\0";
 
-pub const DATABASE_KEY_ENV: &str = "CLUELYY_DATABASE_KEY";
+pub const DATABASE_KEY_ENV: &str = "JOB_HUNT_DATABASE_KEY";
 pub const DATABASE_KEY_SECRET: &str = "database.encryptionKey";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -290,7 +290,7 @@ fn sibling_path(path: &Path, suffix: &str) -> PathBuf {
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
-        .unwrap_or("cluelyy.db");
+        .unwrap_or("job-hunt.db");
     path.with_file_name(format!("{file_name}.{suffix}"))
 }
 

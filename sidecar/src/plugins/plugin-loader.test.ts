@@ -94,15 +94,15 @@ export function createPlugin(manifest) {
   });
 
   it("recognizes nested plugin files with Windows path separators", () => {
-    const rootDir = "C:\\tmp\\cluelyy-plugin";
+    const rootDir = "C:\\tmp\\job-hunt-plugin";
 
     expect(
-      isPathInsideDirectory(rootDir, "C:\\tmp\\cluelyy-plugin\\dist\\index.mjs", path.win32),
+      isPathInsideDirectory(rootDir, "C:\\tmp\\job-hunt-plugin\\dist\\index.mjs", path.win32),
     ).toBe(true);
     expect(isPathInsideDirectory(rootDir, "C:\\tmp\\bad.mjs", path.win32)).toBe(false);
   });
 });
 
 async function createPluginTestDirectory(): Promise<string> {
-  return mkdtemp(join(process.cwd(), ".tmp-cluelyy-plugin-"));
+  return mkdtemp(join(process.cwd(), ".tmp-job-hunt-plugin-"));
 }
